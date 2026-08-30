@@ -141,6 +141,8 @@ export const en = {
       removeReview: "Remove review attachment",
       openAgentSession: "Open agent session attachment",
       removeAgentSession: "Remove agent session attachment",
+      openAgentProfile: "Open agent profile attachment",
+      removeAgentProfile: "Remove agent profile attachment",
     },
     errors: {
       failedToSend: "Failed to send message",
@@ -313,6 +315,7 @@ export const en = {
       commentsMany: "{{count}} comments",
       textAttachment: "Text attachment",
       agentSession: "Agent session",
+      agentProfile: "Agent profile",
       text: "Text",
       file: "File",
     },

@@ -71,4 +71,21 @@ describe("workspace attachment utilities", () => {
     expect(isWorkspaceAttachment(attachment)).toBe(true);
     expect(workspaceAttachmentToSubmitAttachment(attachment)).toEqual(attachment.attachment);
   });
+
+  it("serializes agent profile mentions as create_agent address text", () => {
+    const attachment: ComposerAttachment = {
+      kind: "agent_profile",
+      id: "agent_profile:local:p1",
+      attachment: {
+        type: "text",
+        mimeType: "text/plain",
+        title: "Cursor Fable",
+        text: "Referenced agent profile\n- model: claude-fable-5",
+      },
+      source: { serverId: "local", profileId: "p1" },
+    };
+
+    expect(isWorkspaceAttachment(attachment)).toBe(true);
+    expect(workspaceAttachmentToSubmitAttachment(attachment)).toEqual(attachment.attachment);
+  });
 });

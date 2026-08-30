@@ -141,6 +141,13 @@ export function getWorkspaceAttachmentPillContent(
       subtitle: t("message.attachments.agentSession"),
     };
   }
+  if (attachment.kind === "agent_profile") {
+    return {
+      icon: attachmentAgentSessionIcon,
+      title: attachment.attachment.title ?? t("message.attachments.textAttachment"),
+      subtitle: t("message.attachments.agentProfile"),
+    };
+  }
   return {
     icon: attachmentReviewIcon,
     title: t("message.attachments.review"),

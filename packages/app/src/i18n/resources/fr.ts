@@ -146,6 +146,8 @@ export const fr: TranslationResources = {
       removeReview: "Supprimer la pièce jointe de l'avis",
       openAgentSession: "Ouvrir la pièce jointe de session d'agent",
       removeAgentSession: "Supprimer la pièce jointe de session d'agent",
+      openAgentProfile: "Ouvrir la pièce jointe de profil d'agent",
+      removeAgentProfile: "Supprimer la pièce jointe de profil d'agent",
     },
     errors: {
       failedToSend: "Échec de l'envoi du message",
@@ -319,6 +321,7 @@ export const fr: TranslationResources = {
       commentsMany: "{{count}} commentaires",
       textAttachment: "Texte en pièce jointe",
       agentSession: "Session d'agent",
+      agentProfile: "Profil d'agent",
       text: "Texte",
       file: "Fichier",
     },

@@ -144,6 +144,8 @@ export const ar: TranslationResources = {
       removeReview: "إزالة مرفق المراجعة",
       openAgentSession: "فتح مرفق جلسة الوكيل",
       removeAgentSession: "إزالة مرفق جلسة الوكيل",
+      openAgentProfile: "فتح مرفق ملف الوكيل",
+      removeAgentProfile: "إزالة مرفق ملف الوكيل",
     },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
@@ -315,6 +317,7 @@ export const ar: TranslationResources = {
       commentsMany: "{{count}} تعليقات",
       textAttachment: "مرفق النص",
       agentSession: "جلسة الوكيل",
+      agentProfile: "ملف الوكيل",
       text: "نص",
       file: "ملف",
     },

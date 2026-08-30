@@ -144,6 +144,8 @@ export const zhCN: TranslationResources = {
       removeReview: "移除 review 附件",
       openAgentSession: "打开 agent session 附件",
       removeAgentSession: "移除 agent session 附件",
+      openAgentProfile: "打开 agent profile 附件",
+      removeAgentProfile: "移除 agent profile 附件",
     },
     errors: {
       failedToSend: "发送消息失败",
@@ -315,6 +317,7 @@ export const zhCN: TranslationResources = {
       commentsMany: "{{count}} 条评论",
       textAttachment: "文本附件",
       agentSession: "Agent session",
+      agentProfile: "Agent profile",
       text: "文本",
       file: "文件",
     },

@@ -144,6 +144,8 @@ export const es: TranslationResources = {
       removeReview: "Eliminar archivo adjunto de reseña",
       openAgentSession: "Abrir adjunto de sesión de agente",
       removeAgentSession: "Eliminar adjunto de sesión de agente",
+      openAgentProfile: "Abrir adjunto de perfil de agente",
+      removeAgentProfile: "Eliminar adjunto de perfil de agente",
     },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",
@@ -318,6 +320,7 @@ export const es: TranslationResources = {
       commentsMany: "{{count}} comentarios",
       textAttachment: "Adjunto de texto",
       agentSession: "Sesión de agente",
+      agentProfile: "Perfil de agente",
       text: "Texto",
       file: "Archivo",
     },

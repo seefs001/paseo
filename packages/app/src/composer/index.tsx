@@ -110,6 +110,7 @@ import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
 import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type {
+  AgentProfileContextAttachment,
   AgentSessionContextAttachment,
   AttachmentMetadata,
   ComposerAttachment,
@@ -1329,7 +1330,7 @@ function ComposerContentImpl({
   }, [attachmentScopeKeys]);
 
   const handleSessionMentionSelected = useCallback(
-    (attachment: AgentSessionContextAttachment) => {
+    (attachment: AgentSessionContextAttachment | AgentProfileContextAttachment) => {
       if (!sessionMentionScopeKey) {
         return;
       }

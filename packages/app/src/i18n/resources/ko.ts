@@ -144,6 +144,8 @@ export const ko: TranslationResources = {
       removeReview: "리뷰 첨부 제거",
       openAgentSession: "에이전트 세션 첨부 열기",
       removeAgentSession: "에이전트 세션 첨부 제거",
+      openAgentProfile: "에이전트 프로필 첨부 열기",
+      removeAgentProfile: "에이전트 프로필 첨부 제거",
     },
     errors: {
       failedToSend: "메시지를 보내지 못했습니다",
@@ -316,6 +318,7 @@ export const ko: TranslationResources = {
       commentsMany: "댓글 {{count}}개",
       textAttachment: "텍스트 첨부",
       agentSession: "에이전트 세션",
+      agentProfile: "에이전트 프로필",
       text: "텍스트",
       file: "파일",
     },
