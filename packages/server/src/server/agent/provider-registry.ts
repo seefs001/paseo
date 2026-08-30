@@ -794,6 +794,8 @@ function addDerivedProviders(
             providerId,
             label: override.label ?? providerId,
             providerParams: override.params,
+            // Grok pushes slash commands after session/new via available_commands_update.
+            ...(providerId === "grok" ? { waitForInitialCommands: true } : {}),
           };
           if (providerId === "cursor") {
             return new CursorACPAgentClient(acpOptions);

@@ -610,6 +610,14 @@ export function mapACPUsage(usage: Usage | null | undefined): AgentUsage | undef
   };
 }
 
+export function mapACPUsageUpdate(update: UsageUpdate): AgentUsage {
+  return {
+    contextWindowUsedTokens: update.used,
+    contextWindowMaxTokens: update.size,
+    ...(update.cost?.currency === "USD" ? { totalCostUsd: update.cost.amount } : {}),
+  };
+}
+
 export function resolveACPModeSelection({
   modeId,
   availableModes,
@@ -2679,8 +2687,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.handleSessionInfoUpdate(update);
         return pendingUserEvents;
       case "usage_update":
-        this.handleUsageUpdate(update);
-        return pendingUserEvents;
+        return [...pendingUserEvents, ...this.handleUsageUpdate(update)];
       case "available_commands_update":
         this.cachedCommands = update.availableCommands.map((command) => ({
           name: command.name,
@@ -2840,8 +2847,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
   }
 
-  private handleUsageUpdate(update: UsageUpdate): void {
-    void update;
+  private handleUsageUpdate(update: UsageUpdate): AgentStreamEvent[] {
+    const usage = {
+      ...this.currentTurnUsage,
+      ...mapACPUsageUpdate(update),
+    };
+    this.currentTurnUsage = usage;
+    return [
+      {
+        type: "usage_updated",
+        provider: this.provider,
+        usage,
+        ...(this.activeForegroundTurnId ? { turnId: this.activeForegroundTurnId } : {}),
+      },
+    ];
   }
 
   private handlePromptResponse(response: PromptResponse, turnId: string): void {

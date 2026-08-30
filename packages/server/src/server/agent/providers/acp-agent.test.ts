@@ -25,6 +25,7 @@ import {
   deriveModelDefinitionsFromACP,
   deriveModesFromACP,
   mapACPUsage,
+  mapACPUsageUpdate,
   resolveACPModeSelection,
   resolveACPModelSelection,
   summarizeACPRequestError,
@@ -702,6 +703,35 @@ describe("mapACPUsage", () => {
   });
 });
 
+describe("mapACPUsageUpdate", () => {
+  test("maps session usage_update into context-window usage", () => {
+    expect(
+      mapACPUsageUpdate({
+        used: 42_000,
+        size: 500_000,
+        cost: { amount: 1.25, currency: "USD" },
+      }),
+    ).toEqual({
+      contextWindowUsedTokens: 42_000,
+      contextWindowMaxTokens: 500_000,
+      totalCostUsd: 1.25,
+    });
+  });
+
+  test("omits cost when the currency is not USD", () => {
+    expect(
+      mapACPUsageUpdate({
+        used: 10,
+        size: 100,
+        cost: { amount: 8, currency: "EUR" },
+      }),
+    ).toEqual({
+      contextWindowUsedTokens: 10,
+      contextWindowMaxTokens: 100,
+    });
+  });
+});
+
 describe("deriveModesFromACP", () => {
   test("prefers explicit ACP mode state", () => {
     const result = deriveModesFromACP(
@@ -1038,6 +1068,32 @@ describe("ACPAgentSession Zed parity", () => {
     expect(configEvents).toMatchObject([{ type: "mode_changed", currentModeId: "plan" }]);
     expect(modeEvents).toMatchObject([{ type: "mode_changed", currentModeId: "default" }]);
     expect(await session.getCurrentMode()).toBe("default");
+  });
+
+  test("emits usage_updated from session usage_update for the context meter", () => {
+    const session = createSession();
+    const internals = asInternals<ACPSessionInternals>(session);
+    internals.activeForegroundTurnId = "turn-usage";
+
+    expect(
+      internals.translateSessionUpdate({
+        sessionUpdate: "usage_update",
+        used: 42_000,
+        size: 500_000,
+        cost: { amount: 0.5, currency: "USD" },
+      }),
+    ).toEqual([
+      {
+        type: "usage_updated",
+        provider: "claude-acp",
+        turnId: "turn-usage",
+        usage: {
+          contextWindowUsedTokens: 42_000,
+          contextWindowMaxTokens: 500_000,
+          totalCostUsd: 0.5,
+        },
+      },
+    ]);
   });
 
   test("uses canonical mode returned by setSessionConfigOption response", async () => {
