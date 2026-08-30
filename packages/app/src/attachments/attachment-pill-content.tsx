@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 import React from "react";
 import {
+  Bot,
   CircleDot,
   FileText,
   GitPullRequest,
@@ -133,6 +134,13 @@ export function getWorkspaceAttachmentPillContent(
       subtitle: getTextAttachmentSubtitle(attachment.attachment, t),
     };
   }
+  if (attachment.kind === "agent_session") {
+    return {
+      icon: attachmentAgentSessionIcon,
+      title: attachment.attachment.title ?? t("message.attachments.textAttachment"),
+      subtitle: t("message.attachments.agentSession"),
+    };
+  }
   return {
     icon: attachmentReviewIcon,
     title: t("message.attachments.review"),
@@ -145,6 +153,7 @@ const ThemedAttachmentGitPullRequest = withUnistyles(GitPullRequest);
 const ThemedAttachmentCircleDot = withUnistyles(CircleDot);
 const ThemedAttachmentMessageSquareCode = withUnistyles(MessageSquareCode);
 const ThemedAttachmentMousePointer = withUnistyles(MousePointer2);
+const ThemedAttachmentBot = withUnistyles(Bot);
 
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -162,4 +171,7 @@ const attachmentFileIcon = (
 );
 const attachmentBrowserIcon = (
   <ThemedAttachmentMousePointer size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+);
+const attachmentAgentSessionIcon = (
+  <ThemedAttachmentBot size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
 );

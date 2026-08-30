@@ -77,6 +77,23 @@ function chatHistoryAttachment(id: string, text = "Previous chat."): WorkspaceCo
   };
 }
 
+function agentSessionAttachment(id: string, title = "Auth fix"): WorkspaceComposerAttachment {
+  return {
+    kind: "agent_session",
+    id,
+    attachment: {
+      type: "text",
+      mimeType: "text/plain",
+      title,
+      text: "Referenced agent session\n- agentId: agt_1",
+    },
+    source: {
+      serverId: "local",
+      agentId: "agt_1",
+    },
+  };
+}
+
 describe("workspace attachments store", () => {
   it("scopes workspace attachments by server and workspace before cwd fallback", () => {
     expect(
@@ -145,6 +162,13 @@ describe("workspace attachments store", () => {
   it("dedupes repeated chat history attachments by id", () => {
     const original = chatHistoryAttachment("chat_history:draft-1", "Original chat.");
     const replacement = chatHistoryAttachment("chat_history:draft-1", "Updated chat.");
+
+    expect(appendWorkspaceAttachment([original], replacement)).toEqual([replacement]);
+  });
+
+  it("dedupes repeated agent session mentions by id", () => {
+    const original = agentSessionAttachment("agent_session:local:agt_1", "Auth fix");
+    const replacement = agentSessionAttachment("agent_session:local:agt_1", "Auth fix updated");
 
     expect(appendWorkspaceAttachment([original], replacement)).toEqual([replacement]);
   });
