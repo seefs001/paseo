@@ -60,6 +60,8 @@ PASEO_DEV_SEED_HOME=/path/to/home npm run dev # seed from a different source hom
 PASEO_DEV_RESET_HOME=1 npm run dev            # clear and reseed the derived worktree home
 ```
 
+Persist a checkout-local default in gitignored `.env.local` at the repo root. `scripts/dev-home.sh` sources it for `npm run dev`, `npm run dev:desktop`, and `npm run cli`. Pointing `PASEO_HOME` at `~/.paseo` does not rewrite `daemon.listen`; do not run the checkout daemon while the packaged app already owns that home on `6767`.
+
 ### Daemon endpoints
 
 - Stable daemon launched by the desktop app: `localhost:6767`.
