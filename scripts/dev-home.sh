@@ -4,6 +4,27 @@ default_dev_paseo_root() {
   git rev-parse --show-toplevel 2>/dev/null || pwd
 }
 
+load_dev_env_local() {
+  local env_file
+  env_file="$(default_dev_paseo_root)/.env.local"
+  if [ ! -f "$env_file" ]; then
+    return
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_file"
+  set +a
+}
+
+is_production_paseo_home() {
+  local home_path="$1"
+  local production_home
+  production_home="$(cd "$HOME/.paseo" 2>/dev/null && pwd -P)" || production_home="$HOME/.paseo"
+  local resolved_home
+  resolved_home="$(cd "$home_path" 2>/dev/null && pwd -P)" || resolved_home="$home_path"
+  [ "$resolved_home" = "$production_home" ]
+}
+
 copy_json_tree() {
   local source_dir="$1"
   local target_dir="$2"
@@ -96,12 +117,17 @@ resolve_dev_daemon_endpoint() {
 }
 
 configure_dev_paseo_home() {
+  load_dev_env_local
+
   if [ -n "${PASEO_HOME:-}" ]; then
     export PASEO_HOME
     if [ -n "${PASEO_DEV_SEED_HOME:-}" ]; then
       seed_worktree_paseo_home "$PASEO_HOME"
     fi
     mkdir -p "$PASEO_HOME"
+    if is_production_paseo_home "$PASEO_HOME"; then
+      return
+    fi
     if [ "${PASEO_DEV_MANAGED_HOME:-0}" = "1" ] || [ -n "${PASEO_DEV_SEED_HOME:-}" ]; then
       configure_dev_daemon_config
     fi
