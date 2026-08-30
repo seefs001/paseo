@@ -67,6 +67,9 @@ function getOpenAccessibilityLabel(
   if (attachment.kind === "agent_session") {
     return t("composer.attachments.openAgentSession");
   }
+  if (attachment.kind === "agent_profile") {
+    return t("composer.attachments.openAgentProfile");
+  }
   return t("composer.attachments.openReview");
 }
 
@@ -86,6 +89,9 @@ function getRemoveAccessibilityLabel(
   if (attachment.kind === "agent_session") {
     return t("composer.attachments.removeAgentSession");
   }
+  if (attachment.kind === "agent_profile") {
+    return t("composer.attachments.removeAgentProfile");
+  }
   return t("composer.attachments.removeReview");
 }
 
@@ -95,6 +101,9 @@ function getPillTestID(attachment: WorkspaceComposerAttachment): string {
   }
   if (attachment.kind === "agent_session") {
     return "composer-agent-session-attachment-pill";
+  }
+  if (attachment.kind === "agent_profile") {
+    return "composer-agent-profile-attachment-pill";
   }
   return "composer-review-attachment-pill";
 }
@@ -178,6 +187,7 @@ function useWorkspaceAttachmentBinding({
           selected.kind === "browser_element" ||
           selected.kind === "chat_history" ||
           selected.kind === "agent_session" ||
+          selected.kind === "agent_profile" ||
           isPullRequestContextAttachment(selected)
         ) {
           const selectedKey = getAttachmentKey(selected);

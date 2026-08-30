@@ -80,6 +80,56 @@ export function rankSessionMentionCandidates(
   return matches;
 }
 
+export interface AgentProfileMention {
+  id: string;
+  name: string;
+  provider: string;
+  model?: string | null;
+  modeId?: string | null;
+  thinkingOptionId?: string | null;
+  featureValues?: Record<string, unknown>;
+  notes?: string | null;
+}
+
+export function rankAgentProfileMentions(input: {
+  profiles: readonly AgentProfileMention[];
+  query: string;
+}): AgentProfileMention[] {
+  const query = input.query.trim().toLowerCase();
+  if (!query) {
+    return [...input.profiles];
+  }
+  return input.profiles.filter((profile) => agentProfileSearchHaystack(profile).includes(query));
+}
+
+export function buildAgentProfileAddressCard(input: AgentProfileMention): string {
+  const model = input.model?.trim() || "unknown";
+  const lines = [
+    "Referenced agent profile",
+    `- profileId: ${input.id}`,
+    `- name: ${input.name}`,
+    `- provider: ${input.provider}`,
+    `- model: ${model}`,
+  ];
+  if (input.modeId?.trim()) {
+    lines.push(`- modeId: ${input.modeId.trim()}`);
+  }
+  if (input.thinkingOptionId?.trim()) {
+    lines.push(`- thinkingOptionId: ${input.thinkingOptionId.trim()}`);
+  }
+  if (input.featureValues && Object.keys(input.featureValues).length > 0) {
+    lines.push(`- featureValues: ${JSON.stringify(input.featureValues)}`);
+  }
+  if (input.notes?.trim()) {
+    lines.push(`- notes: ${input.notes.trim()}`);
+  }
+  lines.push(
+    "",
+    "Copy provider, model, modeId, thinkingOptionId, and featureValues into create_agent. There is no profile parameter. Do not guess these values from the name.",
+  );
+  return lines.join("\n");
+}
+
 export function buildAgentSessionAddressCard(input: {
   agentId: string;
   serverId: string;
@@ -127,6 +177,13 @@ function sessionMentionBucket(
 
 function sessionMentionSearchHaystack(agent: SessionMentionCandidate): string {
   return [agent.title, agent.id, agent.provider, agent.model]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ")
+    .toLowerCase();
+}
+
+function agentProfileSearchHaystack(profile: AgentProfileMention): string {
+  return [profile.name, profile.id, profile.provider, profile.model]
     .filter((value): value is string => typeof value === "string" && value.length > 0)
     .join(" ")
     .toLowerCase();

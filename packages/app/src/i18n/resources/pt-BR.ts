@@ -144,6 +144,8 @@ export const ptBR: TranslationResources = {
       removeReview: "Remover anexo de revisão",
       openAgentSession: "Abrir anexo de sessão do agente",
       removeAgentSession: "Remover anexo de sessão do agente",
+      openAgentProfile: "Abrir anexo de perfil do agente",
+      removeAgentProfile: "Remover anexo de perfil do agente",
     },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
@@ -318,6 +320,7 @@ export const ptBR: TranslationResources = {
       commentsMany: "{{count}} comentários",
       textAttachment: "Anexo de texto",
       agentSession: "Sessão do agente",
+      agentProfile: "Perfil do agente",
       text: "Texto",
       file: "Arquivo",
     },

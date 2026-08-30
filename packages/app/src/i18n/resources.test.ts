@@ -709,6 +709,9 @@ describe("translation resources", () => {
     expect(en.agentAutocomplete.noSessions).toBe("No agent sessions found");
     expect(en.agentAutocomplete.failedToLoad).toBe("Failed to load");
     expect(en.message.attachments.agentSession).toBe("Agent session");
+    expect(en.message.attachments.agentProfile).toBe("Agent profile");
+    expect(en.composer.attachments.openAgentProfile).toBe("Open agent profile attachment");
+    expect(en.composer.attachments.removeAgentProfile).toBe("Remove agent profile attachment");
     expect(en.composer.attachments.openAgentSession).toBe("Open agent session attachment");
     expect(en.composer.attachments.removeAgentSession).toBe("Remove agent session attachment");
     expect(en.loadOlderHistory.failed).toBe("Couldn't load older history");

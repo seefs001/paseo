@@ -144,6 +144,8 @@ export const ja: TranslationResources = {
       removeReview: "レビュー添付ファイルを削除",
       openAgentSession: "エージェントセッションの添付を開く",
       removeAgentSession: "エージェントセッションの添付を削除",
+      openAgentProfile: "エージェントプロファイルの添付を開く",
+      removeAgentProfile: "エージェントプロファイルの添付を削除",
     },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",
@@ -318,6 +320,7 @@ export const ja: TranslationResources = {
       commentsMany: "{{count}}件のコメント",
       textAttachment: "テキスト添付ファイル",
       agentSession: "エージェントセッション",
+      agentProfile: "エージェントプロファイル",
       text: "テキスト",
       file: "ファイル",
     },

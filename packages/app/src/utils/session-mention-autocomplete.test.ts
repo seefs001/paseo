@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applySessionMentionReplacement,
+  buildAgentProfileAddressCard,
   buildAgentSessionAddressCard,
   isPathMentionQuery,
+  rankAgentProfileMentions,
   rankSessionMentionCandidates,
   resolveComposerMentionMode,
   type SessionMentionCandidate,
@@ -120,6 +122,45 @@ describe("rankSessionMentionCandidates", () => {
     });
 
     expect(ranked.map((agent) => agent.id)).toEqual(["a"]);
+  });
+});
+
+describe("rankAgentProfileMentions", () => {
+  it("keeps configured order when the query is empty and filters by name or model", () => {
+    const profiles = [
+      { id: "p1", name: "Grok 4.6 (Grok Build)", provider: "grok", model: "grok-4.6" },
+      { id: "p2", name: "Cursor Fable", provider: "cursor", model: "claude-fable-5" },
+      { id: "p3", name: "K3", provider: "cursor", model: "kimi-k3" },
+    ];
+
+    expect(rankAgentProfileMentions({ profiles, query: "" }).map((profile) => profile.id)).toEqual([
+      "p1",
+      "p2",
+      "p3",
+    ]);
+    expect(
+      rankAgentProfileMentions({ profiles, query: "fable" }).map((profile) => profile.id),
+    ).toEqual(["p2"]);
+    expect(
+      rankAgentProfileMentions({ profiles, query: "kimi" }).map((profile) => profile.id),
+    ).toEqual(["p3"]);
+  });
+});
+
+describe("buildAgentProfileAddressCard", () => {
+  it("tells the agent to copy create_agent fields instead of guessing from the name", () => {
+    const card = buildAgentProfileAddressCard({
+      id: "agent_profile_fable",
+      name: "Cursor Fable",
+      provider: "cursor",
+      model: "claude-fable-5",
+      modeId: "agent",
+    });
+
+    expect(card).toContain("profileId: agent_profile_fable");
+    expect(card).toContain("model: claude-fable-5");
+    expect(card).toContain("create_agent");
+    expect(card).toContain("There is no profile parameter");
   });
 });
 

@@ -144,6 +144,8 @@ export const ru: TranslationResources = {
       removeReview: "Удалить вложение проверки",
       openAgentSession: "Открыть вложение сессии агента",
       removeAgentSession: "Удалить вложение сессии агента",
+      openAgentProfile: "Открыть вложение профиля агента",
+      removeAgentProfile: "Удалить вложение профиля агента",
     },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
@@ -317,6 +319,7 @@ export const ru: TranslationResources = {
       commentsMany: "Комментарии: {{count}}",
       textAttachment: "Текстовое вложение",
       agentSession: "Сессия агента",
+      agentProfile: "Профиль агента",
       text: "Текст",
       file: "Файл",
     },
