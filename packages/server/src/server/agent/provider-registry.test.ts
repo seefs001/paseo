@@ -55,6 +55,7 @@ const mockState = vi.hoisted(() => {
         providerId?: string;
         label?: string;
         providerParams?: unknown;
+        waitForInitialCommands?: boolean;
       }>,
     },
     isCommandAvailable: vi.fn(async (_command: string) => false),
@@ -305,6 +306,7 @@ vi.mock("./providers/generic-acp-agent.js", () => ({
       providerId?: string;
       label?: string;
       providerParams?: unknown;
+      waitForInitialCommands?: boolean;
     }) {
       const providerParams =
         options.providerParams &&
@@ -332,6 +334,7 @@ vi.mock("./providers/generic-acp-agent.js", () => ({
         providerId: options.providerId,
         label: options.label,
         providerParams: options.providerParams,
+        ...(options.waitForInitialCommands === true ? { waitForInitialCommands: true } : {}),
       });
     }
 
@@ -677,6 +680,38 @@ test("built-in OMP override keeps the real OMP adapter enabled and launchable", 
     "yolo",
   ]);
   await session.close();
+});
+
+test("grok ACP waits for async slash-command discovery", () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: {
+      grok: {
+        extends: "acp",
+        label: "Grok",
+        command: ["grok", "agent", "stdio"],
+      },
+    },
+  });
+
+  expect(registry.grok.createClient(logger).provider).toBe("grok");
+  expect(mockState.constructorArgs.genericAcp).toEqual([
+    {
+      command: ["grok", "agent", "stdio"],
+      env: undefined,
+      providerId: "grok",
+      label: "Grok",
+      providerParams: undefined,
+      waitForInitialCommands: true,
+    },
+    {
+      command: ["grok", "agent", "stdio"],
+      env: undefined,
+      providerId: "grok",
+      label: "Grok",
+      providerParams: undefined,
+      waitForInitialCommands: true,
+    },
+  ]);
 });
 
 test("new provider extending acp uses GenericACPAgentClient", () => {
