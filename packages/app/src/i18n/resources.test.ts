@@ -706,7 +706,11 @@ describe("translation resources", () => {
     expect(en.branchSwitcher.stashRestored).toBe("Stashed changes restored");
     expect(en.agentAutocomplete.searchingWorkspace).toBe("Searching workspace...");
     expect(en.agentAutocomplete.noCommands).toBe("No commands found");
+    expect(en.agentAutocomplete.noSessions).toBe("No agent sessions found");
     expect(en.agentAutocomplete.failedToLoad).toBe("Failed to load");
+    expect(en.message.attachments.agentSession).toBe("Agent session");
+    expect(en.composer.attachments.openAgentSession).toBe("Open agent session attachment");
+    expect(en.composer.attachments.removeAgentSession).toBe("Remove agent session attachment");
     expect(en.loadOlderHistory.failed).toBe("Couldn't load older history");
     expect(en.agentControls.thinking.extraHigh).toBe("Extra high");
     expect(en.agentControls.model.unknown).toBe("Unknown model");

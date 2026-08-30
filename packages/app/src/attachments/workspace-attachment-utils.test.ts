@@ -54,4 +54,21 @@ describe("workspace attachment utilities", () => {
       text: "GitHub pull request comment\n\nLooks good.",
     });
   });
+
+  it("serializes agent session mentions as address text, not transcript", () => {
+    const attachment: ComposerAttachment = {
+      kind: "agent_session",
+      id: "agent_session:local:agt_1",
+      attachment: {
+        type: "text",
+        mimeType: "text/plain",
+        title: "Auth fix",
+        text: "Referenced agent session\n- agentId: agt_1",
+      },
+      source: { serverId: "local", agentId: "agt_1" },
+    };
+
+    expect(isWorkspaceAttachment(attachment)).toBe(true);
+    expect(workspaceAttachmentToSubmitAttachment(attachment)).toEqual(attachment.attachment);
+  });
 });
