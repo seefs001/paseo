@@ -354,7 +354,6 @@ export const ptBR: TranslationResources = {
         added: "Adicionada",
         started: "Iniciada",
         completed: "Concluída",
-        reopened: "Reaberta",
       },
     },
     compaction: {
