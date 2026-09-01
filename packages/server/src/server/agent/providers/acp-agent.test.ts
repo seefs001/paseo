@@ -3146,6 +3146,58 @@ describe("ACPAgentSession", () => {
     resolvePrompt({ stopReason: "end_turn" });
   });
 
+  test("startTurn sends profile address cards to the model without showing them in the user bubble", async () => {
+    const session = createSession();
+    const events: AgentStreamEvent[] = [];
+    const prompt = vi.fn(
+      () =>
+        new Promise<PromptResponse>(() => {
+          /* leave the turn open so we can inspect the submitted prompt */
+        }),
+    );
+    const profile = {
+      type: "text" as const,
+      mimeType: "text/plain" as const,
+      contextKind: "agent_profile" as const,
+      title: "K3",
+      text: "Referenced agent profile\n- name: K3\n- provider: cursor\n- model: kimi-k3",
+    };
+
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    asInternals<ACPSessionInternals>(session).connection = { prompt };
+    session.subscribe((event) => {
+      events.push(event);
+    });
+
+    const { turnId } = await session.startTurn([{ type: "text", text: "ok" }, profile], {
+      clientMessageId: "msg-client-1",
+    });
+
+    expect(prompt).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      messageId: "msg-client-1",
+      prompt: [
+        { type: "text", text: "ok" },
+        { type: "text", text: profile.text },
+      ],
+    });
+    expect(
+      events.filter((event) => event.type === "timeline" && event.item.type === "user_message"),
+    ).toEqual([
+      {
+        type: "timeline",
+        provider: "claude-acp",
+        turnId,
+        item: {
+          type: "user_message",
+          text: "ok",
+          messageId: "msg-client-1",
+          clientMessageId: "msg-client-1",
+        },
+      },
+    ]);
+  });
+
   test("startTurn dedupes ACP user echo chunks for the submitted message", async () => {
     const session = createSession();
     const events: AgentStreamEvent[] = [];

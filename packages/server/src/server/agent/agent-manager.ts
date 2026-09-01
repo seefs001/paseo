@@ -73,6 +73,7 @@ import {
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { userVisiblePromptText } from "./prompt-attachments.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
@@ -97,16 +98,6 @@ const STORED_AGENT_CAPABILITIES: AgentCapabilityFlags = {
 };
 
 type TimeoutResult = "completed" | "timed_out";
-
-function submittedPromptText(prompt: AgentPromptInput): string {
-  if (typeof prompt === "string") {
-    return prompt;
-  }
-  return prompt
-    .flatMap((block) => (block.type === "text" && !("mimeType" in block) ? [block.text] : []))
-    .join("\n")
-    .trim();
-}
 
 export class AgentManagerShuttingDownError extends Error {
   constructor() {
@@ -4334,7 +4325,7 @@ export class AgentManager {
     agent.lastUserMessageAt = new Date();
     const item: AgentTimelineItem = {
       type: "user_message",
-      text: submittedPromptText(prompt),
+      text: userVisiblePromptText(prompt),
       clientMessageId,
       ...(options?.messageId ? { messageId: options.messageId } : {}),
     };
