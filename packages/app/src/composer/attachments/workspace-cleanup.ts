@@ -20,7 +20,11 @@ export function getAttachmentKey(attachment: WorkspaceComposerAttachment): strin
       id: attachment.id,
     });
   }
-  if (attachment.kind === "chat_history") {
+  if (
+    attachment.kind === "chat_history" ||
+    attachment.kind === "agent_session" ||
+    attachment.kind === "agent_profile"
+  ) {
     return JSON.stringify({
       kind: attachment.kind,
       id: attachment.id,
@@ -59,6 +63,8 @@ function isSentContextAttachment(
   return (
     attachment.kind === "browser_element" ||
     attachment.kind === "chat_history" ||
+    attachment.kind === "agent_session" ||
+    attachment.kind === "agent_profile" ||
     isPullRequestContextAttachment(attachment)
   );
 }

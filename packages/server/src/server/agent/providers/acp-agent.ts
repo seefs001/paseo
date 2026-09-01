@@ -73,7 +73,6 @@ import {
   type AgentPermissionRequestKind,
   type AgentPermissionResponse,
   type AgentPersistenceHandle,
-  type AgentPromptContentBlock,
   type AgentPromptInput,
   type AgentRunOptions,
   type AgentRunResult,
@@ -112,7 +111,7 @@ import {
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
 } from "../provider-launch-config.js";
-import { renderPromptAttachmentAsText } from "../prompt-attachments.js";
+import { renderPromptAttachmentAsText, userVisiblePromptText } from "../prompt-attachments.js";
 import { appendOrReplaceGrowingAssistantMessage, runProviderTurn } from "./provider-runner.js";
 import {
   buildStringCommandShellInvocation,
@@ -2903,7 +2902,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     turnId: string,
     clientMessageId?: string,
   ): void {
-    const text = extractPromptText(prompt);
+    const text = userVisiblePromptText(prompt);
     if (text.trim().length === 0) {
       return;
     }
@@ -3191,18 +3190,6 @@ function toACPContentBlocks(prompt: AgentPromptInput): ContentBlock[] {
     }
   }
   return contentBlocks;
-}
-
-function extractPromptText(prompt: AgentPromptInput): string {
-  if (typeof prompt === "string") {
-    return prompt;
-  }
-  return prompt
-    .filter(
-      (block): block is Extract<AgentPromptContentBlock, { type: "text" }> => block.type === "text",
-    )
-    .map((block) => block.text)
-    .join("");
 }
 
 function contentBlockToText(content: ContentBlock): string {

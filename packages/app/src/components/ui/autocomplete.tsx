@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactElement } from "react";
 import {
   ScrollView,
   Text,
@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { File, Folder } from "lucide-react-native";
+import { Bot, File, Folder } from "lucide-react-native";
 import type { Theme } from "@/styles/theme";
 import { getAutocompleteScrollOffset } from "./autocomplete-utils";
 
@@ -20,7 +20,7 @@ export interface AutocompleteOption {
   label: string;
   detail?: string;
   description?: string;
-  kind?: "command" | "file" | "directory";
+  kind?: "command" | "file" | "directory" | "agent";
 }
 
 interface AutocompleteProps {
@@ -32,6 +32,19 @@ interface AutocompleteProps {
   loadingText?: string;
   emptyText?: string;
   maxHeight?: number;
+}
+
+function renderMentionLeadingIcon(
+  kind: AutocompleteOption["kind"],
+  mutedColor: string,
+): ReactElement {
+  if (kind === "directory") {
+    return <Folder size={14} color={mutedColor} />;
+  }
+  if (kind === "agent") {
+    return <Bot size={14} color={mutedColor} />;
+  }
+  return <File size={14} color={mutedColor} />;
 }
 
 const BOLT_GLYPH_PATTERN = /\u26A1|\uFE0F/gu;
@@ -63,7 +76,8 @@ function AutocompleteRow({
 }: AutocompleteRowProps) {
   const optionLabel = removeBoltGlyphs(option.label) ?? option.label;
   const optionDescription = removeBoltGlyphs(option.description);
-  const isFileOrDir = option.kind === "directory" || option.kind === "file";
+  const showLeadingIcon =
+    option.kind === "directory" || option.kind === "file" || option.kind === "agent";
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => onRowLayout(index, event),
@@ -80,14 +94,10 @@ function AutocompleteRow({
 
   return (
     <Pressable onLayout={handleLayout} onPress={handlePress} style={pressableStyle}>
-      {isFileOrDir ? (
+      {showLeadingIcon ? (
         <>
           <View style={styles.itemLeading}>
-            {option.kind === "directory" ? (
-              <Folder size={14} color={mutedColor} />
-            ) : (
-              <File size={14} color={mutedColor} />
-            )}
+            {renderMentionLeadingIcon(option.kind, mutedColor)}
           </View>
           <View style={styles.itemMain}>
             <View style={styles.itemHeader}>

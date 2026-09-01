@@ -91,6 +91,26 @@ export interface ChatHistoryContextAttachment {
   };
 }
 
+export interface AgentSessionContextAttachment {
+  kind: "agent_session";
+  id: string;
+  attachment: Extract<AgentAttachment, { type: "text" }>;
+  source: {
+    serverId: string;
+    agentId: string;
+  };
+}
+
+export interface AgentProfileContextAttachment {
+  kind: "agent_profile";
+  id: string;
+  attachment: Extract<AgentAttachment, { type: "text" }>;
+  source: {
+    serverId: string;
+    profileId: string;
+  };
+}
+
 export const NEW_WORKSPACE_PICKER_ATTACHMENT_OWNER = "new-workspace-picker";
 
 export type WorkspaceFileSelection =
@@ -127,6 +147,8 @@ export type WorkspaceComposerAttachment =
     }
   | PullRequestContextAttachment
   | ChatHistoryContextAttachment
+  | AgentSessionContextAttachment
+  | AgentProfileContextAttachment
   | {
       kind: "review";
       attachment: Extract<AgentAttachment, { type: "review" }>;

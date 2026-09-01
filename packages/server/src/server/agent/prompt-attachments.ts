@@ -37,6 +37,27 @@ export function buildAgentPrompt(
   return blocks;
 }
 
+function isUserTypedPromptText(
+  block: AgentPromptContentBlock,
+): block is { type: "text"; text: string } {
+  return block.type === "text" && !("mimeType" in block);
+}
+
+/**
+ * Visible timeline text is only what the user typed. Text attachments share
+ * `type: "text"` with that prompt block and still go to the model; they must
+ * not be concatenated into the user bubble.
+ */
+export function userVisiblePromptText(prompt: AgentPromptInput): string {
+  if (typeof prompt === "string") {
+    return prompt;
+  }
+  return prompt
+    .flatMap((block) => (isUserTypedPromptText(block) ? [block.text] : []))
+    .join("\n")
+    .trim();
+}
+
 export function renderPromptAttachmentAsText(attachment: AgentAttachment): string {
   switch (attachment.type) {
     case "forge_change_request": {

@@ -54,4 +54,40 @@ describe("workspace attachment utilities", () => {
       text: "GitHub pull request comment\n\nLooks good.",
     });
   });
+
+  it("serializes agent session mentions as address text, not transcript", () => {
+    const attachment: ComposerAttachment = {
+      kind: "agent_session",
+      id: "agent_session:local:agt_1",
+      attachment: {
+        type: "text",
+        mimeType: "text/plain",
+        contextKind: "agent_session",
+        title: "Auth fix",
+        text: "Referenced agent session\n- agentId: agt_1",
+      },
+      source: { serverId: "local", agentId: "agt_1" },
+    };
+
+    expect(isWorkspaceAttachment(attachment)).toBe(true);
+    expect(workspaceAttachmentToSubmitAttachment(attachment)).toEqual(attachment.attachment);
+  });
+
+  it("serializes agent profile mentions as create_agent address text", () => {
+    const attachment: ComposerAttachment = {
+      kind: "agent_profile",
+      id: "agent_profile:local:p1",
+      attachment: {
+        type: "text",
+        mimeType: "text/plain",
+        contextKind: "agent_profile",
+        title: "Cursor Fable",
+        text: "Referenced agent profile\n- model: claude-fable-5",
+      },
+      source: { serverId: "local", profileId: "p1" },
+    };
+
+    expect(isWorkspaceAttachment(attachment)).toBe(true);
+    expect(workspaceAttachmentToSubmitAttachment(attachment)).toEqual(attachment.attachment);
+  });
 });

@@ -83,6 +83,8 @@ function areWorkspaceAttachmentsEqual(
 function getContextAttachmentKey(attachment: WorkspaceComposerAttachment): string | null {
   if (
     attachment.kind !== "chat_history" &&
+    attachment.kind !== "agent_session" &&
+    attachment.kind !== "agent_profile" &&
     attachment.kind !== "forge.change_request_comment" &&
     attachment.kind !== "forge.change_request_review" &&
     attachment.kind !== "forge.change_request_check" &&
