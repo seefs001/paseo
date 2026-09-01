@@ -242,6 +242,7 @@ function applySelectedMention(input: {
     applySessionMentionReplacement({
       text: input.text,
       mention: input.mention,
+      label: input.attachment.attachment.title ?? "",
     }),
   );
   input.onSessionMentionSelected?.(input.attachment);

@@ -27,6 +27,7 @@ export interface RankSessionMentionCandidatesInput {
 interface ApplySessionMentionReplacementInput {
   text: string;
   mention: SessionMentionRange;
+  label: string;
 }
 
 export function isPathMentionQuery(query: string): boolean {
@@ -86,8 +87,28 @@ export function mentionOptionGroups(kind: ComposerMentionKind): {
   };
 }
 
+const MENTION_TOKEN_SPECIAL = /[\s"/@]/;
+
+export function formatAgentMentionToken(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (MENTION_TOKEN_SPECIAL.test(trimmed)) {
+    return `@"${trimmed.replace(/"/g, '\\"')}"`;
+  }
+  return `@${trimmed}`;
+}
+
 export function applySessionMentionReplacement(input: ApplySessionMentionReplacementInput): string {
-  return `${input.text.slice(0, input.mention.start)}${input.text.slice(input.mention.end)}`;
+  const token = formatAgentMentionToken(input.label);
+  const before = input.text.slice(0, input.mention.start);
+  const after = input.text.slice(input.mention.end);
+  if (!token) {
+    return `${before}${after}`;
+  }
+  const needsSpace = after.length === 0 || !/^\s/.test(after);
+  return `${before}${token}${needsSpace ? " " : ""}${after}`;
 }
 
 export function rankSessionMentionCandidates(

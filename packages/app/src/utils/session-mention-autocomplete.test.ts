@@ -3,6 +3,7 @@ import {
   applySessionMentionReplacement,
   buildAgentProfileAddressCard,
   buildAgentSessionAddressCard,
+  formatAgentMentionToken,
   isPathMentionQuery,
   rankAgentProfileMentions,
   rankSessionMentionCandidates,
@@ -100,14 +101,30 @@ describe("resolveComposerMention", () => {
   });
 });
 
+describe("formatAgentMentionToken", () => {
+  it("keeps a readable @name in the composer and quotes names with spaces", () => {
+    expect(formatAgentMentionToken("K3")).toBe("@K3");
+    expect(formatAgentMentionToken("Auth fix")).toBe('@"Auth fix"');
+    expect(formatAgentMentionToken("")).toBe("");
+  });
+});
+
 describe("applySessionMentionReplacement", () => {
-  it("removes the active @token so the attachment carries the address", () => {
+  it("leaves the selected profile or session name in the text", () => {
     expect(
       applySessionMentionReplacement({
         text: "handoff to @auth",
         mention: { start: 11, end: 16, query: "auth" },
+        label: "Auth fix",
       }),
-    ).toBe("handoff to ");
+    ).toBe('handoff to @"Auth fix" ');
+    expect(
+      applySessionMentionReplacement({
+        text: "@agent k3 please",
+        mention: { start: 0, end: 9, query: "agent k3" },
+        label: "K3",
+      }),
+    ).toBe("@K3 please");
   });
 });
 
