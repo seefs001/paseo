@@ -15,6 +15,7 @@ export function buildAgentProfileComposerAttachment(input: {
     attachment: {
       type: "text",
       mimeType: "text/plain",
+      contextKind: "agent_profile",
       title,
       text: buildAgentProfileAddressCard(input.profile),
     },

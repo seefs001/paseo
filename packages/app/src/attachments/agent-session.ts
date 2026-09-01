@@ -21,6 +21,7 @@ export function buildAgentSessionComposerAttachment(
     attachment: {
       type: "text",
       mimeType: "text/plain",
+      contextKind: "agent_session",
       title,
       text: buildAgentSessionAddressCard(input),
     },

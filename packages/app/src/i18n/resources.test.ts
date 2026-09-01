@@ -707,9 +707,13 @@ describe("translation resources", () => {
     expect(en.agentAutocomplete.searchingWorkspace).toBe("Searching workspace...");
     expect(en.agentAutocomplete.noCommands).toBe("No commands found");
     expect(en.agentAutocomplete.noSessions).toBe("No agent sessions found");
+    expect(en.agentAutocomplete.noProfiles).toBe("No agent profiles found");
+    expect(en.agentAutocomplete.noMentions).toBe("No agent sessions, profiles, or files found");
     expect(en.agentAutocomplete.failedToLoad).toBe("Failed to load");
     expect(en.message.attachments.agentSession).toBe("Agent session");
     expect(en.message.attachments.agentProfile).toBe("Agent profile");
+    expect(en.message.attachments.detailAgentId).toBe("Agent ID");
+    expect(en.message.attachments.detailDirectory).toBe("Directory");
     expect(en.composer.attachments.openAgentProfile).toBe("Open agent profile attachment");
     expect(en.composer.attachments.removeAgentProfile).toBe("Remove agent profile attachment");
     expect(en.composer.attachments.openAgentSession).toBe("Open agent session attachment");

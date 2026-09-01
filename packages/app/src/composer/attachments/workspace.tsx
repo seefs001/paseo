@@ -6,6 +6,8 @@ import type {
   WorkspaceComposerAttachment,
 } from "@/attachments/types";
 import { getWorkspaceAttachmentPillContent } from "@/attachments/attachment-pill-content";
+import { getAgentMentionDetail } from "@/attachments/agent-mention-detail";
+import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
 import { AttachmentLabel, AttachmentPill } from "@/components/attachment-pill";
 import {
   isWorkspaceAttachment,
@@ -275,24 +277,49 @@ function WorkspaceAttachmentPill({
 }: WorkspaceAttachmentPillProps) {
   const { t } = useTranslation();
   const content = getWorkspaceAttachmentPillContent(attachment, t);
+  const mentionDetail = getWorkspaceMentionDetail(attachment, t);
+  const [detailOpen, setDetailOpen] = useState(false);
   const handleOpen = useCallback(() => {
+    if (mentionDetail) {
+      setDetailOpen(true);
+      return;
+    }
     onOpen(attachment);
-  }, [onOpen, attachment]);
+  }, [attachment, mentionDetail, onOpen]);
+  const handleCloseDetail = useCallback(() => {
+    setDetailOpen(false);
+  }, []);
   const handleRemove = useCallback(() => {
     onRemove(index);
-  }, [onRemove, index]);
+  }, [index, onRemove]);
   return (
-    <AttachmentPill
-      testID={getPillTestID(attachment)}
-      onOpen={handleOpen}
-      onRemove={handleRemove}
-      openAccessibilityLabel={getOpenAccessibilityLabel(attachment, t)}
-      removeAccessibilityLabel={getRemoveAccessibilityLabel(attachment, t)}
-      disabled={disabled}
-    >
-      <AttachmentLabel icon={content.icon} title={content.title} subtitle={content.subtitle} />
-    </AttachmentPill>
+    <>
+      <AttachmentPill
+        testID={getPillTestID(attachment)}
+        onOpen={handleOpen}
+        onRemove={handleRemove}
+        openAccessibilityLabel={getOpenAccessibilityLabel(attachment, t)}
+        removeAccessibilityLabel={getRemoveAccessibilityLabel(attachment, t)}
+        disabled={disabled}
+      >
+        <AttachmentLabel icon={content.icon} title={content.title} subtitle={content.subtitle} />
+      </AttachmentPill>
+      <AgentMentionDetailSheet
+        detail={detailOpen ? mentionDetail : null}
+        onClose={handleCloseDetail}
+      />
+    </>
   );
+}
+
+function getWorkspaceMentionDetail(
+  attachment: WorkspaceComposerAttachment,
+  t: ReturnType<typeof useTranslation>["t"],
+): ReturnType<typeof getAgentMentionDetail> {
+  if (attachment.kind !== "agent_session" && attachment.kind !== "agent_profile") {
+    return null;
+  }
+  return getAgentMentionDetail(attachment.attachment, t);
 }
 
 export const composerWorkspaceAttachment = {

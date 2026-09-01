@@ -32,6 +32,7 @@ function agentSessionAttachment(): WorkspaceComposerAttachment {
     attachment: {
       type: "text",
       mimeType: "text/plain",
+      contextKind: "agent_session",
       title: "Auth fix",
       text: "Referenced agent session\n- agentId: agt_1",
     },

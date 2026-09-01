@@ -62,6 +62,7 @@ describe("workspace attachment utilities", () => {
       attachment: {
         type: "text",
         mimeType: "text/plain",
+        contextKind: "agent_session",
         title: "Auth fix",
         text: "Referenced agent session\n- agentId: agt_1",
       },
@@ -79,6 +80,7 @@ describe("workspace attachment utilities", () => {
       attachment: {
         type: "text",
         mimeType: "text/plain",
+        contextKind: "agent_profile",
         title: "Cursor Fable",
         text: "Referenced agent profile\n- model: claude-fable-5",
       },

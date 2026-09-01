@@ -286,6 +286,20 @@ describe("shared messages attachments", () => {
         {
           type: "text",
           mimeType: "text/plain",
+          contextKind: "agent_session",
+          title: "Auth fix",
+          text: "Referenced agent session",
+        },
+        {
+          type: "text",
+          mimeType: "text/plain",
+          contextKind: "agent_profile",
+          title: "K3",
+          text: "Referenced agent profile",
+        },
+        {
+          type: "text",
+          mimeType: "text/plain",
           contextKind: "future_context",
           title: "Future context",
           text: "Future client hint",
@@ -300,6 +314,20 @@ describe("shared messages attachments", () => {
         contextKind: "chat_history",
         title: "Chat history",
         text: "Earlier context",
+      },
+      {
+        type: "text",
+        mimeType: "text/plain",
+        contextKind: "agent_session",
+        title: "Auth fix",
+        text: "Referenced agent session",
+      },
+      {
+        type: "text",
+        mimeType: "text/plain",
+        contextKind: "agent_profile",
+        title: "K3",
+        text: "Referenced agent profile",
       },
       {
         type: "text",

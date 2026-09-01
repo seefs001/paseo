@@ -1121,7 +1121,11 @@ export const TextAttachmentSchema = z
   })
   .transform(({ contextKind, ...attachment }) => ({
     ...attachment,
-    ...(contextKind === "chat_history" ? { contextKind } : {}),
+    ...(contextKind === "chat_history" ||
+    contextKind === "agent_session" ||
+    contextKind === "agent_profile"
+      ? { contextKind }
+      : {}),
   }));
 
 export const ReviewAttachmentContextLineSchema = z.object({

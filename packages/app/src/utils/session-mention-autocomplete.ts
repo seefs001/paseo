@@ -33,17 +33,57 @@ export function isPathMentionQuery(query: string): boolean {
   return query.includes("/");
 }
 
-export function resolveComposerMentionMode(input: {
+export type ComposerMentionKind = "all" | "chat" | "agent" | "file";
+
+export interface ResolvedComposerMention {
+  kind: ComposerMentionKind;
+  filter: string;
+}
+
+const MENTION_KIND_PREFIX = /^(chat|agent|file)(?:\s+|\/|$)(.*)$/i;
+
+export function resolveComposerMention(input: {
   mentionQuery: string | null;
   canAttachSessionMention: boolean;
-}): "file" | "session" | null {
+}): ResolvedComposerMention | null {
   if (input.mentionQuery === null) {
     return null;
   }
-  if (!input.canAttachSessionMention || isPathMentionQuery(input.mentionQuery)) {
-    return "file";
+  if (!input.canAttachSessionMention) {
+    return { kind: "file", filter: input.mentionQuery };
   }
-  return "session";
+  const prefixed = parseMentionKindPrefix(input.mentionQuery);
+  if (prefixed) {
+    return prefixed;
+  }
+  if (isPathMentionQuery(input.mentionQuery)) {
+    return { kind: "file", filter: input.mentionQuery };
+  }
+  return { kind: "all", filter: input.mentionQuery };
+}
+
+function parseMentionKindPrefix(query: string): ResolvedComposerMention | null {
+  const match = MENTION_KIND_PREFIX.exec(query);
+  if (!match) {
+    return null;
+  }
+  const kind = match[1].toLowerCase();
+  if (kind !== "chat" && kind !== "agent" && kind !== "file") {
+    return null;
+  }
+  return { kind, filter: match[2] ?? "" };
+}
+
+export function mentionOptionGroups(kind: ComposerMentionKind): {
+  sessions: boolean;
+  profiles: boolean;
+  files: boolean;
+} {
+  return {
+    sessions: kind === "chat" || kind === "all",
+    profiles: kind === "agent" || kind === "all",
+    files: kind === "file" || kind === "all",
+  };
 }
 
 export function applySessionMentionReplacement(input: ApplySessionMentionReplacementInput): string {
