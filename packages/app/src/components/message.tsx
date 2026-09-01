@@ -83,6 +83,11 @@ import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-d
 import { setAssistantMarkdownBlockHeight } from "@/utils/assistant-message-height-estimate";
 import { isRenderProfileEnabled } from "@/utils/render-profiler";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
+import {
+  getAgentMentionDetail,
+  isAgentMentionAttachment,
+} from "@/attachments/agent-mention-detail";
+import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
 import { PlanCard } from "./plan-card";
 import { useToolCallSheet } from "./tool-call-sheet";
 import { ToolCallDetailsContent } from "./tool-call-details";
@@ -420,6 +425,36 @@ function UserMessageImagePill({ image, onOpen, accessibilityLabel }: UserMessage
   );
 }
 
+interface UserMessageAttachmentChipProps {
+  attachment: AgentAttachment;
+  onOpenMention: (attachment: AgentAttachment) => void;
+}
+
+function mentionOpenLabel(attachment: AgentAttachment, t: (key: string) => string): string {
+  if (attachment.type === "text" && attachment.contextKind === "agent_profile") {
+    return t("composer.attachments.openAgentProfile");
+  }
+  return t("composer.attachments.openAgentSession");
+}
+
+function UserMessageAttachmentChip({ attachment, onOpenMention }: UserMessageAttachmentChipProps) {
+  const { t } = useTranslation();
+  const content = getAgentAttachmentPillContent(attachment, t);
+  const canOpen = isAgentMentionAttachment(attachment);
+  const handlePress = useCallback(() => {
+    onOpenMention(attachment);
+  }, [onOpenMention, attachment]);
+  return (
+    <AttachmentFrame
+      onPress={canOpen ? handlePress : undefined}
+      accessibilityLabel={canOpen ? mentionOpenLabel(attachment, t) : undefined}
+      testID={canOpen ? "user-message-agent-mention-pill" : undefined}
+    >
+      <AttachmentLabel icon={content.icon} title={content.title} subtitle={content.subtitle} />
+    </AttachmentFrame>
+  );
+}
+
 export const UserMessage = memo(function UserMessage({
   serverId,
   agentId,
@@ -439,7 +474,19 @@ export const UserMessage = memo(function UserMessage({
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const [lightboxMetadata, setLightboxMetadata] = useState<UserMessageImageAttachment | null>(null);
+  const [mentionDetailAttachment, setMentionDetailAttachment] = useState<AgentAttachment | null>(
+    null,
+  );
   const handleLightboxClose = useCallback(() => setLightboxMetadata(null), []);
+  const handleOpenMention = useCallback((attachment: AgentAttachment) => {
+    setMentionDetailAttachment(attachment);
+  }, []);
+  const handleCloseMention = useCallback(() => {
+    setMentionDetailAttachment(null);
+  }, []);
+  const mentionDetail = mentionDetailAttachment
+    ? getAgentMentionDetail(mentionDetailAttachment, t)
+    : null;
   const lightboxSource = useMemo<ImageLightboxSource | null>(
     () => (lightboxMetadata ? { type: "attachment", metadata: lightboxMetadata } : null),
     [lightboxMetadata],
@@ -522,20 +569,13 @@ export const UserMessage = memo(function UserMessage({
           ) : null}
           {hasAttachments ? (
             <View style={attachmentPreviewContainerStyle}>
-              {attachments.map((attachment, index) => {
-                const content = getAgentAttachmentPillContent(attachment, t);
-                return (
-                  <AttachmentFrame
-                    key={`${attachment.type}:${"number" in attachment ? attachment.number : index}`}
-                  >
-                    <AttachmentLabel
-                      icon={content.icon}
-                      title={content.title}
-                      subtitle={content.subtitle}
-                    />
-                  </AttachmentFrame>
-                );
-              })}
+              {attachments.map((attachment, index) => (
+                <UserMessageAttachmentChip
+                  key={`${attachment.type}:${"number" in attachment ? attachment.number : index}`}
+                  attachment={attachment}
+                  onOpenMention={handleOpenMention}
+                />
+              ))}
             </View>
           ) : null}
           {hasText ? (
@@ -570,6 +610,7 @@ export const UserMessage = memo(function UserMessage({
         ) : null}
       </View>
       <AttachmentLightbox source={lightboxSource} onClose={handleLightboxClose} />
+      <AgentMentionDetailSheet detail={mentionDetail} onClose={handleCloseMention} />
     </View>
   );
 });

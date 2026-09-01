@@ -6,7 +6,7 @@ import {
   isPathMentionQuery,
   rankAgentProfileMentions,
   rankSessionMentionCandidates,
-  resolveComposerMentionMode,
+  resolveComposerMention,
   type SessionMentionCandidate,
 } from "./session-mention-autocomplete";
 
@@ -31,33 +31,72 @@ describe("isPathMentionQuery", () => {
   it("treats slash-containing queries as file paths", () => {
     expect(isPathMentionQuery("src/foo")).toBe(true);
     expect(isPathMentionQuery("foo")).toBe(false);
+    expect(isPathMentionQuery("package.json")).toBe(false);
     expect(isPathMentionQuery("")).toBe(false);
   });
 });
 
-describe("resolveComposerMentionMode", () => {
-  it("keeps path queries on files and uses sessions for empty or name queries", () => {
+describe("resolveComposerMention", () => {
+  it("keeps path queries on files and mixes kinds for empty or name queries", () => {
     expect(
-      resolveComposerMentionMode({ mentionQuery: null, canAttachSessionMention: true }),
+      resolveComposerMention({ mentionQuery: null, canAttachSessionMention: true }),
     ).toBeNull();
     expect(
-      resolveComposerMentionMode({ mentionQuery: "src/foo", canAttachSessionMention: true }),
-    ).toBe("file");
-    expect(resolveComposerMentionMode({ mentionQuery: "", canAttachSessionMention: true })).toBe(
-      "session",
+      resolveComposerMention({ mentionQuery: "src/foo", canAttachSessionMention: true }),
+    ).toEqual({ kind: "file", filter: "src/foo" });
+    expect(resolveComposerMention({ mentionQuery: "", canAttachSessionMention: true })).toEqual({
+      kind: "all",
+      filter: "",
+    });
+    expect(resolveComposerMention({ mentionQuery: "auth", canAttachSessionMention: true })).toEqual(
+      {
+        kind: "all",
+        filter: "auth",
+      },
+    );
+  });
+
+  it("scopes the mention list to chat, agent, or file prefixes", () => {
+    expect(resolveComposerMention({ mentionQuery: "chat", canAttachSessionMention: true })).toEqual(
+      {
+        kind: "chat",
+        filter: "",
+      },
     );
     expect(
-      resolveComposerMentionMode({ mentionQuery: "auth", canAttachSessionMention: true }),
-    ).toBe("session");
+      resolveComposerMention({ mentionQuery: "chat auth", canAttachSessionMention: true }),
+    ).toEqual({ kind: "chat", filter: "auth" });
+    expect(
+      resolveComposerMention({ mentionQuery: "agent k3", canAttachSessionMention: true }),
+    ).toEqual({ kind: "agent", filter: "k3" });
+    expect(
+      resolveComposerMention({ mentionQuery: "file package.json", canAttachSessionMention: true }),
+    ).toEqual({ kind: "file", filter: "package.json" });
+    expect(
+      resolveComposerMention({ mentionQuery: "file/src/foo", canAttachSessionMention: true }),
+    ).toEqual({ kind: "file", filter: "src/foo" });
+    expect(
+      resolveComposerMention({ mentionQuery: "Agent K3", canAttachSessionMention: true }),
+    ).toEqual({ kind: "agent", filter: "K3" });
+  });
+
+  it("does not treat longer words as kind prefixes", () => {
+    expect(
+      resolveComposerMention({ mentionQuery: "chatty", canAttachSessionMention: true }),
+    ).toEqual({ kind: "all", filter: "chatty" });
+    expect(
+      resolveComposerMention({ mentionQuery: "filename", canAttachSessionMention: true }),
+    ).toEqual({ kind: "all", filter: "filename" });
   });
 
   it("falls back to file mentions when the composer cannot attach a session", () => {
-    expect(resolveComposerMentionMode({ mentionQuery: "", canAttachSessionMention: false })).toBe(
-      "file",
-    );
+    expect(resolveComposerMention({ mentionQuery: "", canAttachSessionMention: false })).toEqual({
+      kind: "file",
+      filter: "",
+    });
     expect(
-      resolveComposerMentionMode({ mentionQuery: "auth", canAttachSessionMention: false }),
-    ).toBe("file");
+      resolveComposerMention({ mentionQuery: "agent k3", canAttachSessionMention: false }),
+    ).toEqual({ kind: "file", filter: "agent k3" });
   });
 });
 

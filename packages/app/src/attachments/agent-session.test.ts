@@ -20,6 +20,7 @@ describe("buildAgentSessionComposerAttachment", () => {
       attachment: {
         type: "text",
         mimeType: "text/plain",
+        contextKind: "agent_session",
         title: "Auth fix",
         text: buildAgentSessionAddressCard(input),
       },

@@ -23,6 +23,7 @@ describe("buildAgentProfileComposerAttachment", () => {
       attachment: {
         type: "text",
         mimeType: "text/plain",
+        contextKind: "agent_profile",
         title: "Cursor Fable",
         text: buildAgentProfileAddressCard(profile),
       },

@@ -28,8 +28,10 @@ import {
   applySessionMentionReplacement,
   rankAgentProfileMentions,
   rankSessionMentionCandidates,
-  resolveComposerMentionMode,
+  mentionOptionGroups,
+  resolveComposerMention,
   type AgentProfileMention,
+  type ComposerMentionKind,
   type SessionMentionCandidate,
 } from "@/utils/session-mention-autocomplete";
 import { CLIENT_SLASH_COMMANDS, type ClientSlashCommand } from "@/client-slash-commands";
@@ -279,6 +281,32 @@ type AvailableCommand =
   | { source: "client"; command: ClientSlashCommand }
   | { source: "provider"; command: AgentSlashCommand };
 
+function mentionKindFromMode(mode: AutocompleteMode): ComposerMentionKind | null {
+  if (mode === "command" || mode === null) {
+    return null;
+  }
+  return mode;
+}
+
+function wantsSessionMentions(mode: AutocompleteMode): boolean {
+  const kind = mentionKindFromMode(mode);
+  return kind !== null && mentionOptionGroups(kind).sessions;
+}
+
+function wantsProfileMentions(mode: AutocompleteMode): boolean {
+  const kind = mentionKindFromMode(mode);
+  return kind !== null && mentionOptionGroups(kind).profiles;
+}
+
+function wantsFileSuggestions(mode: AutocompleteMode): boolean {
+  const kind = mentionKindFromMode(mode);
+  return kind !== null && mentionOptionGroups(kind).files;
+}
+
+function isMentionAutocompleteMode(mode: AutocompleteMode): boolean {
+  return mode === "file" || mode === "chat" || mode === "agent" || mode === "all";
+}
+
 function resolveFileSuggestionsEnabled(input: {
   mode: AutocompleteMode;
   serverId: string;
@@ -287,7 +315,7 @@ function resolveFileSuggestionsEnabled(input: {
   isConnected: boolean;
 }): boolean {
   return (
-    input.mode === "file" &&
+    wantsFileSuggestions(input.mode) &&
     Boolean(input.serverId) &&
     input.cwd.length > 0 &&
     Boolean(input.client) &&
@@ -298,12 +326,12 @@ function resolveFileSuggestionsEnabled(input: {
 function resolveAutocompleteQuery(
   mode: AutocompleteMode,
   commandFilterQuery: string,
-  fileFilterQuery: string,
+  mentionFilter: string,
 ): string {
   if (mode === "command") {
     return commandFilterQuery;
   }
-  return fileFilterQuery;
+  return `${mode ?? ""}:${mentionFilter}`;
 }
 
 function resolveCommandStartEscape(
@@ -422,7 +450,7 @@ function mapCommandToOption(entry: AvailableCommand, t: TFunction): AgentAutocom
   };
 }
 
-type AutocompleteMode = "command" | "file" | "session" | null;
+type AutocompleteMode = "command" | ComposerMentionKind | null;
 
 interface BuildAutocompleteOptionsInput {
   isVisible: boolean;
@@ -439,7 +467,7 @@ interface BuildAutocompleteOptionsInput {
   t: TFunction;
 }
 
-function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
+export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
   if (!input.isVisible) {
     return [];
   }
@@ -470,29 +498,43 @@ function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
   }
 
   const activeFileMention = input.activeFileMention;
-  if (input.mode === "file" && activeFileMention) {
-    const orderedEntries = orderAutocompleteOptions(input.fileSuggestions);
-    return orderedEntries.map((entry) => ({
-      type: "workspace_entry" as const,
-      id: `${entry.kind}:${entry.path}`,
-      label: entry.path,
-      kind: entry.kind,
-      entryPath: entry.path,
-      mention: activeFileMention,
-    }));
-  }
-
-  if (input.mode === "session" && activeFileMention) {
-    const sessionOptions = input.sessionCandidates.map((entry) =>
-      mapSessionCandidateToOption(entry, activeFileMention),
-    );
-    const profileOptions = input.profileMentions.map((entry) =>
-      mapProfileMentionToOption(entry, activeFileMention, input.serverId),
-    );
-    return orderAutocompleteOptions([...sessionOptions, ...profileOptions]);
+  if (isMentionAutocompleteMode(input.mode) && activeFileMention) {
+    return buildMentionAutocompleteOptions(input, activeFileMention);
   }
 
   return [];
+}
+
+function buildMentionAutocompleteOptions(
+  input: BuildAutocompleteOptionsInput,
+  mention: FileMentionRange,
+): AgentAutocompleteOption[] {
+  const sessionOptions = wantsSessionMentions(input.mode)
+    ? input.sessionCandidates.map((entry) => mapSessionCandidateToOption(entry, mention))
+    : [];
+  const profileOptions = wantsProfileMentions(input.mode)
+    ? input.profileMentions.map((entry) =>
+        mapProfileMentionToOption(entry, mention, input.serverId, input.t),
+      )
+    : [];
+  const fileOptions = wantsFileSuggestions(input.mode)
+    ? input.fileSuggestions.map((entry) => mapWorkspaceEntryToOption(entry, mention))
+    : [];
+  return orderAutocompleteOptions([...profileOptions, ...sessionOptions, ...fileOptions]);
+}
+
+function mapWorkspaceEntryToOption(
+  entry: DirectorySuggestionEntry,
+  mention: FileMentionRange,
+): AgentAutocompleteOption {
+  return {
+    type: "workspace_entry",
+    id: `${entry.kind}:${entry.path}`,
+    label: entry.path,
+    kind: entry.kind,
+    entryPath: entry.path,
+    mention,
+  };
 }
 
 function mentionProviderModelDetail(provider: string, model: string | null | undefined): string {
@@ -524,13 +566,14 @@ function mapProfileMentionToOption(
   profile: AgentProfileMention,
   mention: FileMentionRange,
   serverId: string,
+  t: TFunction,
 ): AgentAutocompleteOption {
   return {
     type: "agent_profile",
     id: `${serverId}:${profile.id}`,
     label: profile.name,
     detail: mentionProviderModelDetail(profile.provider, profile.model),
-    description: profile.model?.trim() || profile.provider,
+    description: t("message.attachments.agentProfile"),
     kind: "agent",
     mention,
     profile,
@@ -561,7 +604,7 @@ function collectRankedProfileMentions(input: {
   profiles: readonly AgentProfileMention[];
   query: string;
 }): AgentProfileMention[] {
-  if (input.mode !== "session") {
+  if (!wantsProfileMentions(input.mode)) {
     return [];
   }
   return rankAgentProfileMentions({
@@ -579,7 +622,7 @@ function collectRankedSessionMentions(input: {
   workspaceId: string | null;
   query: string;
 }): SessionMentionCandidate[] {
-  if (input.mode !== "session" || !input.agentsById) {
+  if (!wantsSessionMentions(input.mode) || !input.agentsById) {
     return [];
   }
   const openTabIds = collectOpenAgentTabIdsForServer(input.layoutByWorkspace, input.serverId);
@@ -620,15 +663,11 @@ function mapAgentToSessionMentionCandidate(
 }
 
 function resolveAutocompleteMode(args: {
-  showFileAutocomplete: boolean;
-  showSessionAutocomplete: boolean;
+  mentionKind: ComposerMentionKind | null;
   showCommandAutocomplete: boolean;
 }): AutocompleteMode {
-  if (args.showFileAutocomplete) {
-    return "file";
-  }
-  if (args.showSessionAutocomplete) {
-    return "session";
+  if (args.mentionKind) {
+    return args.mentionKind;
   }
   if (args.showCommandAutocomplete) {
     return "command";
@@ -648,7 +687,7 @@ function resolveAutocompleteIsVisible(args: {
   if (args.mode === "file") {
     return Boolean(args.serverId) && args.autocompleteCwd.length > 0;
   }
-  if (args.mode === "session") {
+  if (isMentionAutocompleteMode(args.mode)) {
     return Boolean(args.serverId);
   }
   return false;
@@ -680,6 +719,9 @@ function resolveAutocompleteIsLoading(args: {
       args.fileSuggestionsIsPending || (args.fileSuggestionsIsLoading && args.optionsLength === 0)
     );
   }
+  if (args.mode === "all") {
+    return args.fileSuggestionsIsPending && args.optionsLength === 0;
+  }
   return false;
 }
 
@@ -704,7 +746,7 @@ function resolveAutocompleteErrorMessage(args: {
 }
 
 function resolveAutocompleteLoadingText(mode: AutocompleteMode, t: TFunction): string {
-  if (mode === "file") {
+  if (wantsFileSuggestions(mode)) {
     return t("agentAutocomplete.searchingWorkspace");
   }
   return t("agentAutocomplete.loadingCommands");
@@ -714,8 +756,14 @@ function resolveAutocompleteEmptyText(mode: AutocompleteMode, t: TFunction): str
   if (mode === "file") {
     return t("agentAutocomplete.noFiles");
   }
-  if (mode === "session") {
+  if (mode === "chat") {
     return t("agentAutocomplete.noSessions");
+  }
+  if (mode === "agent") {
+    return t("agentAutocomplete.noProfiles");
+  }
+  if (mode === "all") {
+    return t("agentAutocomplete.noMentions");
   }
   return t("agentAutocomplete.noCommands");
 }
@@ -755,19 +803,17 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       }),
     [cursorIndex, userInput],
   );
-  const fileFilterQuery = activeFileMention?.query ?? "";
-  const mentionMode = resolveComposerMentionMode({
+  const mention = resolveComposerMention({
     mentionQuery: activeFileMention === null ? null : activeFileMention.query,
     canAttachSessionMention: Boolean(onSessionMentionSelected),
   });
-  const showFileAutocomplete = mentionMode === "file";
-  const showSessionAutocomplete = mentionMode === "session";
-  const [debouncedFileFilterQuery, setDebouncedFileFilterQuery] = useState(fileFilterQuery);
+  const mentionFilter = mention?.filter ?? "";
+  const [debouncedFileFilterQuery, setDebouncedFileFilterQuery] = useState(mentionFilter);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedFileFilterQuery(fileFilterQuery), 180);
+    const timer = setTimeout(() => setDebouncedFileFilterQuery(mentionFilter), 180);
     return () => clearTimeout(timer);
-  }, [fileFilterQuery]);
+  }, [mentionFilter]);
 
   const normalizedDraftConfig = useMemo(
     () => normalizeDraftCommandConfig(draftConfig),
@@ -791,8 +837,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const { config: daemonConfig } = useDaemonConfig(serverId);
 
   const mode = resolveAutocompleteMode({
-    showFileAutocomplete,
-    showSessionAutocomplete,
+    mentionKind: mention?.kind ?? null,
     showCommandAutocomplete,
   });
   const canShowAutocomplete = resolveAutocompleteIsVisible({
@@ -825,9 +870,9 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         serverId,
         agentId,
         workspaceId: workspaceId ?? null,
-        query: fileFilterQuery,
+        query: mentionFilter,
       }),
-    [agentId, agentsById, fileFilterQuery, layoutByWorkspace, mode, serverId, workspaceId],
+    [agentId, agentsById, mentionFilter, layoutByWorkspace, mode, serverId, workspaceId],
   );
 
   const profileMentions = useMemo(
@@ -835,9 +880,9 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       collectRankedProfileMentions({
         mode,
         profiles: daemonConfig?.agentProfiles ?? [],
-        query: fileFilterQuery,
+        query: mentionFilter,
       }),
-    [daemonConfig?.agentProfiles, fileFilterQuery, mode],
+    [daemonConfig?.agentProfiles, mentionFilter, mode],
   );
 
   const fileSuggestionsQuery = useQuery({
@@ -940,7 +985,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const { selectedIndex, onKeyPress } = useAutocomplete({
     isVisible,
     options,
-    query: resolveAutocompleteQuery(mode, commandFilterQuery, fileFilterQuery),
+    query: resolveAutocompleteQuery(mode, commandFilterQuery, mentionFilter),
     onSelectOption: selectOptionFromKeyPress,
     onEscape: resolveCommandStartEscape(mode, activeSlashCommand, setUserInput),
   });

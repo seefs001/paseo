@@ -46,4 +46,30 @@ describe("getWorkspaceNamingAttachments", () => {
 
     expect(getWorkspaceNamingAttachments([chatHistory, prContext])).toEqual([prContext]);
   });
+
+  it("removes agent mention address cards from workspace naming context", () => {
+    const profile = {
+      type: "text",
+      mimeType: "text/plain",
+      contextKind: "agent_profile",
+      title: "K3",
+      text: "Referenced agent profile",
+    } satisfies AgentAttachment;
+    const session = {
+      type: "text",
+      mimeType: "text/plain",
+      contextKind: "agent_session",
+      title: "Auth fix",
+      text: "Referenced agent session",
+    } satisfies AgentAttachment;
+    const prContext = {
+      type: "github_pr",
+      mimeType: "application/github-pr",
+      number: 1788,
+      title: "Fork assistant turns into new drafts",
+      url: "https://github.com/getpaseo/paseo/pull/1788",
+    } satisfies AgentAttachment;
+
+    expect(getWorkspaceNamingAttachments([profile, session, prContext])).toEqual([prContext]);
+  });
 });

@@ -52,7 +52,22 @@ function getTextAttachmentSubtitle(
   if (attachment.contextKind === "chat_history") {
     return "Previous conversation";
   }
+  if (attachment.contextKind === "agent_session") {
+    return t("message.attachments.agentSession");
+  }
+  if (attachment.contextKind === "agent_profile") {
+    return t("message.attachments.agentProfile");
+  }
   return t("message.attachments.text");
+}
+
+function getTextAttachmentIcon(attachment: Extract<AgentAttachment, { type: "text" }>): ReactNode {
+  const isAgentMention =
+    attachment.contextKind === "agent_session" || attachment.contextKind === "agent_profile";
+  if (isAgentMention) {
+    return attachmentAgentSessionIcon;
+  }
+  return attachmentFileIcon;
 }
 
 export function getAgentAttachmentPillContent(
@@ -96,7 +111,7 @@ export function getAgentAttachmentPillContent(
         };
       }
       return {
-        icon: attachmentFileIcon,
+        icon: getTextAttachmentIcon(attachment),
         title: attachment.title ?? t("message.attachments.textAttachment"),
         subtitle: getTextAttachmentSubtitle(attachment, t),
       };
