@@ -1930,6 +1930,8 @@ export const fr: TranslationResources = {
     dismiss: "Rejeter",
   },
   contextWindow: {
+    outputSpeed: "Moyenne du dernier tour : {{speed}} token/s",
+    outputSpeedHint: "Inclut le temps d’attente des requêtes au modèle.",
     title: "Fenêtre contextuelle",
     used: "{{percentage}}% utilisé",
     tokens: "Jetons{{used}}/{{max}}",

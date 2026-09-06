@@ -62,6 +62,32 @@ async function compileInlineSchema(sourceSchema: string): Promise<GeneratedSchem
 }
 
 describe("WS outbound zod-aot validation", () => {
+  it.each([125, null, undefined])(
+    "preserves optional output speed %s in turn usage",
+    (outputTokensPerSecond) => {
+      const envelope = {
+        type: "session",
+        message: {
+          type: "agent_stream",
+          payload: {
+            agentId: "agent-1",
+            timestamp: "2026-09-06T00:00:00.000Z",
+            event: {
+              type: "turn_completed",
+              provider: "grok",
+              turnId: "turn-1",
+              usage: { outputTokensPerSecond },
+            },
+          },
+        },
+      };
+      expect(GeneratedWSOutboundMessageSchema.safeParse(envelope)).toMatchObject({
+        success: true,
+        data: envelope,
+      });
+    },
+  );
+
   it("applies defaults inside discriminated-union branches", async () => {
     const schema = await compileInlineSchema(`
 const SourceSchema = z.discriminatedUnion("type", [

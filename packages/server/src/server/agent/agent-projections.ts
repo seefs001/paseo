@@ -479,6 +479,7 @@ function sanitizeUsage(value: unknown): AgentUsage | undefined {
     "inputTokens",
     "cachedInputTokens",
     "outputTokens",
+    "outputTokensPerSecond",
     "totalCostUsd",
     "contextWindowMaxTokens",
     "contextWindowUsedTokens",
@@ -487,6 +488,12 @@ function sanitizeUsage(value: unknown): AgentUsage | undefined {
     if (!assignFiniteNumber(sanitized, result, field)) {
       return undefined;
     }
+  }
+  if (sanitized.outputTokensPerSecond === null) {
+    result.outputTokensPerSecond = null;
+  }
+  if (typeof result.outputTokensPerSecond === "number" && result.outputTokensPerSecond < 0) {
+    return undefined;
   }
   return Object.keys(result).length ? result : undefined;
 }

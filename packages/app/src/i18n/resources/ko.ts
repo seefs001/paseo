@@ -1889,6 +1889,8 @@ export const ko: TranslationResources = {
     dismiss: "닫기",
   },
   contextWindow: {
+    outputSpeed: "최근 턴 평균: {{speed}} token/s",
+    outputSpeedHint: "모델 요청 대기 시간을 포함합니다.",
     title: "컨텍스트 윈도우",
     used: "{{percentage}}% 사용됨",
     tokens: "{{used}} / {{max}} 토큰",

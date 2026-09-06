@@ -1897,6 +1897,8 @@ export const ja: TranslationResources = {
     dismiss: "閉じる",
   },
   contextWindow: {
+    outputSpeed: "直近のターンの平均: {{speed}} token/s",
+    outputSpeedHint: "モデルへのリクエストの待機時間を含みます。",
     title: "コンテキストウィンドウ",
     used: "{{percentage}}%使用",
     tokens: "{{used}} / {{max}}トークン",

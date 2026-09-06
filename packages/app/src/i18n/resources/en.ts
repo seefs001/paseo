@@ -1889,6 +1889,8 @@ export const en = {
     dismiss: "Dismiss",
   },
   contextWindow: {
+    outputSpeed: "Last turn average: {{speed}} token/s",
+    outputSpeedHint: "Includes model request waiting time.",
     title: "Context window",
     used: "{{percentage}}% used",
     tokens: "{{used}} / {{max}} tokens",

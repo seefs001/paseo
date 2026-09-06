@@ -179,6 +179,8 @@ export interface AgentUsage {
   inputTokens?: number;
   cachedInputTokens?: number;
   outputTokens?: number;
+  /** Last turn's average over model API time, including request latency. Null clears it. */
+  outputTokensPerSecond?: number | null;
   totalCostUsd?: number;
   contextWindowMaxTokens?: number;
   contextWindowUsedTokens?: number;

@@ -426,6 +426,7 @@ const AgentUsageSchema: z.ZodType<AgentUsage> = z.object({
   inputTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
+  outputTokensPerSecond: z.number().nonnegative().nullable().optional(),
   totalCostUsd: z.number().optional(),
   contextWindowMaxTokens: z.number().optional(),
   contextWindowUsedTokens: z.number().optional(),

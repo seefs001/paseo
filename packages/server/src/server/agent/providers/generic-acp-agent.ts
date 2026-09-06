@@ -76,6 +76,7 @@ export class GenericACPAgentClient extends ACPAgentClient {
       clientCapabilityMeta: options.clientCapabilityMeta,
       configFeatureOptions: options.configFeatureOptions,
       extensionCommandsParser: options.extensionCommandsParser,
+      grokUsage: options.providerId === "grok",
       catalogModelResolver: options.catalogModelResolver,
       now: options.now,
     });

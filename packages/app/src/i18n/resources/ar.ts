@@ -1879,6 +1879,8 @@ export const ar: TranslationResources = {
     dismiss: "رفض",
   },
   contextWindow: {
+    outputSpeed: "متوسط الجولة الأخيرة: {{speed}} token/s",
+    outputSpeedHint: "يشمل وقت انتظار طلبات النموذج.",
     title: "نافذة السياق",
     used: "تم استخدام{{percentage}}%",
     tokens: "رموز{{used}}/{{max}}",

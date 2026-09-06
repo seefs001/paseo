@@ -1910,6 +1910,8 @@ export const ru: TranslationResources = {
     dismiss: "Закрыть",
   },
   contextWindow: {
+    outputSpeed: "Средняя скорость за последний ход: {{speed}} token/s",
+    outputSpeedHint: "Включает время ожидания запросов к модели.",
     title: "Контекстное окно",
     used: "Использовано: {{percentage}}%",
     tokens: "Токены: {{used}} / {{max}}",

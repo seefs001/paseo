@@ -12,6 +12,7 @@ interface ContextWindowMeterProps {
   maxTokens: number | null;
   usedTokens: number | null;
   totalCostUsd?: number | null;
+  outputTokensPerSecond?: number | null;
   showPercentage?: boolean;
   serverId?: string;
   /** The Paseo provider key, e.g. "claude", "gemini", "codex" */
@@ -100,6 +101,7 @@ export function ContextWindowMeter({
   maxTokens,
   usedTokens,
   totalCostUsd,
+  outputTokensPerSecond,
   showPercentage = false,
   serverId,
   provider,
@@ -232,6 +234,14 @@ export function ContextWindowMeter({
             <Text style={styles.tooltipDetail}>
               {t("contextWindow.sessionCost", { cost: formattedSessionCost })}
             </Text>
+          ) : null}
+          {outputTokensPerSecond != null ? (
+            <View testID="output-token-speed">
+              <Text style={styles.tooltipDetail}>
+                {t("contextWindow.outputSpeed", { speed: outputTokensPerSecond.toFixed(1) })}
+              </Text>
+              <Text style={styles.tooltipDetail}>{t("contextWindow.outputSpeedHint")}</Text>
+            </View>
           ) : null}
           <ProviderUsageTooltipSection view={providerUsageView} activeProviderId={provider} />
         </View>

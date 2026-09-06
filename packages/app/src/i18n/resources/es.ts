@@ -1925,6 +1925,8 @@ export const es: TranslationResources = {
     dismiss: "Despedir",
   },
   contextWindow: {
+    outputSpeed: "Media del último turno: {{speed}} token/s",
+    outputSpeedHint: "Incluye el tiempo de espera de las solicitudes al modelo.",
     title: "ventana contextual",
     used: "{{percentage}}% utilizado",
     tokens: "Fichas{{used}}/{{max}}",

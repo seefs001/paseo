@@ -2719,6 +2719,109 @@ describe("ACPAgentSession slash commands", () => {
 });
 
 describe("ACPAgentSession", () => {
+  test("keeps Grok speed across prompt completion and context updates, and clears it for the next turn", async () => {
+    const clientToAgent = new TransformStream<Uint8Array, Uint8Array>();
+    const agentToClient = new TransformStream<Uint8Array, Uint8Array>();
+    const promptIds: unknown[] = [];
+    const events: AgentStreamEvent[] = [];
+    const upstream = new AgentSideConnection(
+      () => ({
+        async initialize() {
+          return { protocolVersion: PROTOCOL_VERSION };
+        },
+        async newSession() {
+          return { sessionId: "grok-session" };
+        },
+        async authenticate() {},
+        async cancel() {},
+        async prompt(request) {
+          promptIds.push(request._meta?.promptId);
+          await upstream.sessionUpdate({
+            sessionId: "grok-session",
+            update: { sessionUpdate: "usage_update", used: 1_000, size: 100_000 },
+          });
+          if (promptIds.length === 1) {
+            await upstream.extNotification("_x.ai/session_notification", {
+              sessionId: "grok-session",
+              update: {
+                sessionUpdate: "turn_completed",
+                prompt_id: request._meta?.promptId,
+                usage: { outputTokens: 250, apiDurationMs: 2_000 },
+              },
+            });
+          }
+          return { stopReason: "end_turn", usage: { outputTokens: 250 } };
+        },
+      }),
+      ndJsonStream(agentToClient.writable, clientToAgent.readable),
+    );
+    class InMemoryGrokSession extends ACPAgentSession {
+      protected override async spawnProcess(): Promise<SpawnedACPProcess> {
+        const connection = new ClientSideConnection(
+          () => this,
+          ndJsonStream(clientToAgent.writable, agentToClient.readable),
+        );
+        return {
+          child: createProbeChildStub(),
+          connection,
+          initialize: await connection.initialize({ protocolVersion: PROTOCOL_VERSION }),
+        };
+      }
+    }
+    const terminator = new FakeTerminator();
+    const session = new InMemoryGrokSession(
+      { provider: "grok", cwd: "/tmp" },
+      {
+        provider: "grok",
+        logger: createTestLogger(),
+        defaultCommand: ["grok"],
+        defaultModes: [],
+        capabilities: { supportsStreaming: true, supportsSessionPersistence: true },
+        grokUsage: true,
+        terminateProcess: terminator.terminate,
+      },
+    );
+    session.subscribe((event) => events.push(event));
+    await session.initializeNewSession();
+    try {
+      await session.run("first");
+      expect(events.find((event) => event.type === "turn_completed")).toMatchObject({
+        usage: {
+          outputTokens: 250,
+          outputTokensPerSecond: 125,
+          contextWindowUsedTokens: 1_000,
+          contextWindowMaxTokens: 100_000,
+        },
+      });
+      const lateNotification = {
+        sessionId: "grok-session",
+        update: {
+          sessionUpdate: "turn_completed",
+          prompt_id: promptIds[0],
+          usage: { outputTokens: 300, apiDurationMs: 2_000 },
+        },
+      };
+      await session.extNotification("_x.ai/session_notification", lateNotification);
+      expect(events.at(-1)).toMatchObject({
+        type: "usage_updated",
+        usage: { outputTokensPerSecond: 150 },
+      });
+      await session.run("second");
+      expect(events.at(-1)).toMatchObject({
+        type: "turn_completed",
+        usage: { outputTokensPerSecond: null },
+      });
+      const eventCount = events.length;
+      await session.extNotification("_x.ai/session_notification", lateNotification);
+      expect(events).toHaveLength(eventCount);
+      expect(promptIds).toEqual(
+        events.filter((event) => event.type === "turn_started").map((event) => event.turnId),
+      );
+    } finally {
+      await session.close();
+    }
+  });
+
   test("drops MCP servers from ACP requests when the provider does not support MCP", () => {
     const session = new ACPAgentSession(
       {

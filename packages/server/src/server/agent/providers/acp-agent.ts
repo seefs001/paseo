@@ -58,6 +58,7 @@ import {
   type Stream as ACPStream,
 } from "@agentclientprotocol/sdk";
 import type { Logger } from "pino";
+import { parseGrokTurnUsage } from "./grok-usage.js";
 
 import {
   getAgentStreamEventTurnId,
@@ -413,6 +414,7 @@ export type ACPCatalogModelResolver = (
 ) => Promise<AgentModelDefinition[]>;
 
 interface ACPAgentClientOptions {
+  grokUsage?: boolean;
   provider: string;
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
@@ -445,6 +447,7 @@ interface ACPAgentClientOptions {
 }
 
 interface ACPAgentSessionOptions {
+  grokUsage?: boolean;
   provider: string;
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
@@ -909,6 +912,7 @@ export class ACPAgentClient implements AgentClient {
   private readonly waitForInitialCommands: boolean;
   private readonly initialCommandsWaitTimeoutMs: number;
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
+  private readonly grokUsage: boolean;
   private readonly importPromptCache = new Map<string, ACPImportPromptCacheEntry>();
   private readonly now: () => number;
   protected readonly terminateProcess: ProcessTerminator;
@@ -939,6 +943,7 @@ export class ACPAgentClient implements AgentClient {
     this.waitForInitialCommands = options.waitForInitialCommands ?? false;
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
+    this.grokUsage = options.grokUsage ?? false;
     this.now = options.now ?? Date.now;
   }
 
@@ -974,6 +979,7 @@ export class ACPAgentClient implements AgentClient {
         agentId: launchContext?.agentId,
         launchEnv: launchContext?.env,
         extensionCommandsParser: this.extensionCommandsParser,
+        grokUsage: this.grokUsage,
         waitForInitialCommands: this.waitForInitialCommands,
         initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
       },
@@ -1025,6 +1031,7 @@ export class ACPAgentClient implements AgentClient {
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
       extensionCommandsParser: this.extensionCommandsParser,
+      grokUsage: this.grokUsage,
       waitForInitialCommands: this.waitForInitialCommands,
       initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
     });
@@ -1745,8 +1752,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private waitForInitialCommands: boolean;
   private initialCommandsWaitTimeoutMs: number;
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
+  private readonly grokUsage: boolean;
   private currentTurnUsage: AgentUsage | undefined;
   private activeForegroundTurnId: string | null = null;
+  private grokPromptTurnId: string | null = null;
   private fallbackAssistantMessageId: string | null = null;
   private closed = false;
   private historyPending = false;
@@ -1785,6 +1794,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.waitForInitialCommands = options.waitForInitialCommands ?? false;
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
+    this.grokUsage = options.grokUsage ?? false;
   }
 
   get id(): string | null {
@@ -1919,12 +1929,23 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.emitBootstrapThreadEvent();
     this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
     this.emitSubmittedUserMessage(prompt, messageId, turnId, options?.clientMessageId);
+    if (this.grokUsage) {
+      this.grokPromptTurnId = turnId;
+      this.currentTurnUsage = { ...this.currentTurnUsage, outputTokensPerSecond: null };
+      this.pushEvent({
+        type: "usage_updated",
+        provider: this.provider,
+        turnId,
+        usage: this.currentTurnUsage,
+      });
+    }
 
     void this.connection
       .prompt({
         sessionId: this.sessionId,
         messageId,
         prompt: toACPContentBlocks(prompt),
+        ...(this.grokUsage ? { _meta: { promptId: turnId } } : {}),
       })
       .then((response) => {
         this.handlePromptResponse(response, turnId);
@@ -2636,6 +2657,24 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       "provider.acp.extension_notification",
     );
 
+    if (this.grokUsage && !this.replayingHistory) {
+      const usage = parseGrokTurnUsage({
+        method,
+        params,
+        sessionId: this.sessionId,
+        turnId: this.grokPromptTurnId,
+      });
+      if (usage) {
+        this.currentTurnUsage = { ...this.currentTurnUsage, ...usage };
+        this.pushEvent({
+          type: "usage_updated",
+          provider: this.provider,
+          usage: this.currentTurnUsage,
+          turnId: this.grokPromptTurnId ?? undefined,
+        });
+      }
+    }
+
     const parsedCommands = this.extensionCommandsParser?.(method, params);
     if (parsedCommands) {
       this.applyResolvedCommands(parsedCommands, {
@@ -2776,7 +2815,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return {};
   }
 
-  private async spawnProcess(): Promise<SpawnedACPProcess> {
+  protected async spawnProcess(): Promise<SpawnedACPProcess> {
     const prefix = await resolveProviderLaunch({
       commandConfig: this.runtimeSettings?.command,
       defaultBinary: this.defaultCommand[0],
@@ -3176,7 +3215,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   private handlePromptResponse(response: PromptResponse, turnId: string): void {
-    this.currentTurnUsage = mapACPUsage(response.usage) ?? this.currentTurnUsage;
+    const responseUsage = mapACPUsage(response.usage);
+    if (responseUsage) {
+      this.currentTurnUsage = { ...this.currentTurnUsage, ...responseUsage };
+    }
 
     switch (response.stopReason) {
       case "cancelled":

@@ -1858,6 +1858,8 @@ export const zhCN: TranslationResources = {
     dismiss: "关闭",
   },
   contextWindow: {
+    outputSpeed: "最近一轮平均：{{speed}} token/s",
+    outputSpeedHint: "包含模型请求等待时间。",
     title: "上下文窗口",
     used: "已使用 {{percentage}}%",
     tokens: "{{used}} / {{max}} tokens",

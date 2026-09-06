@@ -1911,6 +1911,8 @@ export const ptBR: TranslationResources = {
     dismiss: "Dispensar",
   },
   contextWindow: {
+    outputSpeed: "Média do último turno: {{speed}} token/s",
+    outputSpeedHint: "Inclui o tempo de espera das solicitações ao modelo.",
     title: "Janela de contexto",
     used: "{{percentage}}% usado",
     tokens: "{{used}} / {{max}} tokens",

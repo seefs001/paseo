@@ -431,6 +431,14 @@ describe("toAgentPayload", () => {
     });
   });
 
+  it.each([125, 0, null])(
+    "preserves output speed %s when projecting an agent snapshot",
+    (outputTokensPerSecond) => {
+      const agent = createManagedAgent({ lastUsage: { outputTokensPerSecond } });
+      expect(toAgentPayload(agent).lastUsage).toEqual({ outputTokensPerSecond });
+    },
+  );
+
   it("omits lastUsage when context window usage fields are invalid", () => {
     const agent = createManagedAgent({
       lastUsage: {

@@ -262,11 +262,13 @@ function buildRealtimeVoiceButtonStyle(
 function buildAgentStateSelector(serverId: string, agentId: string) {
   return (state: ReturnType<typeof useSessionStore.getState>) => {
     const agent = state.sessions[serverId]?.agents?.get(agentId) ?? null;
+    const usage = agent?.lastUsage;
     return {
       status: agent?.status ?? null,
-      contextWindowMaxTokens: agent?.lastUsage?.contextWindowMaxTokens ?? null,
-      contextWindowUsedTokens: agent?.lastUsage?.contextWindowUsedTokens ?? null,
-      totalCostUsd: agent?.lastUsage?.totalCostUsd ?? null,
+      contextWindowMaxTokens: usage?.contextWindowMaxTokens ?? null,
+      contextWindowUsedTokens: usage?.contextWindowUsedTokens ?? null,
+      totalCostUsd: usage?.totalCostUsd ?? null,
+      outputTokensPerSecond: usage?.outputTokensPerSecond ?? null,
       model: agent?.model ?? null,
       provider: agent?.provider ?? null,
     };
@@ -277,6 +279,7 @@ function renderContextWindowMeter(
   contextWindowMaxTokens: number | null,
   contextWindowUsedTokens: number | null,
   totalCostUsd: number | null,
+  outputTokensPerSecond: number | null,
   showPercentage: boolean,
   serverId: string,
   provider: string | null,
@@ -292,6 +295,7 @@ function renderContextWindowMeter(
       maxTokens={contextWindowMaxTokens}
       usedTokens={contextWindowUsedTokens}
       totalCostUsd={totalCostUsd}
+      outputTokensPerSecond={outputTokensPerSecond}
       showPercentage={showPercentage}
       serverId={serverId}
       provider={provider}
@@ -2030,6 +2034,7 @@ function ComposerContentImpl({
         contextWindowMaxTokens,
         contextWindowUsedTokens,
         agentState.totalCostUsd,
+        agentState.outputTokensPerSecond,
         false,
         serverId,
         agentState.provider,
@@ -2040,6 +2045,7 @@ function ComposerContentImpl({
       contextWindowMaxTokens,
       contextWindowUsedTokens,
       agentState.totalCostUsd,
+      agentState.outputTokensPerSecond,
       serverId,
       agentState.provider,
       contextWindowPending,
