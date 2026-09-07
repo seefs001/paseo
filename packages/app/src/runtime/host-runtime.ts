@@ -1,3 +1,4 @@
+import { createTimelineReplica, type TimelineReplica } from "@/timeline/replica";
 import { useSyncExternalStore, useMemo } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import equal from "fast-deep-equal/es6";
@@ -45,7 +46,13 @@ import {
 import { getDesktopHost } from "@/desktop/host";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
-import { useSessionStore } from "@/stores/session-store";
+import {
+  useSessionStore,
+  type Agent,
+  type WorkspaceDescriptor,
+  type ProjectDescriptor,
+} from "@/stores/session-store";
+import type { TurnLivenessTransition } from "@/timeline/turn-liveness";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { invalidateCheckoutGitQueriesForServer } from "@/git/query-keys";
 import { queryClient } from "@/data/query-client";
@@ -64,11 +71,8 @@ import { ReplicaCache } from "@/runtime/replica-cache";
 import type { ReplicaRowStore } from "@/runtime/replica-cache/row-store";
 import { createReplicaRowStore } from "@/runtime/replica-cache/row-store-factory";
 import {
-  createTimelineReplica,
   createViewedTimelineOwner,
-  type TimelineReplica,
   type ViewedTimelineOwner,
-  type ViewedTimelineOwnerPorts,
 } from "@/timeline/viewed-timeline-sync";
 import { projectIconCache } from "@/projects/icon-cache";
 import { nativePerformanceTrace } from "@/performance/native-trace";
@@ -512,6 +516,7 @@ function createDefaultDeps(): HostRuntimeControllerDeps {
         runtimeGeneration,
         capabilities: appCapabilities,
         trace: nativePerformanceTrace,
+        providerSnapshots: "wire",
       } satisfies Omit<DaemonClientConfig, "url">;
       if (connection.type === "directSocket" || connection.type === "directPipe") {
         return new DaemonClient({
@@ -612,6 +617,7 @@ export class HostRuntimeController {
   private switchRequestVersion = 0;
   private probeRequestVersion = 0;
   private probeCycleInFlight: Promise<void> | null = null;
+  private reconnectEnabled = true;
 
   constructor(input: {
     host: HostProfile;
@@ -719,6 +725,11 @@ export class HostRuntimeController {
 
   ensureConnected(): void {
     this.activeClient?.ensureConnected();
+  }
+
+  setReconnectEnabled(enabled: boolean): void {
+    this.reconnectEnabled = enabled;
+    this.activeClient?.setReconnectEnabled(enabled);
   }
 
   markAgentDirectorySyncLoading(): void {
@@ -970,10 +981,7 @@ export class HostRuntimeController {
           let shouldCloseClient = false;
           try {
             const activeClient =
-              this.snapshot.connectionStatus === "online" &&
-              this.snapshot.activeConnectionId === connection.id
-                ? this.snapshot.client
-                : null;
+              this.snapshot.activeConnectionId === connection.id ? this.snapshot.client : null;
 
             if (activeClient) {
               connectedClient = activeClient;
@@ -1226,9 +1234,6 @@ export class HostRuntimeController {
     }
 
     const nextGeneration = this.snapshot.clientGeneration + 1;
-    if (existingClient) {
-      existingClient.setReconnectEnabled(true);
-    }
     const client =
       existingClient ??
       this.deps.createClient({
@@ -1237,6 +1242,7 @@ export class HostRuntimeController {
         clientId,
         runtimeGeneration: nextGeneration,
       });
+    client.setReconnectEnabled(this.reconnectEnabled);
 
     if (!this.isSwitchStillValid(requestVersion, expectedProbeVersion)) {
       await client.close().catch(() => undefined);
@@ -1394,9 +1400,12 @@ export class HostRuntimeStore {
   private connectionStatusStartedAtByServer = new Map<string, number>();
   private queuedAgentDrainInFlight = new Set<string>();
   private directorySyncByServer = new Map<string, DirectorySync>();
+  private nextCancellationRequestId = 0;
   private timelineReplicaByServer = new Map<string, TimelineReplica>();
+  private viewedTimelineByServer = new Map<string, ViewedTimelineOwner>();
   private configuredOverrideBootstrapInFlight: Promise<void> | null = null;
   private bootPromise: Promise<void> | null = null;
+  private appVisible = true;
   private storage: HostRuntimeStorage;
   private replicaCache: ReplicaCache;
   private readonly revokePushNotifications: typeof revokePushNotifications;
@@ -1647,11 +1656,17 @@ export class HostRuntimeStore {
     projectIconCache.reconcileServerId(oldServerId, newServerId);
     this.directorySyncByServer.get(oldServerId)?.dispose();
     this.directorySyncByServer.delete(oldServerId);
-    this.timelineReplicaByServer.delete(oldServerId);
+    const timelineReplica = this.getTimelineReplica(oldServerId);
+    rekeyMap(this.timelineReplicaByServer, oldServerId, newServerId);
     const directory = new DirectorySync(
       newServerId,
       {
+        onTimelineRequest: (agentId, replaceTail) =>
+          this.getViewedTimelineOwner(newServerId).beginTimelineRequest(agentId, replaceTail),
         onAgentStoppedRunning: (agentId) => this.drainQueuedAgentMessage(newServerId, agentId),
+        onAgentRemoved: (agentId, reason) =>
+          this.getViewedTimelineOwner(newServerId).removeAgent(agentId, reason),
+        onAgentAccepted: (agentId) => this.getViewedTimelineOwner(newServerId).acceptAgent(agentId),
         markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
         markAgentReady: () => controller.markAgentDirectorySyncReady(),
         markAgentError: (error) => controller.markAgentDirectorySyncError(error),
@@ -1659,18 +1674,16 @@ export class HostRuntimeStore {
       this.replicaCache,
     );
     this.directorySyncByServer.set(newServerId, directory);
-    this.timelineReplicaByServer.set(
-      newServerId,
-      createTimelineReplica({
-        serverId: newServerId,
-        storage: this.replicaCache,
-        prepareAgent: (agentId) => directory.prepareAgentRoute(agentId),
-      }),
-    );
     controller.adoptReconciledServerId(newServerId);
     const snapshot = controller.getSnapshot();
+    this.viewedTimelineByServer.get(oldServerId)?.dispose();
+    this.viewedTimelineByServer.delete(oldServerId);
     this.clearHostReplica(oldServerId);
-    this.syncSessionReplica(newServerId, snapshot);
+    useSessionStore
+      .getState()
+      .initializeSession(newServerId, snapshot.client, snapshot.clientGeneration);
+    timelineReplica.reconcileServerId(newServerId);
+    this.installViewedTimelineOwner(newServerId);
     directory.connectionChanged({
       client: snapshot.client,
       status: snapshot.connectionStatus === "online" ? "online" : "offline",
@@ -2041,6 +2054,9 @@ export class HostRuntimeStore {
       this.connectionStatusStartedAtByServer.delete(serverId);
       this.directorySyncByServer.get(serverId)?.dispose();
       this.directorySyncByServer.delete(serverId);
+      this.viewedTimelineByServer.get(serverId)?.dispose();
+      this.viewedTimelineByServer.delete(serverId);
+      this.timelineReplicaByServer.get(serverId)?.dispose();
       this.timelineReplicaByServer.delete(serverId);
       this.clearHostReplica(serverId);
       void controller.stop();
@@ -2064,12 +2080,19 @@ export class HostRuntimeStore {
         deps: this.deps,
         onReconcileServerId: (oldId, newId) => this.reconcileServerId(oldId, newId),
       });
+      controller.setReconnectEnabled(this.appVisible);
       this.controllers.set(host.serverId, controller);
       useSessionStore.getState().initializeSession(host.serverId, null);
       const directory = new DirectorySync(
         host.serverId,
         {
+          onTimelineRequest: (agentId, replaceTail) =>
+            this.getViewedTimelineOwner(host.serverId).beginTimelineRequest(agentId, replaceTail),
           onAgentStoppedRunning: (agentId) => this.drainQueuedAgentMessage(host.serverId, agentId),
+          onAgentRemoved: (agentId, reason) =>
+            this.getViewedTimelineOwner(host.serverId).removeAgent(agentId, reason),
+          onAgentAccepted: (agentId) =>
+            this.getViewedTimelineOwner(host.serverId).acceptAgent(agentId),
           markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
           markAgentReady: () => controller.markAgentDirectorySyncReady(),
           markAgentError: (error) => controller.markAgentDirectorySyncError(error),
@@ -2082,9 +2105,9 @@ export class HostRuntimeStore {
         createTimelineReplica({
           serverId: host.serverId,
           storage: this.replicaCache,
-          prepareAgent: (agentId) => directory.prepareAgentRoute(agentId),
         }),
       );
+      this.installViewedTimelineOwner(host.serverId);
       const initialSnapshot = controller.getSnapshot();
       this.lastConnectionStatusByServer.set(host.serverId, initialSnapshot.connectionStatus);
       this.connectionStatusStartedAtByServer.set(host.serverId, Date.now());
@@ -2196,7 +2219,7 @@ export class HostRuntimeStore {
             supportsForgeAttachments,
           }),
           encodeImages,
-          submission: createMessageSubmissionWriter(serverId),
+          submission: createMessageSubmissionWriter(serverId, this.getTimelineReplica(serverId)),
         });
       },
     })
@@ -2213,6 +2236,56 @@ export class HostRuntimeStore {
       .finally(() => {
         this.queuedAgentDrainInFlight.delete(drainKey);
       });
+  }
+
+  applyAgentTurnLiveness(
+    serverId: string,
+    agentId: string,
+    transition: TurnLivenessTransition | readonly TurnLivenessTransition[],
+  ): void {
+    this.directorySyncByServer.get(serverId)?.applyAgentTurnLiveness(agentId, transition);
+  }
+
+  beginAgentCancellation(serverId: string, agentId: string): number {
+    const requestId = ++this.nextCancellationRequestId;
+    this.applyAgentTurnLiveness(serverId, agentId, { type: "cancellation_started", requestId });
+    return requestId;
+  }
+
+  settleAgentCancellation(serverId: string, agentId: string, requestId: number): void {
+    this.applyAgentTurnLiveness(serverId, agentId, { type: "cancellation_settled", requestId });
+  }
+
+  acceptAgentSnapshot(serverId: string, agent: Agent): Agent {
+    return this.requireDirectory(serverId).acceptAgent(agent);
+  }
+
+  archiveAgentSnapshot(serverId: string, agentId: string, archivedAt: string): void {
+    this.requireDirectory(serverId).archiveAgent(agentId, archivedAt);
+  }
+
+  restoreAgentSnapshot(serverId: string, agentId: string, agent: Agent | undefined): void {
+    const directory = this.requireDirectory(serverId);
+    if (agent) directory.acceptAgent(agent);
+    else directory.removeAgent(agentId);
+  }
+
+  acceptWorkspaceSnapshots(serverId: string, workspaces: readonly WorkspaceDescriptor[]): void {
+    this.requireDirectory(serverId).acceptWorkspaces(workspaces);
+  }
+
+  acceptProjectSnapshot(serverId: string, project: ProjectDescriptor): void {
+    this.requireDirectory(serverId).acceptProject(project);
+  }
+
+  removeWorkspaceSnapshot(serverId: string, workspaceId: string): void {
+    this.requireDirectory(serverId).removeWorkspace(workspaceId);
+  }
+
+  private requireDirectory(serverId: string): DirectorySync {
+    const directory = this.directorySyncByServer.get(serverId);
+    if (!directory) throw new Error(`Unknown host runtime for serverId ${serverId}`);
+    return directory;
   }
 
   getSnapshot(serverId: string): HostRuntimeSnapshot | null {
@@ -2274,6 +2347,20 @@ export class HostRuntimeStore {
     }
   }
 
+  setAppVisible(visible: boolean): void {
+    this.appVisible = visible;
+    for (const owner of this.viewedTimelineByServer.values()) owner.setActive(visible);
+    for (const controller of this.controllers.values()) {
+      controller.setReconnectEnabled(visible);
+    }
+    if (!visible) {
+      void this.replicaCache.flush();
+      return;
+    }
+
+    this.ensureConnectedAll();
+  }
+
   runProbeCycleNow(serverId?: string): Promise<void> {
     if (serverId) {
       return this.controllers.get(serverId)?.runProbeCycleNow() ?? Promise.resolve();
@@ -2311,49 +2398,40 @@ export class HostRuntimeStore {
     return () => directory.setDemand(source, false);
   }
 
-  async prepareAgentRoute(serverId: string, agentId: string): Promise<void> {
-    const directory = this.directorySyncByServer.get(serverId);
-    if (!directory) throw new Error(`Unknown host runtime for serverId ${serverId}`);
-    await directory.prepareAgentRoute(agentId);
-  }
-
-  async prepareWorkspaceRoute(serverId: string, workspaceId: string): Promise<void> {
-    const directory = this.directorySyncByServer.get(serverId);
-    if (!directory) throw new Error(`Unknown host runtime for serverId ${serverId}`);
-    await directory.prepareWorkspaceRoute(workspaceId);
-  }
-
-  async prepareAgentTimeline(serverId: string, agentId: string): Promise<void> {
+  getTimelineReplica(serverId: string): TimelineReplica {
     const replica = this.timelineReplicaByServer.get(serverId);
     if (!replica) throw new Error(`Unknown host runtime for serverId ${serverId}`);
-    await replica.prepare(agentId);
+    return replica;
   }
 
-  fetchAgentTimeline(
+  async fetchAgentTimeline(
     serverId: string,
     agentId: string,
     request: Parameters<DaemonClient["fetchAgentTimeline"]>[1],
+    replaceTail = false,
   ): Promise<Awaited<ReturnType<DaemonClient["fetchAgentTimeline"]>>> {
     const directory = this.directorySyncByServer.get(serverId);
     if (!directory) throw new Error(`Unknown host runtime for serverId ${serverId}`);
-    return directory.fetchTimeline(agentId, request);
+    return directory.fetchTimeline(agentId, request, replaceTail);
   }
 
-  createViewedTimelineOwner(
-    serverId: string,
-    ports: ViewedTimelineOwnerPorts,
-  ): ViewedTimelineOwner {
-    const directory = this.directorySyncByServer.get(serverId);
-    if (!directory) throw new Error(`Unknown host runtime for serverId ${serverId}`);
-    const replica = this.timelineReplicaByServer.get(serverId);
-    if (!replica) throw new Error(`Unknown host runtime for serverId ${serverId}`);
-    return createViewedTimelineOwner({
+  getViewedTimelineOwner(serverId: string): ViewedTimelineOwner {
+    const owner = this.viewedTimelineByServer.get(serverId);
+    if (!owner) throw new Error(`Unknown host runtime for serverId ${serverId}`);
+    return owner;
+  }
+
+  private installViewedTimelineOwner(serverId: string): void {
+    const owner = createViewedTimelineOwner({
       serverId,
-      replica,
-      replaceDemandedAgentIds: (agentIds) => directory.setAgentRouteDemand(agentIds),
-      drainQueuedAgentMessage: (agentId) => this.drainQueuedAgentMessage(serverId, agentId),
-      ports,
+      replica: this.getTimelineReplica(serverId),
+      replaceDemandedAgentIds: (ids) =>
+        this.directorySyncByServer.get(serverId)?.setAgentRouteDemand(ids),
+      drainQueuedAgentMessage: (id) => this.drainQueuedAgentMessage(serverId, id),
     });
+    this.viewedTimelineByServer.set(serverId, owner);
+    owner.setActive(this.appVisible);
+    useSessionStore.getState().setViewedTimelineSync(serverId, owner);
   }
 
   private emit(serverId: string): void {

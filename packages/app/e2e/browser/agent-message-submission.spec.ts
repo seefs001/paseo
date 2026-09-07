@@ -5,6 +5,7 @@ import {
   expectAgentIdle,
   expectAgentReadyToInterrupt,
   expectAgentSurfacesIdle,
+  expectInlineWorkingIndicator,
   expectRunningAgentChrome,
   expectVisibleAgentSurfacesIdle,
 } from "../support/helpers/agent-stream";
@@ -36,7 +37,7 @@ import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-
 import { gotoAppShell, openSettings, selectModel } from "../support/helpers/app";
 import { observeTimelineSubscriptions } from "../support/helpers/timeline-delivery";
 import {
-  expectResumeOverflowFallsBackToOneTail,
+  expectEmptyBaselineBootstrapsWithOneTail,
   rememberTimelineRequestCounts,
 } from "../support/helpers/timeline-resume";
 import {
@@ -483,7 +484,8 @@ async function expectHiddenStreamingSubmissionOrderAfterWorkspaceEviction(
     await expect(promptRow).toBeVisible();
     await expect(response).toBeVisible();
     await expectRenderedBefore(promptRow, response);
-    expectResumeOverflowFallsBackToOneTail(gate, requestsBeforeReturn);
+    // The initial timeline was empty and live rows were suppressed: there is no resume cursor.
+    expectEmptyBaselineBootstrapsWithOneTail(gate, requestsBeforeReturn);
   } finally {
     gate.setAgentStreamSuppressed(false);
     gate.restore();
@@ -549,9 +551,18 @@ async function expectProviderAcknowledgementBeforeRpcAcceptanceSettlesSubmission
     const userMessage = await submitMessageWithImage(page, prompt);
     await gate.waitForHeldServerMessage();
     await gate.waitForAgentStreamItem("user_message");
+    await gate.waitForAgentStreamEvent("turn_started");
     gate.releaseHeldServerMessage();
+    await expect(userMessage).toHaveAttribute("aria-busy", "false");
     await gate.drop();
-    await expect(page.getByTestId("turn-working-indicator")).toHaveCount(0);
+    await expectInlineWorkingIndicator(page);
+    await expect(userMessage).toHaveAttribute("aria-busy", "false");
+
+    await agent.client.waitForFinish(agent.agentId, 30_000);
+    gate.setServerMessageSuppressed("agent_status", false);
+    gate.setServerMessageSuppressed("agent_update", false);
+    gate.restoreFresh();
+    await expectVisibleAgentSurfacesIdle(page);
     await expect(userMessage).toHaveAttribute("aria-busy", "false");
   } finally {
     gate.restore();
@@ -991,7 +1002,7 @@ test.describe("Agent message submission", () => {
       await openAgentRoute(page, agent);
       await expectComposerVisible(page);
       await submitMessage(page, "Keep running until the queued turn is ready.");
-      await expectAgentReadyToInterrupt(page);
+      await expectRunningAgentChrome(page, title);
       await queueMessage(page, secondPrompt);
       await expect(page.getByRole("button", { name: "Send queued message now" })).toBeVisible();
 
