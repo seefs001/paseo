@@ -162,6 +162,28 @@ describe("Codex app-server provider features", () => {
     ]);
   });
 
+  test("restores and preserves Astra fast mode across toggles and model switches", async () => {
+    const { session, appServer } = await createConnectedSession({
+      model: "gpt-6-astra",
+      featureValues: { fast_mode: true },
+    });
+
+    expect(session.features).toContainEqual(
+      expect.objectContaining({ id: "fast_mode", value: true }),
+    );
+
+    await session.setFeature?.("fast_mode", false);
+    await session.setFeature?.("fast_mode", true);
+    await session.setModel("gpt-5.6-sol");
+    await session.setModel("gpt-6-astra");
+    await session.startTurn("hello");
+
+    await expect(appServer.waitForTurnStart()).resolves.toMatchObject({
+      model: "gpt-6-astra",
+      serviceTier: "fast",
+    });
+  });
+
   test("constructor ignores restored fast mode when model does not support it", async () => {
     const { session, appServer } = await createConnectedSession({
       model: "gpt-3.5-turbo",
