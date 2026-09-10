@@ -762,7 +762,7 @@ export function deriveModelDefinitionsFromACP(
   models: SessionModelState | null | undefined,
   configOptions?: SessionConfigOption[] | null,
 ): AgentModelDefinition[] {
-  const thinkingOptions = deriveSelectorOptions(configOptions, "thought_level");
+  const thinkingOptions = deriveThinkingSelectorOptions(configOptions);
   const defaultThinkingOptionId = thinkingOptions.find((option) => option.isDefault)?.id ?? null;
 
   if (models?.availableModels?.length) {
@@ -935,13 +935,17 @@ export class ACPAgentClient implements AgentClient {
     this.now = options.now ?? Date.now;
   }
 
+  protected transformSessionConfig(config: AgentSessionConfig): AgentSessionConfig {
+    return config;
+  }
+
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
     this.assertProvider(config);
     const session = new ACPAgentSession(
-      { ...config, provider: this.provider },
+      this.transformSessionConfig({ ...config, provider: this.provider }),
       {
         provider: this.provider,
         logger: this.logger,
@@ -986,12 +990,12 @@ export class ACPAgentClient implements AgentClient {
       throw new Error(`${this.provider} resume requires the original working directory`);
     }
 
-    const mergedConfig: AgentSessionConfig = {
+    const mergedConfig = this.transformSessionConfig({
       ...storedConfig,
       ...overrides,
       provider: this.provider,
       cwd,
-    };
+    });
     const session = new ACPAgentSession(mergedConfig, {
       provider: this.provider,
       logger: this.logger,
@@ -1121,26 +1125,34 @@ export class ACPAgentClient implements AgentClient {
   }
 
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
-    const autoAcceptFeature = buildACPAutoAcceptFeature(config);
+    const sessionConfig = this.transformSessionConfig(config);
+    const autoAcceptFeature = buildACPAutoAcceptFeature(sessionConfig);
     if (this.configFeatureOptions.length === 0) {
       return [autoAcceptFeature];
     }
 
-    this.assertProvider(config);
+    this.assertProvider(sessionConfig);
     const probe = await this.spawnProcess(PROBE_ENV);
     let probeSessionId: string | null = null;
     try {
       const response = await this.runACPRequest(() =>
         probe.connection.newSession({
-          cwd: config.cwd,
+          cwd: sessionConfig.cwd,
           mcpServers: [],
         }),
       );
       probeSessionId = response.sessionId;
       const transformed = this.transformSessionResponse(response);
+      const configOptions = await this.applyDraftModelConfigOptions({
+        connection: probe.connection,
+        sessionId: response.sessionId,
+        modelId: sessionConfig.model,
+        availableModels: transformed.models?.availableModels,
+        configOptions: transformed.configOptions,
+      });
       return [
         autoAcceptFeature,
-        ...deriveFeaturesFromACP(transformed.configOptions, this.configFeatureOptions),
+        ...deriveFeaturesFromACP(configOptions, this.configFeatureOptions),
       ];
     } finally {
       await this.closeProbe(probe, probeSessionId);
@@ -1617,6 +1629,51 @@ export class ACPAgentClient implements AgentClient {
       ...transformed,
       configOptions: this.configOptionsTransformer(transformed.configOptions),
     };
+  }
+
+  private async applyDraftModelConfigOptions({
+    connection,
+    sessionId,
+    modelId,
+    availableModels,
+    configOptions,
+  }: {
+    connection: ClientSideConnection;
+    sessionId: string;
+    modelId: string | undefined;
+    availableModels: AvailableACPModel[] | null | undefined;
+    configOptions: SessionConfigOption[] | null | undefined;
+  }): Promise<SessionConfigOption[] | null | undefined> {
+    if (!modelId) {
+      return configOptions;
+    }
+    if (typeof connection.setSessionConfigOption !== "function") {
+      return configOptions;
+    }
+    const selection = resolveACPModelSelection({
+      modelId,
+      availableModels,
+      configOptions,
+    });
+    const modelOption = selection.configOption;
+    if (!modelOption || !selection.configChoice || modelOption.currentValue === modelId) {
+      return configOptions;
+    }
+    try {
+      const response = await this.runACPRequest(() =>
+        connection.setSessionConfigOption({
+          sessionId,
+          configId: modelOption.id,
+          value: modelId,
+        }),
+      );
+      const nextOptions = response.configOptions ?? [];
+      return this.configOptionsTransformer
+        ? this.configOptionsTransformer(nextOptions)
+        : nextOptions;
+    } catch {
+      return configOptions;
+    }
   }
 }
 
@@ -2145,6 +2202,29 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       throw new Error("ACP session not initialized");
     }
 
+    if (selection.configOption && selection.configChoice) {
+      const modelOption = selection.configOption;
+      const response = await this.connection.setSessionConfigOption({
+        sessionId: this.sessionId,
+        configId: modelOption.id,
+        value: modelId,
+      });
+      this.currentModel = this.applyConfigOptionResponse({
+        response,
+        configId: modelOption.id,
+        category: "model",
+        requestedValue: modelId,
+        label: "model",
+      });
+      this.syncThinkingFromConfigOptions();
+      this.pushEvent({
+        type: "model_changed",
+        provider: this.provider,
+        runtimeInfo: this.runtimeInfo(),
+      });
+      return;
+    }
+
     if (selection.hasAvailableModels) {
       if (!selection.availableModel) {
         this.warnInvalidSelection(
@@ -2181,35 +2261,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (!modelOption) {
       throw new Error(this.modelSelectionUnavailableMessage());
     }
-    if (!selection.configChoice) {
-      this.warnInvalidSelection(
-        modelId,
-        `is not a valid ${this.provider} model config option. Available options: ${flattenSelectOptions(
-          modelOption.options,
-        )
-          .map((option) => option.value)
-          .join(", ")}`,
-      );
-      return;
-    }
-
-    const response = await this.connection.setSessionConfigOption({
-      sessionId: this.sessionId,
-      configId: modelOption.id,
-      value: modelId,
-    });
-    this.currentModel = this.applyConfigOptionResponse({
-      response,
-      configId: modelOption.id,
-      category: "model",
-      requestedValue: modelId,
-      label: "model",
-    });
-    this.pushEvent({
-      type: "model_changed",
-      provider: this.provider,
-      runtimeInfo: this.runtimeInfo(),
-    });
+    this.warnInvalidSelection(
+      modelId,
+      `is not a valid ${this.provider} model config option. Available options: ${flattenSelectOptions(
+        modelOption.options,
+      )
+        .map((option) => option.value)
+        .join(", ")}`,
+    );
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
@@ -2232,12 +2291,24 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
 
-    const option = findSelectConfigOption({
-      configOptions: this.configOptions,
-      category: "thought_level",
-    });
+    const option = findThinkingConfigOption(this.configOptions, thinkingOptionId);
     if (!option) {
-      throw new Error(`${this.provider} does not expose ACP thought-level selection`);
+      this.warnInvalidSelection(
+        thinkingOptionId,
+        `${this.provider} does not expose ACP thought-level selection`,
+      );
+      return;
+    }
+    if (!findSelectConfigChoice({ option, value: thinkingOptionId })) {
+      this.warnInvalidSelection(
+        thinkingOptionId,
+        `is not a valid ${this.provider} thought-level option. Available options: ${flattenSelectOptions(
+          option.options,
+        )
+          .map((choice) => choice.value)
+          .join(", ")}`,
+      );
+      return;
     }
     const response = await this.connection.setSessionConfigOption({
       sessionId: this.sessionId,
@@ -2247,7 +2318,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.thinkingOptionId = this.applyConfigOptionResponse({
       response,
       configId: option.id,
-      category: "thought_level",
+      category: option.category ?? undefined,
       requestedValue: thinkingOptionId,
       label: "thought-level",
     });
@@ -2790,8 +2861,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.availableModels = transformed.models?.availableModels ?? null;
     this.currentModel =
       transformed.models?.currentModelId ?? deriveCurrentConfigValue(this.configOptions, "model");
-    this.thinkingOptionId =
-      deriveCurrentConfigValue(this.configOptions, "thought_level") ?? this.thinkingOptionId;
+    this.thinkingOptionId = deriveCurrentThinkingOptionId(this.configOptions);
   }
 
   private transformConfigOptions(configOptions: SessionConfigOption[]): SessionConfigOption[] {
@@ -2843,6 +2913,19 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }
       await this.setFeature(featureOption.id, configuredFeatureValues[featureOption.id]);
     }
+  }
+
+  private syncThinkingFromConfigOptions(): void {
+    const nextThinkingOptionId = deriveCurrentThinkingOptionId(this.configOptions);
+    if (nextThinkingOptionId === this.thinkingOptionId) {
+      return;
+    }
+    this.thinkingOptionId = nextThinkingOptionId;
+    this.pushEvent({
+      type: "thinking_option_changed",
+      provider: this.provider,
+      thinkingOptionId: this.thinkingOptionId,
+    });
   }
 
   private warnInvalidSelection(value: string, message: string): void {
@@ -3027,12 +3110,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const modeInfo = deriveModesFromACP(this.defaultModes, null, this.configOptions);
     const nextMode = modeInfo.currentModeId;
     const nextModel = deriveCurrentConfigValue(this.configOptions, "model");
-    const nextThinkingOptionId = deriveCurrentConfigValue(this.configOptions, "thought_level");
+    const nextThinkingOptionId = deriveCurrentThinkingOptionId(this.configOptions);
+    const previousThinkingOptionId = this.thinkingOptionId;
 
     this.availableModes = modeInfo.modes;
     this.currentMode = nextMode ?? this.currentMode;
     this.currentModel = nextModel ?? this.currentModel;
-    this.thinkingOptionId = nextThinkingOptionId ?? this.thinkingOptionId;
+    this.thinkingOptionId = nextThinkingOptionId;
 
     const events: AgentStreamEvent[] = [];
     if (nextMode !== null) {
@@ -3050,7 +3134,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         runtimeInfo: this.runtimeInfo(),
       });
     }
-    if (nextThinkingOptionId !== null) {
+    if (nextThinkingOptionId !== previousThinkingOptionId) {
       events.push({
         type: "thinking_option_changed",
         provider: this.provider,
@@ -3337,7 +3421,79 @@ export function deriveSelectorOptions(
   if (!option) {
     return [];
   }
+  return mapSelectConfigOption(option);
+}
 
+export function deriveThinkingSelectorOptions(
+  configOptions: SessionConfigOption[] | null | undefined,
+): ConfigOptionSelector[] {
+  const option = findThinkingConfigOption(configOptions);
+  if (!option) {
+    return [];
+  }
+  return mapSelectConfigOption(option);
+}
+
+export function deriveCurrentThinkingOptionId(
+  configOptions: SessionConfigOption[] | null | undefined,
+): string | null {
+  return findThinkingConfigOption(configOptions)?.currentValue ?? null;
+}
+
+export function findThinkingConfigOption(
+  configOptions: SessionConfigOption[] | null | undefined,
+  requestedValue?: string,
+): SelectConfigOption | null {
+  const options = findSelectConfigOptions({ configOptions, category: "thought_level" });
+  if (requestedValue) {
+    const matching = options.find((option) =>
+      flattenSelectOptions(option.options).some((choice) => choice.value === requestedValue),
+    );
+    if (matching) {
+      return matching;
+    }
+  }
+  return pickPreferredThinkingConfigOption(options);
+}
+
+function findSelectConfigOptions({
+  configOptions,
+  category,
+}: {
+  configOptions: SessionConfigOption[] | null | undefined;
+  category: string;
+}): SelectConfigOption[] {
+  return (
+    configOptions?.filter(
+      (entry): entry is SelectConfigOption =>
+        entry.type === "select" && entry.category === category,
+    ) ?? []
+  );
+}
+
+function pickPreferredThinkingConfigOption(
+  options: SelectConfigOption[],
+): SelectConfigOption | null {
+  const byId = (id: string) => options.find((option) => option.id === id) ?? null;
+  return (
+    byId("effort") ??
+    byId("reasoning") ??
+    options.find((option) => !isBooleanThinkingConfig(option)) ??
+    options[0] ??
+    null
+  );
+}
+
+function isBooleanThinkingConfig(option: SelectConfigOption): boolean {
+  const values = flattenSelectOptions(option.options).map((choice) => choice.value);
+  const hasValues = values.length > 0;
+  const allBoolean = values.every(
+    (value) => value === "true" || value === "false" || value === "on" || value === "off",
+  );
+  return hasValues && allBoolean;
+}
+
+function mapSelectConfigOption(option: SelectConfigOption): ConfigOptionSelector[] {
   return flattenSelectOptions(option.options).map((value) => ({
     id: value.value,
     label: value.name,
