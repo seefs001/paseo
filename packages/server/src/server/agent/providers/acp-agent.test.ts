@@ -53,6 +53,7 @@ import type {
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 import { buildStringCommandShellInvocation } from "../../../utils/string-command-shell.js";
 import { asInternals } from "../../test-utils/class-mocks.js";
+import { buildToolCallDisplayModel } from "@getpaseo/protocol/tool-call-display";
 import * as spawnUtils from "../../../utils/spawn.js";
 
 describe("buildACPClientCapabilities", () => {
@@ -2424,6 +2425,85 @@ describe("ACPAgentSession slash commands", () => {
 });
 
 describe("ACPAgentSession", () => {
+  test.each([undefined, { entries: ["example.memory.md"] }])(
+    "keeps ACP tool arguments when display text accompanies output %j",
+    (rawOutput) => {
+      const internals = asInternals<ACPSessionInternals>(createSession());
+      const rawInput = { command: "ls /memories" };
+      const text = "example.memory.md";
+      const events = internals.translateSessionUpdate({
+        sessionUpdate: "tool_call",
+        toolCallId: "mcp-call-with-text",
+        title: "nowledge-mem__mem_fs",
+        kind: "other",
+        status: "completed",
+        rawInput,
+        rawOutput,
+        content: [{ type: "content", content: { type: "text", text } }],
+      });
+
+      expect(events).toMatchObject([
+        {
+          type: "timeline",
+          item: {
+            name: "nowledge-mem__mem_fs",
+            detail: { type: "unknown", input: rawInput, output: rawOutput ?? text },
+          },
+        },
+      ]);
+    },
+  );
+
+  test("shows the ACP tool title instead of Other across partial updates", () => {
+    const session = createSession();
+    const internals = asInternals<ACPSessionInternals>(session);
+    const toolCallId = "grok-mcp-call";
+    const rawInput = {
+      variant: "UseTool",
+      tool_name: "nowledge-mem__mem_fs",
+      tool_input: { command: "ls /memories" },
+    };
+    const rawOutput = { entries: ["example.memory.md"] };
+    internals.translateSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId,
+      title: "use_tool",
+      status: "pending",
+    });
+    internals.translateSessionUpdate({
+      sessionUpdate: "tool_call_update",
+      toolCallId,
+      title: "nowledge-mem__mem_fs",
+      kind: "other",
+      rawInput,
+    });
+    const events = internals.translateSessionUpdate({
+      sessionUpdate: "tool_call_update",
+      toolCallId,
+      status: "completed",
+      rawOutput,
+    });
+
+    expect(events).toMatchObject([
+      {
+        type: "timeline",
+        item: {
+          type: "tool_call",
+          name: "nowledge-mem__mem_fs",
+          status: "completed",
+          detail: { type: "unknown", input: rawInput, output: rawOutput },
+        },
+      },
+    ]);
+    const event = events[0];
+    if (event?.type !== "timeline" || event.item.type !== "tool_call") {
+      throw new Error("Expected a tool call timeline event");
+    }
+    expect(buildToolCallDisplayModel(event.item)).toEqual({
+      displayName: "nowledge-mem__mem_fs",
+    });
+  });
+
   test("drops MCP servers from ACP requests when the provider does not support MCP", () => {
     const session = new ACPAgentSession(
       {
