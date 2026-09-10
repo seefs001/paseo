@@ -25,6 +25,24 @@ function chatHistoryAttachment(): WorkspaceComposerAttachment {
   };
 }
 
+function agentSessionAttachment(): WorkspaceComposerAttachment {
+  return {
+    kind: "agent_session",
+    id: "agent_session:local:agt_1",
+    attachment: {
+      type: "text",
+      mimeType: "text/plain",
+      contextKind: "agent_session",
+      title: "Auth fix",
+      text: "Referenced agent session\n- agentId: agt_1",
+    },
+    source: {
+      serverId: "local",
+      agentId: "agt_1",
+    },
+  };
+}
+
 function pullRequestContextAttachment(): WorkspaceComposerAttachment {
   return {
     kind: "github.pull_request_comment",
@@ -58,14 +76,15 @@ describe("workspace composer attachment cleanup", () => {
     resetWorkspaceAttachmentsStore();
     const scopeKey = buildDraftWorkspaceAttachmentScopeKey("draft-1");
     const chatHistory = chatHistoryAttachment();
+    const agentSession = agentSessionAttachment();
     const pullRequestContext = pullRequestContextAttachment();
     const browserElement = browserElementAttachment();
     useWorkspaceAttachmentsStore.getState().setWorkspaceAttachments({
       scopeKey,
-      attachments: [chatHistory, pullRequestContext, browserElement],
+      attachments: [chatHistory, agentSession, pullRequestContext, browserElement],
     });
 
-    removeSentContextAttachments([chatHistory, pullRequestContext, browserElement]);
+    removeSentContextAttachments([chatHistory, agentSession, pullRequestContext, browserElement]);
 
     expect(useWorkspaceAttachmentsStore.getState().attachmentsByScope[scopeKey]).toBeUndefined();
   });

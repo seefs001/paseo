@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 import React from "react";
 import {
+  Bot,
   CircleDot,
   FileText,
   GitPullRequest,
@@ -51,7 +52,22 @@ function getTextAttachmentSubtitle(
   if (attachment.contextKind === "chat_history") {
     return "Previous conversation";
   }
+  if (attachment.contextKind === "agent_session") {
+    return t("message.attachments.agentSession");
+  }
+  if (attachment.contextKind === "agent_profile") {
+    return t("message.attachments.agentProfile");
+  }
   return t("message.attachments.text");
+}
+
+function getTextAttachmentIcon(attachment: Extract<AgentAttachment, { type: "text" }>): ReactNode {
+  const isAgentMention =
+    attachment.contextKind === "agent_session" || attachment.contextKind === "agent_profile";
+  if (isAgentMention) {
+    return attachmentAgentSessionIcon;
+  }
+  return attachmentFileIcon;
 }
 
 export function getAgentAttachmentPillContent(
@@ -95,7 +111,7 @@ export function getAgentAttachmentPillContent(
         };
       }
       return {
-        icon: attachmentFileIcon,
+        icon: getTextAttachmentIcon(attachment),
         title: attachment.title ?? t("message.attachments.textAttachment"),
         subtitle: getTextAttachmentSubtitle(attachment, t),
       };
@@ -133,6 +149,20 @@ export function getWorkspaceAttachmentPillContent(
       subtitle: getTextAttachmentSubtitle(attachment.attachment, t),
     };
   }
+  if (attachment.kind === "agent_session") {
+    return {
+      icon: attachmentAgentSessionIcon,
+      title: attachment.attachment.title ?? t("message.attachments.textAttachment"),
+      subtitle: t("message.attachments.agentSession"),
+    };
+  }
+  if (attachment.kind === "agent_profile") {
+    return {
+      icon: attachmentAgentSessionIcon,
+      title: attachment.attachment.title ?? t("message.attachments.textAttachment"),
+      subtitle: t("message.attachments.agentProfile"),
+    };
+  }
   return {
     icon: attachmentReviewIcon,
     title: t("message.attachments.review"),
@@ -145,6 +175,7 @@ const ThemedAttachmentGitPullRequest = withUnistyles(GitPullRequest);
 const ThemedAttachmentCircleDot = withUnistyles(CircleDot);
 const ThemedAttachmentMessageSquareCode = withUnistyles(MessageSquareCode);
 const ThemedAttachmentMousePointer = withUnistyles(MousePointer2);
+const ThemedAttachmentBot = withUnistyles(Bot);
 
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -162,4 +193,7 @@ const attachmentFileIcon = (
 );
 const attachmentBrowserIcon = (
   <ThemedAttachmentMousePointer size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+);
+const attachmentAgentSessionIcon = (
+  <ThemedAttachmentBot size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
 );

@@ -4,6 +4,7 @@ import {
   buildAgentBranchNameSeed,
   buildAgentPrompt,
   renderPromptAttachmentAsText,
+  userVisiblePromptText,
 } from "./prompt-attachments.js";
 
 describe("prompt attachments", () => {
@@ -35,6 +36,26 @@ describe("prompt attachments", () => {
       { type: "image", data: "image-data", mimeType: "image/png" },
       issue,
     ]);
+  });
+
+  it("keeps profile address cards in the model prompt without putting them in the user bubble", () => {
+    const profile = {
+      type: "text" as const,
+      mimeType: "text/plain" as const,
+      contextKind: "agent_profile" as const,
+      title: "K3",
+      text: [
+        "Referenced agent profile",
+        "- name: K3",
+        "- provider: cursor",
+        "- model: kimi-k3",
+        "- modeId: agent",
+      ].join("\n"),
+    };
+
+    const prompt = buildAgentPrompt("ok", undefined, [profile]);
+    expect(prompt).toEqual([{ type: "text", text: "ok" }, profile]);
+    expect(userVisiblePromptText(prompt)).toBe("ok");
   });
 
   it("renders github_pr attachments as readable text", () => {

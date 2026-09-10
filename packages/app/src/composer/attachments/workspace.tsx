@@ -6,6 +6,8 @@ import type {
   WorkspaceComposerAttachment,
 } from "@/attachments/types";
 import { getWorkspaceAttachmentPillContent } from "@/attachments/attachment-pill-content";
+import { getAgentMentionDetail } from "@/attachments/agent-mention-detail";
+import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
 import { AttachmentLabel, AttachmentPill } from "@/components/attachment-pill";
 import {
   isWorkspaceAttachment,
@@ -64,6 +66,12 @@ function getOpenAccessibilityLabel(
   if (attachment.kind === "chat_history") {
     return "Open chat history attachment";
   }
+  if (attachment.kind === "agent_session") {
+    return t("composer.attachments.openAgentSession");
+  }
+  if (attachment.kind === "agent_profile") {
+    return t("composer.attachments.openAgentProfile");
+  }
   return t("composer.attachments.openReview");
 }
 
@@ -80,12 +88,24 @@ function getRemoveAccessibilityLabel(
   if (attachment.kind === "chat_history") {
     return "Remove chat history attachment";
   }
+  if (attachment.kind === "agent_session") {
+    return t("composer.attachments.removeAgentSession");
+  }
+  if (attachment.kind === "agent_profile") {
+    return t("composer.attachments.removeAgentProfile");
+  }
   return t("composer.attachments.removeReview");
 }
 
 function getPillTestID(attachment: WorkspaceComposerAttachment): string {
   if (attachment.kind === "chat_history") {
     return "composer-chat-history-attachment-pill";
+  }
+  if (attachment.kind === "agent_session") {
+    return "composer-agent-session-attachment-pill";
+  }
+  if (attachment.kind === "agent_profile") {
+    return "composer-agent-profile-attachment-pill";
   }
   return "composer-review-attachment-pill";
 }
@@ -168,6 +188,8 @@ function useWorkspaceAttachmentBinding({
         if (
           selected.kind === "browser_element" ||
           selected.kind === "chat_history" ||
+          selected.kind === "agent_session" ||
+          selected.kind === "agent_profile" ||
           isPullRequestContextAttachment(selected)
         ) {
           const selectedKey = getAttachmentKey(selected);
@@ -255,24 +277,49 @@ function WorkspaceAttachmentPill({
 }: WorkspaceAttachmentPillProps) {
   const { t } = useTranslation();
   const content = getWorkspaceAttachmentPillContent(attachment, t);
+  const mentionDetail = getWorkspaceMentionDetail(attachment, t);
+  const [detailOpen, setDetailOpen] = useState(false);
   const handleOpen = useCallback(() => {
+    if (mentionDetail) {
+      setDetailOpen(true);
+      return;
+    }
     onOpen(attachment);
-  }, [onOpen, attachment]);
+  }, [attachment, mentionDetail, onOpen]);
+  const handleCloseDetail = useCallback(() => {
+    setDetailOpen(false);
+  }, []);
   const handleRemove = useCallback(() => {
     onRemove(index);
-  }, [onRemove, index]);
+  }, [index, onRemove]);
   return (
-    <AttachmentPill
-      testID={getPillTestID(attachment)}
-      onOpen={handleOpen}
-      onRemove={handleRemove}
-      openAccessibilityLabel={getOpenAccessibilityLabel(attachment, t)}
-      removeAccessibilityLabel={getRemoveAccessibilityLabel(attachment, t)}
-      disabled={disabled}
-    >
-      <AttachmentLabel icon={content.icon} title={content.title} subtitle={content.subtitle} />
-    </AttachmentPill>
+    <>
+      <AttachmentPill
+        testID={getPillTestID(attachment)}
+        onOpen={handleOpen}
+        onRemove={handleRemove}
+        openAccessibilityLabel={getOpenAccessibilityLabel(attachment, t)}
+        removeAccessibilityLabel={getRemoveAccessibilityLabel(attachment, t)}
+        disabled={disabled}
+      >
+        <AttachmentLabel icon={content.icon} title={content.title} subtitle={content.subtitle} />
+      </AttachmentPill>
+      <AgentMentionDetailSheet
+        detail={detailOpen ? mentionDetail : null}
+        onClose={handleCloseDetail}
+      />
+    </>
   );
+}
+
+function getWorkspaceMentionDetail(
+  attachment: WorkspaceComposerAttachment,
+  t: ReturnType<typeof useTranslation>["t"],
+): ReturnType<typeof getAgentMentionDetail> {
+  if (attachment.kind !== "agent_session" && attachment.kind !== "agent_profile") {
+    return null;
+  }
+  return getAgentMentionDetail(attachment.attachment, t);
 }
 
 export const composerWorkspaceAttachment = {

@@ -115,6 +115,8 @@ import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
 import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type {
+  AgentProfileContextAttachment,
+  AgentSessionContextAttachment,
   AttachmentMetadata,
   ComposerAttachment,
   UserComposerAttachment,
@@ -124,7 +126,10 @@ import type {
 import type { PickedFile } from "@/attachments/picked-file";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
-import { useWorkspaceAttachmentsForScopes } from "@/attachments/workspace-attachments-store";
+import {
+  useWorkspaceAttachmentsForScopes,
+  useWorkspaceAttachmentsStore,
+} from "@/attachments/workspace-attachments-store";
 import { droppedItemsToPickedFiles } from "@/composer/attachments/drop";
 import { getFileTypeLabel } from "@/attachments/file-types";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -1329,6 +1334,24 @@ function ComposerContentImpl({
     ],
   );
 
+  const sessionMentionScopeKey = useMemo(() => {
+    const scopeKey = attachmentScopeKeys.find((key) => key.trim().length > 0);
+    return scopeKey?.trim() ?? "";
+  }, [attachmentScopeKeys]);
+
+  const handleSessionMentionSelected = useCallback(
+    (attachment: AgentSessionContextAttachment | AgentProfileContextAttachment) => {
+      if (!sessionMentionScopeKey) {
+        return;
+      }
+      useWorkspaceAttachmentsStore.getState().addWorkspaceAttachment({
+        scopeKey: sessionMentionScopeKey,
+        attachment,
+      });
+    },
+    [sessionMentionScopeKey],
+  );
+
   const runPluginClientSlashCommand = useCallback(
     (resolved: { command: (typeof pluginClientSlashCommands)[number]; args: string }): boolean => {
       if (blurOnSubmit) messageInputRef.current?.blur();
@@ -1356,9 +1379,11 @@ function ComposerContentImpl({
     setUserInput: replaceUserInput,
     serverId,
     agentId,
+    workspaceId,
     draftConfig: commandDraftConfig,
     canExecuteClientSlashCommand: buildOutgoingAttachments(attachments).length === 0,
     onClientSlashCommand: runClientSlashCommand,
+    onSessionMentionSelected: sessionMentionScopeKey ? handleSessionMentionSelected : undefined,
     pluginClientSlashCommands,
     onAutocompleteApplied: () => {
       messageInputRef.current?.focus();
