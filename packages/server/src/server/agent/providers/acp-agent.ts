@@ -3717,10 +3717,11 @@ function mapToolSnapshotToTimeline(
 ): ToolCallTimelineItem {
   const status = mapToolStatus(snapshot.status);
   const detail = mapToolDetail(snapshot, terminals);
+  const name = snapshot.kind === "other" ? snapshot.title : (snapshot.kind ?? snapshot.title);
   const base = {
     type: "tool_call" as const,
     callId: snapshot.toolCallId,
-    name: snapshot.kind ?? snapshot.title,
+    name,
     detail,
     metadata: {
       kind: snapshot.kind ?? undefined,
@@ -3889,7 +3890,8 @@ function buildDefaultToolDetail(context: MapToolDetailContext): ToolCallDetail {
       exitCode: terminalContent.exitCode,
     };
   }
-  if (textContent) {
+  const hasRawDetail = snapshot.rawInput != null || snapshot.rawOutput != null;
+  if (textContent && !hasRawDetail) {
     return {
       type: "plain_text",
       label: snapshot.title,
@@ -3900,7 +3902,7 @@ function buildDefaultToolDetail(context: MapToolDetailContext): ToolCallDetail {
   return {
     type: "unknown",
     input: snapshot.rawInput ?? null,
-    output: snapshot.rawOutput ?? null,
+    output: snapshot.rawOutput ?? textContent ?? null,
   };
 }
 
