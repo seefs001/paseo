@@ -126,6 +126,8 @@ describe("CursorACPAgentClient model discovery", () => {
       this.setSessionConfigOption = setSessionConfigOption;
     }
 
+    readonly catalogConfigOptions = new Map<string, SessionConfigOption[]>();
+
     private readonly response: SessionStateResponse;
     private readonly setSessionConfigOption?: SpawnedACPProcess["connection"]["setSessionConfigOption"];
 
@@ -135,6 +137,13 @@ describe("CursorACPAgentClient model discovery", () => {
         connection: {
           newSession: vi.fn().mockResolvedValue(this.response),
           setSessionConfigOption: this.setSessionConfigOption,
+          extMethod: async () => ({
+            models: (this.response.models?.availableModels ?? []).map((model) => ({
+              value: model.modelId,
+              name: model.name,
+              configOptions: this.catalogConfigOptions.get(model.modelId) ?? [],
+            })),
+          }),
         },
         initialize: { agentCapabilities: {} },
       } as SpawnedACPProcess;
@@ -276,30 +285,8 @@ describe("CursorACPAgentClient model discovery", () => {
     ]);
   });
 
-  test("probes each model so effort, reasoning, and Fast stay per-model", async () => {
-    const setSessionConfigOption = vi.fn(async ({ value }: { value: string }) => {
-      if (value === "grok-4.6") {
-        return {
-          configOptions: [
-            modelConfigOption(value),
-            effortConfigOption("high"),
-            fastConfigOption("true"),
-          ],
-        };
-      }
-      if (value === "claude-fable-5") {
-        return {
-          configOptions: [
-            modelConfigOption(value),
-            thinkingToggleConfigOption("true"),
-            contextConfigOption("300k"),
-            effortConfigOption("high", ["low", "medium", "high", "xhigh", "max"]),
-          ],
-        };
-      }
-      return { configOptions: [modelConfigOption(value), fastConfigOption("true")] };
-    });
-
+  test("reads per-model effort and reasoning without switching Cursor models", async () => {
+    const setSessionConfigOption = vi.fn();
     const client = new TestCursorACPAgentClient(
       {
         sessionId: "session-1",
@@ -308,6 +295,17 @@ describe("CursorACPAgentClient model discovery", () => {
       },
       setSessionConfigOption,
     );
+    client.catalogConfigOptions.set("kimi-k3", [reasoningConfigOption("max")]);
+    client.catalogConfigOptions.set("grok-4.6", [
+      effortConfigOption("high"),
+      fastConfigOption("true"),
+    ]);
+    client.catalogConfigOptions.set("claude-fable-5", [
+      thinkingToggleConfigOption("true"),
+      contextConfigOption("300k"),
+      effortConfigOption("high", ["low", "medium", "high", "xhigh", "max"]),
+    ]);
+    client.catalogConfigOptions.set("composer-2.5", [fastConfigOption("true")]);
 
     const catalog = await client.fetchCatalog({
       scope: "workspace",
@@ -315,12 +313,7 @@ describe("CursorACPAgentClient model discovery", () => {
       force: false,
     });
 
-    expect(setSessionConfigOption).toHaveBeenCalledTimes(3);
-    expect(setSessionConfigOption.mock.calls.map((call) => call[0].value)).toEqual([
-      "grok-4.6",
-      "claude-fable-5",
-      "composer-2.5",
-    ]);
+    expect(setSessionConfigOption).not.toHaveBeenCalled();
 
     const k3 = catalog.models.find((model) => model.id === "kimi-k3");
     const grok = catalog.models.find((model) => model.id === "grok-4.6");

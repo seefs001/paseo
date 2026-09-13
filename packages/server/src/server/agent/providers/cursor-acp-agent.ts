@@ -1,13 +1,13 @@
+import { zSessionConfigOption } from "@agentclientprotocol/sdk/dist/schema/zod.gen.js";
 import type { Logger } from "pino";
+import { z } from "zod";
 
 import type { AgentModelDefinition, AgentSessionConfig } from "../agent-sdk-types.js";
 import {
+  deriveThinkingSelectorOptions,
   type ACPCatalogModelResolverContext,
   type ACPConfigFeatureOption,
-  deriveThinkingSelectorOptions,
-  findSelectConfigOption,
 } from "./acp-agent.js";
-import { toDiagnosticErrorMessage } from "./diagnostic-utils.js";
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
 interface CursorACPAgentClientOptions {
@@ -23,6 +23,7 @@ const CURSOR_INITIAL_COMMANDS_WAIT_TIMEOUT_MS = 10_000;
 const CURSOR_CLIENT_CAPABILITY_META = {
   parameterizedModelPicker: true,
 };
+
 const CURSOR_PARAMETERIZED_MODEL_ID = /^([^[\]]+)\[(.*)\]$/;
 
 export const CURSOR_FAST_FEATURE_OPTION: ACPConfigFeatureOption = {
@@ -42,56 +43,56 @@ export const CURSOR_CONTEXT_FEATURE_OPTION: ACPConfigFeatureOption = {
   tooltip: "Select Cursor context window",
 };
 
-/**
- * Cursor ACP only exposes the currently selected model's effort / reasoning /
- * Fast / context pickers. The model list itself is a set of base IDs. Probe
- * each model on the catalog session so Grok does not inherit K3's
- * low/high/max, and Composer is not given a thinking chip.
- */
+const CursorModelCatalogSchema = z.object({
+  models: z.array(
+    z.object({
+      value: z.string().min(1),
+      name: z.string(),
+      configOptions: z.array(zSessionConfigOption),
+    }),
+  ),
+});
+
+// Cursor model switches persist CLI preferences, even in a throwaway probe session.
+// Its extension returns each model's parameter definitions without selecting it.
 export async function resolveCursorCatalogModels({
   connection,
-  sessionId,
   models,
-  configOptions,
-  runRequest,
-  transformConfigOptions,
-  logger,
   provider,
+  runRequest,
 }: ACPCatalogModelResolverContext): Promise<AgentModelDefinition[]> {
-  if (models.length <= 1) {
-    return models.map((model) => applyCursorThinkingOptions(model, configOptions));
-  }
-  const modelOption = findSelectConfigOption({ configOptions, category: "model" });
-  if (!modelOption) {
-    return models.map((model) => applyCursorThinkingOptions(model, configOptions));
-  }
+  const catalog = await runRequest(() => fetchCursorModelCatalog(connection));
+  const currentModelId = models.find((model) => model.isDefault)?.id;
 
-  const resolved: AgentModelDefinition[] = [];
-  for (const model of models) {
-    if (model.isDefault) {
-      resolved.push(applyCursorThinkingOptions(model, configOptions));
-      continue;
+  return catalog.models.map((model) => {
+    const thinkingOptions = deriveThinkingSelectorOptions(model.configOptions);
+    const defaultThinkingOptionId = thinkingOptions.find((option) => option.isDefault)?.id;
+    return {
+      provider,
+      id: model.value,
+      label: model.name,
+      isDefault: model.value === currentModelId,
+      thinkingOptions: thinkingOptions.length > 0 ? thinkingOptions : undefined,
+      defaultThinkingOptionId,
+    };
+  });
+}
+
+async function fetchCursorModelCatalog(connection: ACPCatalogModelResolverContext["connection"]) {
+  try {
+    const response = await connection.extMethod("cursor/list_available_models", {});
+    return CursorModelCatalogSchema.parse(response);
+  } catch (error) {
+    const extensionUnavailable =
+      typeof error === "object" && error !== null && "code" in error && error.code === -32601;
+    if (extensionUnavailable) {
+      throw new Error(
+        "Update Cursor CLI: this version does not support cursor/list_available_models.",
+        { cause: error },
+      );
     }
-    try {
-      const response = await runRequest(() =>
-        connection.setSessionConfigOption({
-          sessionId,
-          configId: modelOption.id,
-          value: model.id,
-        }),
-      );
-      resolved.push(
-        applyCursorThinkingOptions(model, transformConfigOptions(response.configOptions ?? [])),
-      );
-    } catch (error) {
-      logger.warn(
-        { modelId: model.id, error: toDiagnosticErrorMessage(error) },
-        `${provider} catalog probe could not resolve thinking options for model "${model.id}"; leaving thinking unset`,
-      );
-      resolved.push(applyCursorThinkingOptions(model, null));
-    }
+    throw error;
   }
-  return resolved;
 }
 
 export function parseCursorModelId(modelId: string): {
@@ -144,18 +145,6 @@ export function normalizeCursorSessionConfig(config: AgentSessionConfig): AgentS
     model: parsed.modelId,
     thinkingOptionId: config.thinkingOptionId ?? thinkingFromParams,
     featureValues: Object.keys(featureValues).length > 0 ? featureValues : config.featureValues,
-  };
-}
-
-function applyCursorThinkingOptions(
-  model: AgentModelDefinition,
-  configOptions: ACPCatalogModelResolverContext["configOptions"],
-): AgentModelDefinition {
-  const thinkingOptions = deriveThinkingSelectorOptions(configOptions);
-  return {
-    ...model,
-    thinkingOptions: thinkingOptions.length > 0 ? thinkingOptions : undefined,
-    defaultThinkingOptionId: thinkingOptions.find((option) => option.isDefault)?.id,
   };
 }
 
