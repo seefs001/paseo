@@ -29,6 +29,7 @@ import {
   type ListSessionsResponse,
   type LoadSessionResponse,
   type McpServer,
+  type NewSessionRequest,
   type NewSessionResponse,
   type PermissionOption,
   type Plan,
@@ -412,13 +413,14 @@ export type ACPCatalogModelResolver = (
   context: ACPCatalogModelResolverContext,
 ) => Promise<AgentModelDefinition[]>;
 
-interface ACPAgentClientOptions {
+export interface ACPAgentClientOptions {
   grokUsage?: boolean;
   provider: string;
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
   defaultCommand: [string, ...string[]];
   defaultModes?: AgentMode[];
+  sessionRequestMeta?: (config: AgentSessionConfig) => NewSessionRequest["_meta"];
   catalogModelResolver?: ACPCatalogModelResolver;
   modelTransformer?: (models: AgentModelDefinition[]) => AgentModelDefinition[];
   sessionResponseTransformer?: (response: SessionStateResponse) => SessionStateResponse;
@@ -452,6 +454,7 @@ interface ACPAgentSessionOptions {
   runtimeSettings?: ProviderRuntimeSettings;
   defaultCommand: [string, ...string[]];
   defaultModes: AgentMode[];
+  sessionRequestMeta?: ACPAgentClientOptions["sessionRequestMeta"];
   modelTransformer?: (models: AgentModelDefinition[]) => AgentModelDefinition[];
   sessionResponseTransformer?: (response: SessionStateResponse) => SessionStateResponse;
   configOptionsTransformer?: (configOptions: SessionConfigOption[]) => SessionConfigOption[];
@@ -884,6 +887,7 @@ export class ACPAgentClient implements AgentClient {
   protected readonly runtimeSettings?: ProviderRuntimeSettings;
   protected readonly defaultCommand: [string, ...string[]];
   protected readonly defaultModes: AgentMode[];
+  private readonly sessionRequestMeta?: ACPAgentClientOptions["sessionRequestMeta"];
   private readonly catalogModelResolver?: ACPCatalogModelResolver;
   private readonly modelTransformer?: (models: AgentModelDefinition[]) => AgentModelDefinition[];
   private readonly sessionResponseTransformer?: (
@@ -927,6 +931,7 @@ export class ACPAgentClient implements AgentClient {
     this.runtimeSettings = options.runtimeSettings;
     this.defaultCommand = options.defaultCommand;
     this.defaultModes = options.defaultModes ?? [];
+    this.sessionRequestMeta = options.sessionRequestMeta;
     this.catalogModelResolver = options.catalogModelResolver;
     this.modelTransformer = options.modelTransformer;
     this.sessionResponseTransformer = options.sessionResponseTransformer;
@@ -963,6 +968,7 @@ export class ACPAgentClient implements AgentClient {
         runtimeSettings: this.runtimeSettings,
         defaultCommand: this.defaultCommand,
         defaultModes: this.defaultModes,
+        sessionRequestMeta: this.sessionRequestMeta,
         modelTransformer: this.modelTransformer,
         sessionResponseTransformer: this.sessionResponseTransformer,
         configOptionsTransformer: this.configOptionsTransformer,
@@ -1014,6 +1020,7 @@ export class ACPAgentClient implements AgentClient {
       runtimeSettings: this.runtimeSettings,
       defaultCommand: this.defaultCommand,
       defaultModes: this.defaultModes,
+      sessionRequestMeta: this.sessionRequestMeta,
       modelTransformer: this.modelTransformer,
       sessionResponseTransformer: this.sessionResponseTransformer,
       configOptionsTransformer: this.configOptionsTransformer,
@@ -1698,6 +1705,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly defaultCommand: [string, ...string[]];
   private readonly defaultModes: AgentMode[];
+  private readonly sessionRequestMeta?: ACPAgentClientOptions["sessionRequestMeta"];
   protected readonly modelTransformer?: (models: AgentModelDefinition[]) => AgentModelDefinition[];
   private readonly sessionResponseTransformer?: (
     response: SessionStateResponse,
@@ -1770,6 +1778,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.runtimeSettings = options.runtimeSettings;
     this.defaultCommand = options.defaultCommand;
     this.defaultModes = options.defaultModes;
+    this.sessionRequestMeta = options.sessionRequestMeta;
     this.modelTransformer = options.modelTransformer;
     this.sessionResponseTransformer = options.sessionResponseTransformer;
     this.configOptionsTransformer = options.configOptionsTransformer;
@@ -1802,6 +1811,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
   async initializeNewSession(): Promise<void> {
     try {
+      const meta = this.sessionRequestMeta?.(this.config);
       const spawned = await this.spawnProcess();
       this.child = spawned.child;
       this.connection = spawned.connection;
@@ -1811,6 +1821,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.connection!.newSession({
           cwd: this.config.cwd,
           mcpServers: this.acpMcpServers(),
+          ...(meta ? { _meta: meta } : {}),
         }),
       );
       this.sessionId = response.sessionId;
@@ -1836,6 +1847,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         throw new Error("Resume requested without persistence handle");
       }
 
+      const meta = this.sessionRequestMeta?.(this.config);
       const spawned = await this.spawnProcess();
       this.child = spawned.child;
       this.connection = spawned.connection;
@@ -1851,6 +1863,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
             sessionId: handle.sessionId,
             cwd: this.config.cwd,
             mcpServers: this.acpMcpServers(),
+            ...(meta ? { _meta: meta } : {}),
           }),
         );
         this.deliverTranslatedEvents(this.flushPendingUserMessage());
@@ -1863,6 +1876,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
             sessionId: handle.sessionId,
             cwd: this.config.cwd,
             mcpServers: this.acpMcpServers(),
+            ...(meta ? { _meta: meta } : {}),
           }),
         );
         this.applySessionState(response);
@@ -2097,6 +2111,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       : { handled: false };
     if (providerResult.handled) {
       this.currentMode = providerResult.currentModeId ?? modeId;
+      this.config.modeId = this.currentMode;
       if (providerResult.configOptions) {
         this.configOptions = this.transformConfigOptions(providerResult.configOptions);
       }
@@ -3151,7 +3166,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   private handleCurrentModeUpdate(update: CurrentModeUpdate): void {
-    this.currentMode = this.transformModeId(update.currentModeId);
+    this.currentMode = this.transformModeId(update.currentModeId) ?? this.currentMode;
   }
 
   private handleConfigOptionUpdate(update: ConfigOptionUpdate): AgentStreamEvent[] {

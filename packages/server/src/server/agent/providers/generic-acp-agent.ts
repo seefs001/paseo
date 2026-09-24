@@ -5,6 +5,7 @@ import type { AgentCapabilityFlags } from "../agent-sdk-types.js";
 import { checkProviderLaunchAvailable, resolveProviderLaunch } from "../provider-launch-config.js";
 import {
   ACPAgentClient,
+  type ACPAgentClientOptions,
   type ACPCatalogModelResolver,
   type ACPClientCapabilityMeta,
   type ACPConfigFeatureOption,
@@ -37,7 +38,15 @@ export const GenericACPProviderParamsSchema = z
 
 type GenericACPProviderParams = z.infer<typeof GenericACPProviderParamsSchema>;
 
-interface GenericACPAgentClientOptions {
+export interface GenericACPAgentClientOptions extends Pick<
+  ACPAgentClientOptions,
+  | "defaultModes"
+  | "sessionRequestMeta"
+  | "sessionResponseTransformer"
+  | "configOptionsTransformer"
+  | "modeIdTransformer"
+  | "providerModeWriter"
+> {
   logger: Logger;
   command: [string, ...string[]];
   env?: Record<string, string>;
@@ -69,6 +78,12 @@ export class GenericACPAgentClient extends ACPAgentClient {
         env: options.env,
       },
       defaultCommand: options.command,
+      defaultModes: options.defaultModes,
+      sessionRequestMeta: options.sessionRequestMeta,
+      sessionResponseTransformer: options.sessionResponseTransformer,
+      configOptionsTransformer: options.configOptionsTransformer,
+      modeIdTransformer: options.modeIdTransformer,
+      providerModeWriter: options.providerModeWriter,
       capabilities: buildGenericACPCapabilities(providerParams),
       waitForInitialCommands: options.waitForInitialCommands,
       initialCommandsWaitTimeoutMs: options.initialCommandsWaitTimeoutMs,

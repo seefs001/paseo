@@ -56,6 +56,7 @@ const mockState = vi.hoisted(() => {
         label?: string;
         providerParams?: unknown;
         waitForInitialCommands?: boolean;
+        defaultModes?: AgentMode[];
       }>,
     },
     isCommandAvailable: vi.fn(async (_command: string) => false),
@@ -307,6 +308,7 @@ vi.mock("./providers/generic-acp-agent.js", () => ({
       label?: string;
       providerParams?: unknown;
       waitForInitialCommands?: boolean;
+      defaultModes?: AgentMode[];
     }) {
       const providerParams =
         options.providerParams &&
@@ -335,6 +337,7 @@ vi.mock("./providers/generic-acp-agent.js", () => ({
         label: options.label,
         providerParams: options.providerParams,
         ...(options.waitForInitialCommands === true ? { waitForInitialCommands: true } : {}),
+        ...(options.defaultModes ? { defaultModes: options.defaultModes } : {}),
       });
     }
 
@@ -682,7 +685,7 @@ test("built-in OMP override keeps the real OMP adapter enabled and launchable", 
   await session.close();
 });
 
-test("grok ACP waits for async slash-command discovery", () => {
+test("grok ACP advertises permission modes and waits for async slash-command discovery", () => {
   const registry = buildProviderRegistry(logger, {
     providerOverrides: {
       grok: {
@@ -702,6 +705,11 @@ test("grok ACP waits for async slash-command discovery", () => {
       label: "Grok",
       providerParams: undefined,
       waitForInitialCommands: true,
+      defaultModes: [
+        expect.objectContaining({ id: "ask" }),
+        expect.objectContaining({ id: "auto" }),
+        expect.objectContaining({ id: "always-approve" }),
+      ],
     },
     {
       command: ["grok", "agent", "stdio"],
@@ -710,6 +718,11 @@ test("grok ACP waits for async slash-command discovery", () => {
       label: "Grok",
       providerParams: undefined,
       waitForInitialCommands: true,
+      defaultModes: [
+        expect.objectContaining({ id: "ask" }),
+        expect.objectContaining({ id: "auto" }),
+        expect.objectContaining({ id: "always-approve" }),
+      ],
     },
   ]);
 });
