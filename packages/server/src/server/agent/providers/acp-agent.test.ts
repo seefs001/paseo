@@ -8,7 +8,10 @@ import {
   RequestError,
   ndJsonStream,
   type Agent,
+  type Client as ACPClient,
+  type LoadSessionRequest,
   type CreateTerminalRequest,
+  type NewSessionRequest,
   PermissionOption,
   PromptResponse,
   RequestPermissionRequest,
@@ -45,6 +48,7 @@ import {
   writeCopilotProviderMode,
 } from "./copilot-acp-agent.js";
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
+import { GROK_ACP_OPTIONS, GrokACPAgentClient } from "./grok-acp-agent.js";
 import { parseKiroExtensionCommands } from "./kiro-acp-agent.js";
 import { transformPiModels } from "./pi/agent.js";
 import type { AgentStreamEvent } from "../agent-sdk-types.js";
@@ -4404,6 +4408,271 @@ describe("ACPAgentClient probe cleanup", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("Grok permission modes", () => {
+  const sessions: ACPAgentSession[] = [];
+  afterEach(async () => {
+    await Promise.all(sessions.splice(0).map((session) => session.close()));
+  });
+
+  function createGrokSession({
+    modeId,
+    resume = false,
+    response = { sessionId: "grok-session" },
+  }: {
+    modeId?: string;
+    resume?: boolean;
+    response?: SessionStateResponse;
+  } = {}) {
+    const clientToAgent = new TransformStream<Uint8Array, Uint8Array>();
+    const agentToClient = new TransformStream<Uint8Array, Uint8Array>();
+    const requests: Array<NewSessionRequest | LoadSessionRequest> = [];
+    const notifications: Array<{ method: string; params: Record<string, unknown> }> = [];
+    const modeRequests: unknown[] = [];
+    const configRequests: unknown[] = [];
+    let rejectNotifications = false;
+    const upstream = new AgentSideConnection(
+      () => ({
+        async initialize() {
+          return {
+            protocolVersion: PROTOCOL_VERSION,
+            agentCapabilities: { loadSession: !resume, sessionCapabilities: { resume: {} } },
+          };
+        },
+        async newSession(request) {
+          requests.push(request);
+          return { ...response, sessionId: "grok-session" };
+        },
+        async loadSession(request) {
+          requests.push(request);
+          return response;
+        },
+        async unstable_resumeSession(request) {
+          requests.push(request);
+          return response;
+        },
+        async setSessionMode(request) {
+          modeRequests.push(request);
+          return {};
+        },
+        async setSessionConfigOption(request) {
+          configRequests.push(request);
+          return { configOptions: response.configOptions ?? [] };
+        },
+        async extNotification(method, params) {
+          notifications.push({ method, params });
+        },
+        async authenticate() {},
+        async cancel() {},
+        async prompt() {
+          return { stopReason: "end_turn" };
+        },
+      }),
+      ndJsonStream(agentToClient.writable, clientToAgent.readable),
+    );
+    class TestConnection extends ClientSideConnection {
+      override async extNotification(method: string, params: Record<string, unknown>) {
+        if (rejectNotifications) {
+          throw new Error("notification transport failed");
+        }
+        await super.extNotification(method, params);
+      }
+    }
+    async function connect(client: ACPClient): Promise<SpawnedACPProcess> {
+      const connection = new TestConnection(
+        () => client,
+        ndJsonStream(clientToAgent.writable, agentToClient.readable),
+      );
+      return {
+        child: createProbeChildStub(),
+        connection,
+        initialize: await connection.initialize({ protocolVersion: PROTOCOL_VERSION }),
+      };
+    }
+    class InMemoryGrokSession extends ACPAgentSession {
+      protected override async spawnProcess(): Promise<SpawnedACPProcess> {
+        return connect(this);
+      }
+    }
+    const session = new InMemoryGrokSession(
+      { provider: "grok", cwd: "/tmp/paseo-grok-test", modeId },
+      {
+        provider: "grok",
+        logger: createTestLogger(),
+        defaultCommand: ["grok", "agent", "stdio"],
+        ...GROK_ACP_OPTIONS,
+        handle: { provider: "grok", sessionId: "grok-session" },
+        capabilities: { supportsStreaming: true, supportsSessionPersistence: true },
+        terminateProcess: new FakeTerminator().terminate,
+      },
+    );
+    sessions.push(session);
+    return {
+      session,
+      requests,
+      notifications,
+      modeRequests,
+      configRequests,
+      upstream,
+      connect,
+      failNotifications() {
+        rejectNotifications = true;
+      },
+    };
+  }
+
+  const modes = [
+    { modeId: "ask", autoMode: false, yoloMode: false },
+    { modeId: "auto", autoMode: true, yoloMode: false },
+    { modeId: "always-approve", autoMode: false, yoloMode: true },
+  ];
+
+  test.each(modes)("applies $modeId in session/new", async ({ modeId, autoMode, yoloMode }) => {
+    const { session, requests, notifications } = createGrokSession({ modeId });
+    await session.initializeNewSession();
+    expect(requests).toEqual([
+      { cwd: "/tmp/paseo-grok-test", mcpServers: [], _meta: { autoMode, yoloMode } },
+    ]);
+    expect(notifications).toEqual([]);
+    expect(await session.getCurrentMode()).toBe(modeId);
+  });
+
+  describe.each([false, true])("resume extension: %s", (resume) => {
+    test.each(modes)("applies $modeId on reconnect", async ({ modeId, autoMode, yoloMode }) => {
+      const { session, requests, notifications } = createGrokSession({ modeId, resume });
+      await session.initializeResumedSession();
+      expect(requests).toEqual([
+        {
+          sessionId: "grok-session",
+          cwd: "/tmp/paseo-grok-test",
+          mcpServers: [],
+          _meta: { autoMode, yoloMode },
+        },
+      ]);
+      expect(notifications).toEqual([]);
+      expect(await session.getCurrentMode()).toBe(modeId);
+    });
+  });
+
+  test.each(["new", "load", "resume"])("leaves provider defaults alone on %s", async (method) => {
+    const { session, requests, notifications } = createGrokSession({ resume: method === "resume" });
+    if (method === "new") {
+      await session.initializeNewSession();
+    } else {
+      await session.initializeResumedSession();
+    }
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toHaveProperty("_meta");
+    expect(notifications).toEqual([]);
+    expect(await session.getCurrentMode()).toBeNull();
+    expect(session.describePersistence()?.metadata?.modeId).toBeUndefined();
+  });
+
+  test("switches and persists permission modes using only extension notifications", async () => {
+    const { session, notifications, modeRequests, configRequests } = createGrokSession();
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    await session.initializeNewSession();
+    for (const { modeId, autoMode, yoloMode } of [...modes, modes[0], modes[0]]) {
+      await session.setMode(modeId);
+      expect(notifications.at(-1)).toEqual({
+        method: "x.ai/yolo_mode_changed",
+        params: {
+          sessionId: "grok-session",
+          auto_mode: autoMode,
+          yolo_mode: yoloMode,
+          permission_mode: modeId,
+        },
+      });
+      expect(await session.getCurrentMode()).toBe(modeId);
+      expect(session.describePersistence()?.metadata?.modeId).toBe(modeId);
+      expect(events.at(-1)).toMatchObject({ type: "mode_changed", currentModeId: modeId });
+    }
+    expect(notifications).toHaveLength(5);
+    expect(modeRequests).toEqual([]);
+    expect(configRequests).toEqual([]);
+    await session.close();
+    await expect(session.setMode("auto")).rejects.toThrow("ACP session not initialized");
+    expect(notifications).toHaveLength(5);
+  });
+
+  test("rejects invalid modes and preserves state when notification delivery fails", async () => {
+    const { session, notifications, failNotifications } = createGrokSession({ modeId: "auto" });
+    await session.initializeNewSession();
+    await expect(session.setMode("plan")).rejects.toThrow("Invalid Grok permission mode: plan");
+    failNotifications();
+    await expect(session.setMode("always-approve")).rejects.toThrow(
+      "notification transport failed",
+    );
+    expect(await session.getCurrentMode()).toBe("auto");
+    expect(session.describePersistence()?.metadata?.modeId).toBe("auto");
+    expect(notifications).toEqual([]);
+  });
+
+  test("keeps permission modes separate from ACP prompt modes and model/thinking config", async () => {
+    const configOptions = [
+      selectConfigOption("mode", ["default", "plan", "ask"], "plan"),
+      selectConfigOption("model", ["grok-4.6", "deepseek"], "grok-4.6"),
+      selectConfigOption("thought_level", ["high", "max"], "high"),
+    ];
+    const { session, modeRequests, configRequests } = createGrokSession({
+      modeId: "auto",
+      response: {
+        sessionId: "grok-session",
+        modes: { currentModeId: "plan", availableModes: [{ id: "plan", name: "Plan" }] },
+        configOptions,
+      },
+    });
+    await session.initializeNewSession();
+    await session.sessionUpdate({
+      sessionId: "grok-session",
+      update: { sessionUpdate: "current_mode_update", currentModeId: "ask" },
+    });
+    await session.sessionUpdate({
+      sessionId: "grok-session",
+      update: { sessionUpdate: "config_option_update", configOptions },
+    });
+    expect((await session.getAvailableModes()).map((mode) => mode.id)).toEqual([
+      "ask",
+      "auto",
+      "always-approve",
+    ]);
+    expect(await session.getRuntimeInfo()).toMatchObject({
+      modeId: "auto",
+      model: "grok-4.6",
+      thinkingOptionId: "high",
+    });
+    await session.setModel("deepseek");
+    await session.setThinkingOption("max");
+    expect(configRequests).toEqual([
+      { sessionId: "grok-session", configId: "model-option", value: "deepseek" },
+      { sessionId: "grok-session", configId: "thought_level-option", value: "max" },
+    ]);
+    expect(await session.getCurrentMode()).toBe("auto");
+    expect(modeRequests).toEqual([]);
+  });
+
+  test("advertises permission modes through the Grok catalog without overriding its defaults", async () => {
+    const { connect, requests } = createGrokSession();
+    class InMemoryGrokClient extends GrokACPAgentClient {
+      protected override async spawnProcess(): Promise<SpawnedACPProcess> {
+        return connect(this.buildProbeClient());
+      }
+    }
+    const client = new InMemoryGrokClient({
+      logger: createTestLogger(),
+      command: ["grok", "agent", "stdio"],
+      providerId: "grok",
+    });
+    const catalog = await client.fetchCatalog({
+      scope: "workspace",
+      cwd: "/tmp/paseo-grok-test",
+      force: false,
+    });
+    expect(catalog.modes.map((mode) => mode.id)).toEqual(["ask", "auto", "always-approve"]);
+    expect(requests).toEqual([{ cwd: "/tmp/paseo-grok-test", mcpServers: [] }]);
   });
 });
 
