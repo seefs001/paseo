@@ -1,4 +1,5 @@
 import type { AgentMode } from "../agent-sdk-types.js";
+import { composeSystemPromptParts } from "../system-prompt.js";
 import type { ACPAgentClientOptions } from "./acp-agent.js";
 import { GenericACPAgentClient, type GenericACPAgentClientOptions } from "./generic-acp-agent.js";
 
@@ -20,7 +21,9 @@ export const GROK_ACP_OPTIONS = {
   waitForInitialCommands: true,
   grokUsage: true,
   sessionRequestMeta(config) {
-    return config.modeId === undefined ? undefined : permissionModeMeta(config.modeId);
+    const mode = config.modeId === undefined ? undefined : permissionModeMeta(config.modeId);
+    const rules = composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt);
+    return rules ? { ...mode, rules } : mode;
   },
   // ACP plan/ask/default are a separate prompt-mode axis, unadvertised by this permission chip.
   sessionResponseTransformer(response) {

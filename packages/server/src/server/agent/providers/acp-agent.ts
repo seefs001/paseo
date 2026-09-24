@@ -76,6 +76,7 @@ import {
   type AgentPermissionResponse,
   type AgentPersistenceHandle,
   type AgentPromptInput,
+  type AgentResumeSessionOptions,
   type AgentRunOptions,
   type AgentRunResult,
   type AgentRuntimeInfo,
@@ -959,11 +960,19 @@ export class ACPAgentClient implements AgentClient {
     return config;
   }
 
+  protected prepareSession(
+    _config: AgentSessionConfig,
+    _launchContext?: AgentLaunchContext,
+  ): Promise<void> {
+    return Promise.resolve();
+  }
+
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
     this.assertProvider(config);
+    await this.prepareSession(config, launchContext);
     const session = new ACPAgentSession(
       this.transformSessionConfig({ ...config, provider: this.provider }),
       {
@@ -1001,12 +1010,15 @@ export class ACPAgentClient implements AgentClient {
     handle: AgentPersistenceHandle,
     overrides?: Partial<AgentSessionConfig>,
     launchContext?: AgentLaunchContext,
+    options?: AgentResumeSessionOptions,
   ): Promise<AgentSession> {
     if (handle.provider !== this.provider) {
       throw new Error(`Cannot resume ${handle.provider} handle with ${this.provider} provider`);
     }
 
-    const storedConfig = coerceSessionConfigMetadata(handle.metadata);
+    const storedConfig = { ...coerceSessionConfigMetadata(handle.metadata) };
+    // Host instructions are a runtime setting, including when the current value is empty.
+    delete storedConfig.daemonAppendSystemPrompt;
     const cwd = overrides?.cwd ?? storedConfig.cwd;
     if (!cwd) {
       throw new Error(`${this.provider} resume requires the original working directory`);
@@ -1018,6 +1030,9 @@ export class ACPAgentClient implements AgentClient {
       provider: this.provider,
       cwd,
     });
+    if (options?.purpose !== "history") {
+      await this.prepareSession(mergedConfig, launchContext);
+    }
     const session = new ACPAgentSession(mergedConfig, {
       provider: this.provider,
       logger: this.logger,
@@ -2499,14 +2514,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (!this.sessionId) {
       return null;
     }
+    const metadata = { ...this.config, title: this.currentTitle };
+    delete metadata.daemonAppendSystemPrompt;
     return {
       provider: this.provider,
       sessionId: this.sessionId,
       nativeHandle: this.sessionId,
-      metadata: {
-        ...this.config,
-        title: this.currentTitle,
-      },
+      metadata,
     };
   }
 

@@ -2,7 +2,12 @@ import { zSessionConfigOption } from "@agentclientprotocol/sdk/dist/schema/zod.g
 import type { Logger } from "pino";
 import { z } from "zod";
 
-import type { AgentModelDefinition, AgentSessionConfig } from "../agent-sdk-types.js";
+import type {
+  AgentModelDefinition,
+  AgentLaunchContext,
+  AgentSessionConfig,
+} from "../agent-sdk-types.js";
+import { syncCursorRules } from "./cursor-rules.js";
 import {
   deriveThinkingSelectorOptions,
   type ACPCatalogModelResolverContext,
@@ -168,5 +173,13 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
 
   protected override transformSessionConfig(config: AgentSessionConfig): AgentSessionConfig {
     return normalizeCursorSessionConfig(config);
+  }
+
+  protected override async prepareSession(
+    config: AgentSessionConfig,
+    launchContext?: AgentLaunchContext,
+  ): Promise<void> {
+    // Probes and internal utility agents must not replace the shared workspace instructions.
+    if (launchContext?.agentId && !config.internal) await syncCursorRules(config);
   }
 }
