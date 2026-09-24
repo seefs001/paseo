@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Bot, File, Folder } from "lucide-react-native";
+import { BookOpen, Bot, File, Folder } from "lucide-react-native";
 import type { Theme } from "@/styles/theme";
 import { getAutocompleteScrollOffset } from "./autocomplete-utils";
 
@@ -20,7 +20,7 @@ export interface AutocompleteOption {
   label: string;
   detail?: string;
   description?: string;
-  kind?: "command" | "file" | "directory" | "agent";
+  kind?: "command" | "file" | "directory" | "agent" | "skill";
 }
 
 interface AutocompleteProps {
@@ -38,6 +38,7 @@ function renderMentionLeadingIcon(
   kind: AutocompleteOption["kind"],
   mutedColor: string,
 ): ReactElement {
+  if (kind === "skill") return <BookOpen size={14} color={mutedColor} />;
   if (kind === "directory") {
     return <Folder size={14} color={mutedColor} />;
   }
@@ -77,7 +78,10 @@ function AutocompleteRow({
   const optionLabel = removeBoltGlyphs(option.label) ?? option.label;
   const optionDescription = removeBoltGlyphs(option.description);
   const showLeadingIcon =
-    option.kind === "directory" || option.kind === "file" || option.kind === "agent";
+    option.kind === "directory" ||
+    option.kind === "file" ||
+    option.kind === "agent" ||
+    option.kind === "skill";
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => onRowLayout(index, event),
@@ -92,8 +96,18 @@ function AutocompleteRow({
     [isSelected],
   );
 
+  const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
+  const accessibilityLabel = [optionLabel, optionDescription].filter(Boolean).join(". ");
+
   return (
-    <Pressable onLayout={handleLayout} onPress={handlePress} style={pressableStyle}>
+    <Pressable
+      onLayout={handleLayout}
+      onPress={handlePress}
+      style={pressableStyle}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
+    >
       {showLeadingIcon ? (
         <>
           <View style={styles.itemLeading}>
@@ -107,7 +121,7 @@ function AutocompleteRow({
               ) : null}
             </View>
             {optionDescription ? (
-              <Text style={styles.itemDescription} numberOfLines={1}>
+              <Text style={styles.itemDescription} numberOfLines={option.kind === "skill" ? 2 : 1}>
                 {optionDescription}
               </Text>
             ) : null}
@@ -184,7 +198,7 @@ export function Autocomplete({
   }, [options]);
 
   useEffect(() => {
-    if (options.length === 0) {
+    if (options.length === 0 || options[0].kind === "skill") {
       return;
     }
     pinToBottom();
@@ -272,7 +286,7 @@ export function Autocomplete({
         <ScrollView
           ref={scrollRef}
           onLayout={handleScrollViewLayout}
-          onContentSizeChange={pinToBottom}
+          onContentSizeChange={options[0]?.kind === "skill" ? ensureActiveItemVisible : pinToBottom}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           style={styles.scrollView}

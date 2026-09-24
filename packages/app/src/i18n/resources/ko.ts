@@ -1534,6 +1534,15 @@ export const ko: TranslationResources = {
     later: "나중에",
     stashRestored: "스태시된 변경 사항이 복원되었습니다",
   },
+  skillPicker: {
+    loading: "스킬 로딩 중…",
+    empty: "{{directory}}에 스킬이 없습니다",
+    noMatches: "일치하는 스킬이 없습니다",
+    noDescription: "설명 없음",
+    usage: "{{count}}회 사용",
+    updateHost: "스킬 선택기를 사용하려면 호스트를 업데이트하세요",
+    loadFailed: "스킬을 불러올 수 없습니다. 닫고 다시 시도하세요.",
+  },
   agentAutocomplete: {
     searchingWorkspace: "워크스페이스 검색 중...",
     loadingCommands: "명령 불러오는 중...",

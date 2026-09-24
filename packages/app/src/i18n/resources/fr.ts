@@ -1574,6 +1574,15 @@ export const fr: TranslationResources = {
     later: "Plus tard",
     stashRestored: "Modifications cachées restaurées",
   },
+  skillPicker: {
+    loading: "Chargement des compétences…",
+    empty: "Aucune compétence dans {{directory}}",
+    noMatches: "Aucune compétence correspondante",
+    noDescription: "Aucune description",
+    usage: "{{count}} utilisations",
+    updateHost: "Mettez cet hôte à jour pour sélectionner des compétences",
+    loadFailed: "Impossible de charger les compétences. Fermez puis réessayez.",
+  },
   agentAutocomplete: {
     searchingWorkspace: "Recherche dans l'espace de travail...",
     loadingCommands: "Chargement des commandes...",

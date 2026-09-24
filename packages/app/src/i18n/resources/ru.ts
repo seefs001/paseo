@@ -1553,6 +1553,15 @@ export const ru: TranslationResources = {
     later: "Позже",
     stashRestored: "Изменения из stash восстановлены.",
   },
+  skillPicker: {
+    loading: "Загрузка навыков…",
+    empty: "В {{directory}} нет навыков",
+    noMatches: "Совпадающих навыков нет",
+    noDescription: "Без описания",
+    usage: "Использований: {{count}}",
+    updateHost: "Обновите хост для выбора навыков",
+    loadFailed: "Не удалось загрузить навыки. Закройте список и повторите попытку.",
+  },
   agentAutocomplete: {
     searchingWorkspace: "Поиск в рабочем пространстве...",
     loadingCommands: "Загрузка команд...",

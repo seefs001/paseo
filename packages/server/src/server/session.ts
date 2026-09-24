@@ -1,3 +1,4 @@
+import type { SkillCatalog } from "./skills/catalog.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
@@ -507,6 +508,7 @@ export interface SessionOptions {
     catalog(): Array<{ id: string; clientBundle: string }>;
     invokePluginRpc(pluginId: string, method: string, input: unknown): Promise<unknown>;
   };
+  skillCatalog?: SkillCatalog;
   orchestrationSkills?: import("./orchestration-skills/index.js").OrchestrationSkills;
   mcpBaseUrl?: string | null;
   stt: Resolvable<SpeechToTextProvider | null>;
@@ -726,6 +728,7 @@ export class Session {
   private readonly daemonConfigStore: DaemonConfigStore;
   private readonly pushNotifications: PushNotifications;
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
+  private readonly skillCatalog: SkillCatalog | undefined;
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
   private unsubscribeAgentEvents: (() => void) | null = null;
   private unsubscribeProjectMutations: (() => void) | null = null;
@@ -866,6 +869,7 @@ export class Session {
     this.worktreesRoot = worktreesRoot;
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
+    this.skillCatalog = options.skillCatalog;
     this.sessionLogger = logger.child({
       module: "session",
       clientId: this.clientId,
@@ -3044,6 +3048,21 @@ export class Session {
 
   private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {
     switch (msg.type) {
+      case "skills.list.request": {
+        if (!this.skillCatalog) throw new Error("Skill catalog is unavailable");
+        const catalog = await this.skillCatalog.list();
+        this.emit({
+          type: "skills.list.response",
+          payload: { requestId: msg.requestId, ...catalog },
+        });
+        return;
+      }
+      case "skills.usage.record.request": {
+        if (!this.skillCatalog) throw new Error("Skill catalog is unavailable");
+        await this.skillCatalog.recordUsage(msg.submissionId, msg.paths);
+        this.emit({ type: "skills.usage.record.response", payload: { requestId: msg.requestId } });
+        return;
+      }
       case "list_commands_request":
         await this.handleListCommandsRequest(msg);
         return;

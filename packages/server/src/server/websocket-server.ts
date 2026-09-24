@@ -1,3 +1,4 @@
+import { SkillCatalog } from "./skills/catalog.js";
 import { stat } from "node:fs/promises";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
@@ -588,6 +589,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly advertiseRelayConfig: boolean;
   private readonly directorySync = new DirectorySyncService();
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
+  private readonly skillCatalog: SkillCatalog;
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
 
   private async validateCompletedCreation(snapshot: CreationSnapshot): Promise<void> {
@@ -671,6 +673,7 @@ export class VoiceAssistantWebSocketServer {
     this.hubRelationships = hubRelationships ?? null;
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
+    this.skillCatalog = new SkillCatalog(paseoHome);
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
     this.messageReceipts = new MessageReceipts(join(paseoHome, "agent-requests"));
@@ -1469,6 +1472,7 @@ export class VoiceAssistantWebSocketServer {
       daemonConfigStore: this.daemonConfigStore,
       pluginRuntime: this.pluginRuntime,
       orchestrationSkills: this.orchestrationSkills,
+      skillCatalog: this.skillCatalog,
       mcpBaseUrl: this.mcpBaseUrl,
       stt: () => this.speech?.resolveStt() ?? null,
       sttLanguage: this.speech?.resolveSttLanguage() ?? "en",
@@ -1731,6 +1735,7 @@ export class VoiceAssistantWebSocketServer {
         pluginTimelineItems: true,
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: true,
+        skillCatalog: true,
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": true,
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.

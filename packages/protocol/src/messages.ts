@@ -1,3 +1,9 @@
+import {
+  SkillsListRequestSchema,
+  SkillsListResponseSchema,
+  SkillsRecordUsageRequestSchema,
+  SkillsRecordUsageResponseSchema,
+} from "./skills.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "./agent-profile.js";
 export {
   AgentProfileSchema,
@@ -3215,6 +3221,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   PluginRemoveRequestSchema,
   PluginRpcInvokeRequestSchema,
   AgentTimelineAppendRequestSchema,
+  SkillsListRequestSchema,
+  SkillsRecordUsageRequestSchema,
   AgentSkillsGetStatusRequestSchema,
   AgentSkillsReconcileRequestSchema,
   AgentSkillsUninstallRequestSchema,
@@ -3596,6 +3604,8 @@ export const ServerInfoStatusPayloadSchema = z
         pluginTimelineItems: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
+        // COMPAT(skillCatalog): added after v0.9.1, remove gate after 2027-09-24.
+        skillCatalog: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -6753,6 +6763,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   PluginRemoveResponseSchema,
   PluginRpcInvokeResponseSchema,
   AgentTimelineAppendResponseSchema,
+  SkillsListResponseSchema,
+  SkillsRecordUsageResponseSchema,
   AgentSkillsGetStatusResponseSchema,
   AgentSkillsReconcileResponseSchema,
   AgentSkillsUninstallResponseSchema,
