@@ -2,6 +2,28 @@
 
 This guide walks through adding a new agent provider end-to-end. There are two integration patterns, and this doc covers both.
 
+## System prompts
+
+Daemon-wide instructions are a launch-time snapshot. Saving Settings does not update resident
+provider sessions; create or reload an agent to read the new value.
+
+ACP has no standard system-instruction field. Keep these provider-specific contracts:
+
+- **Grok Build:** send per-agent and daemon instructions through session `_meta.rules`. Grok appends
+  them to its native system prompt at creation and persists that prompt. Loading or resuming keeps
+  the original rules, so changed instructions require a new Grok session. Do not use
+  `systemPromptOverride`: it replaces Grok's built-in prompt.
+- **Cursor:** use the native `alwaysApply` rule at `.cursor/rules/paseo.mdc`. It is shared by all
+  Cursor sessions in that workspace, including sessions outside Paseo; the most recent managed
+  start or reload supplies the per-agent and daemon instructions. Cursor reads the rule itself,
+  so user messages stay unchanged. Keep the rule when a session closes because other sessions
+  still use it. Clearing both prompts removes the managed file on the next start or reload.
+  Identical content is not rewritten. Never overwrite an unmarked file or symlink at that path.
+  Draft probes, internal utility agents, and history-only loads do not sync workspace rules.
+
+Pi appends per-agent and daemon instructions through its generated integration extension. Do not
+pass `--append-system-prompt`: it replaces Pi's automatic `APPEND_SYSTEM.md` discovery.
+
 ## Provider-native session options
 
 `AgentSessionConfig.providerOptions` carries JSON-safe configuration for the selected provider. The
@@ -87,8 +109,6 @@ Paseo tools are not implemented as MCP tools internally. They live in a shared t
 A provider that can register runtime tools directly should set `supportsNativePaseoTools: true` and consume the already-filtered `launchContext.paseoTools` in `createSession`/`resumeSession`. When native tools are present, `AgentManager` strips the internal Paseo MCP server from the provider launch config so the provider does not receive the same tools twice. Providers that only know MCP should keep `supportsMcpServers: true` and let the daemon inject `/mcp/agents`; the MCP server builds the same policy-filtered catalog for that caller. Filtering is enforced at catalog registration in both paths. Browser tools remain subject to the daemon browser-tools setting and browser-host availability.
 
 Pi is a process-backed provider. Paseo requires the user to have the `pi` binary installed and talks to it through `pi --mode rpc`; the server package does not embed Pi's SDK/runtime packages.
-
-Paseo's per-agent and daemon-wide system prompts are appended by its generated Pi integration extension. Paseo deliberately does not pass `--append-system-prompt`, because that flag replaces Pi's automatic `APPEND_SYSTEM.md` discovery instead of composing with it.
 
 Pi model records expose input capabilities through `model.input`. Only send raw RPC `images` when the current model explicitly includes `"image"` in that list. Text-only Pi/OMP models reject image content and persist the rejected image in JSONL history, so image prompts for those models must be materialized to a local file and passed as a text path hint instead.
 

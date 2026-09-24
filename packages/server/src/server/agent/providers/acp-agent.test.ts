@@ -4419,10 +4419,14 @@ describe("Grok permission modes", () => {
 
   function createGrokSession({
     modeId,
+    systemPrompt,
+    daemonAppendSystemPrompt,
     resume = false,
     response = { sessionId: "grok-session" },
   }: {
     modeId?: string;
+    systemPrompt?: string;
+    daemonAppendSystemPrompt?: string;
     resume?: boolean;
     response?: SessionStateResponse;
   } = {}) {
@@ -4497,7 +4501,13 @@ describe("Grok permission modes", () => {
       }
     }
     const session = new InMemoryGrokSession(
-      { provider: "grok", cwd: "/tmp/paseo-grok-test", modeId },
+      {
+        provider: "grok",
+        cwd: "/tmp/paseo-grok-test",
+        modeId,
+        systemPrompt,
+        daemonAppendSystemPrompt,
+      },
       {
         provider: "grok",
         logger: createTestLogger(),
@@ -4528,6 +4538,26 @@ describe("Grok permission modes", () => {
     { modeId: "auto", autoMode: true, yoloMode: false },
     { modeId: "always-approve", autoMode: false, yoloMode: true },
   ];
+
+  test("appends agent and daemon system prompts as Grok rules without replacing permission metadata", async () => {
+    const { session, requests } = createGrokSession({
+      modeId: "auto",
+      systemPrompt: "  Agent instructions.  ",
+      daemonAppendSystemPrompt: "  Host instructions.  ",
+    });
+    await session.initializeNewSession();
+    expect(requests).toEqual([
+      {
+        cwd: "/tmp/paseo-grok-test",
+        mcpServers: [],
+        _meta: {
+          autoMode: true,
+          yoloMode: false,
+          rules: "Agent instructions.\n\nHost instructions.",
+        },
+      },
+    ]);
+  });
 
   test.each(modes)("applies $modeId in session/new", async ({ modeId, autoMode, yoloMode }) => {
     const { session, requests, notifications } = createGrokSession({ modeId });

@@ -1,9 +1,12 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { ACPAgentSession } from "./acp-agent.js";
 import type { SpawnedACPProcess, SessionStateResponse } from "./acp-agent.js";
-import type { AgentSessionConfig } from "../agent-sdk-types.js";
+import type { AgentSession, AgentSessionConfig } from "../agent-sdk-types.js";
 import {
   CURSOR_CONTEXT_FEATURE_OPTION,
   CURSOR_FAST_FEATURE_OPTION,
@@ -12,6 +15,166 @@ import {
   parseCursorModelId,
 } from "./cursor-acp-agent.js";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
+import { asInternals } from "../../test-utils/class-mocks.js";
+
+describe("Cursor native rules", () => {
+  let cwd: string;
+  let rulePath: string;
+  let session: AgentSession | undefined;
+  let client: CursorACPAgentClient;
+  const context = { agentId: "cursor-rules-test" };
+  const prompt = vi.fn().mockResolvedValue({ stopReason: "end_turn" });
+  const rulesAtOpen: Array<string | null> = [];
+  const header =
+    "---\nalwaysApply: true\n---\n<!-- Managed by Paseo. Edit System prompt in Paseo Settings. -->\n\n";
+  beforeEach(async () => {
+    cwd = await mkdtemp(join(tmpdir(), "paseo-cursor-rules-test-"));
+    rulePath = join(cwd, ".cursor", "rules", "paseo.mdc");
+    session = undefined;
+    rulesAtOpen.length = 0;
+    prompt.mockClear();
+    async function opened() {
+      const content = await readFile(rulePath, "utf8").catch((error: unknown) => {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+        throw error;
+      });
+      rulesAtOpen.push(content);
+      return { sessionId: "instructions-session" };
+    }
+    vi.spyOn(
+      asInternals<{ spawnProcess(): Promise<SpawnedACPProcess> }>(ACPAgentSession.prototype),
+      "spawnProcess",
+    ).mockResolvedValue({
+      child: { kill: vi.fn(), exitCode: 0, signalCode: null, once: vi.fn() },
+      connection: { newSession: opened, loadSession: opened, prompt },
+      initialize: { agentCapabilities: { loadSession: true } },
+    } as SpawnedACPProcess);
+    client = new CursorACPAgentClient({
+      logger: createTestLogger(),
+      command: ["cursor-agent", "acp"],
+    });
+  });
+  afterEach(async () => {
+    await session?.close();
+    vi.restoreAllMocks();
+    await rm(cwd, { recursive: true, force: true });
+  });
+  test("syncs one native rule before start and resume, leaving user turns unchanged", async () => {
+    const config = {
+      provider: "acp",
+      cwd,
+      systemPrompt: " Agent rules. ",
+      daemonAppendSystemPrompt: " Host rules. ",
+    };
+    const expected = header + "Agent rules.\n\nHost rules.\n";
+    session = await client.createSession(config, context);
+    expect(await readFile(rulePath, "utf8")).toBe(expected);
+    await session.run("hello");
+    await session.run([
+      { type: "text", text: "image" },
+      { type: "image", data: "AA==", mimeType: "image/png" },
+    ]);
+    await session.run("/help");
+    const handle = session.describePersistence();
+    if (!handle) throw new Error("Expected a resumable Cursor session");
+    expect(handle.metadata).not.toHaveProperty("daemonAppendSystemPrompt");
+    await session.close();
+    await utimes(rulePath, 1000, 1000);
+    const before = await stat(rulePath);
+    session = await client.resumeSession(handle, config, context);
+    expect((await stat(rulePath)).mtimeMs).toBe(before.mtimeMs);
+    await session.run("again");
+    expect(rulesAtOpen).toEqual([expected, expected]);
+    expect(prompt.mock.calls.map(([request]) => request.prompt)).toEqual([
+      [{ type: "text", text: "hello" }],
+      [
+        { type: "text", text: "image" },
+        { type: "image", data: "AA==", mimeType: "image/png" },
+      ],
+      [{ type: "text", text: "/help" }],
+      [{ type: "text", text: "again" }],
+    ]);
+  });
+  test("updates and clears only the managed rule, ignoring persisted runtime instructions", async () => {
+    const config = { provider: "acp", cwd, daemonAppendSystemPrompt: "Old rules." };
+    session = await client.createSession(config, context);
+    const userRule = join(cwd, ".cursor", "rules", "user.mdc");
+    await writeFile(userRule, "User-owned rule");
+    const handle = session.describePersistence();
+    if (!handle) throw new Error("Expected a resumable Cursor session");
+    await session.close();
+    session = await client.resumeSession(
+      handle,
+      { ...config, daemonAppendSystemPrompt: "New rules." },
+      context,
+    );
+    expect(await readFile(rulePath, "utf8")).toBe(header + "New rules.\n");
+    await session.close();
+    session = await client.resumeSession(
+      { ...handle, metadata: { ...handle.metadata, daemonAppendSystemPrompt: "Stale rules." } },
+      { provider: "acp", cwd },
+      context,
+    );
+    await expect(readFile(rulePath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(userRule, "utf8")).toBe("User-owned rule");
+  });
+  test("does not sync rules during draft probes, internal runs, or history-only loading", async () => {
+    await mkdir(join(cwd, ".cursor", "rules"), { recursive: true });
+    const existing = header + "Existing rules.\n";
+    await writeFile(rulePath, existing);
+    const config = { provider: "acp", cwd, daemonAppendSystemPrompt: "Replacement rules." };
+    session = await client.createSession(config);
+    await session.close();
+    session = await client.createSession({ ...config, internal: true }, context);
+    await session.close();
+    session = await client.resumeSession(
+      { provider: "acp", sessionId: "instructions-session" },
+      config,
+      context,
+      { purpose: "history" },
+    );
+    expect(await readFile(rulePath, "utf8")).toBe(existing);
+    expect(rulesAtOpen).toEqual([existing, existing, existing]);
+  });
+  test("concurrent starts keep a single copy of the workspace rule", async () => {
+    const config = { provider: "acp", cwd, daemonAppendSystemPrompt: "Shared rules." };
+    const [first, second] = await Promise.all([
+      client.createSession(config, context),
+      client.createSession(config, { agentId: "second-cursor" }),
+    ]);
+    session = first;
+    await second.close();
+    expect(await readFile(rulePath, "utf8")).toBe(header + "Shared rules.\n");
+  });
+  test("preserves an existing user file at the managed path", async () => {
+    await mkdir(join(cwd, ".cursor", "rules"), { recursive: true });
+    await writeFile(rulePath, "User-owned rule");
+    await expect(
+      client.createSession(
+        { provider: "acp", cwd, daemonAppendSystemPrompt: "Host rules." },
+        context,
+      ),
+    ).rejects.toThrow("not managed by Paseo");
+    expect(await readFile(rulePath, "utf8")).toBe("User-owned rule");
+    expect(rulesAtOpen).toEqual([]);
+    session = await client.createSession({ provider: "acp", cwd }, context);
+    expect(await readFile(rulePath, "utf8")).toBe("User-owned rule");
+  });
+  test("does not replace a symlink at the managed path", async () => {
+    await mkdir(join(cwd, ".cursor", "rules"), { recursive: true });
+    const target = join(cwd, "other.mdc");
+    await writeFile(target, header + "Other rules.\n");
+    await symlink(target, rulePath);
+    await expect(
+      client.createSession(
+        { provider: "acp", cwd, daemonAppendSystemPrompt: "Host rules." },
+        context,
+      ),
+    ).rejects.toThrow("not managed by Paseo");
+    expect(await readFile(target, "utf8")).toBe(header + "Other rules.\n");
+    expect(rulesAtOpen).toEqual([]);
+  });
+});
 
 function captureWarnings(): {
   logger: ReturnType<typeof createTestLogger>;
