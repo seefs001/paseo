@@ -1816,6 +1816,7 @@ export const en = {
     backdrop: "Menu backdrop",
   },
   subagents: {
+    openParent: "Go to parent agent",
     title: "Subagents",
     pillLabelOne: "1 subagent",
     pillLabelMany: "{{count}} subagents",

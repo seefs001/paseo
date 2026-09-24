@@ -1823,6 +1823,7 @@ export const ru: TranslationResources = {
     backdrop: "Фон меню",
   },
   subagents: {
+    openParent: "Вернуться к родительскому агенту",
     title: "Субагенты",
     pillLabelOne: "1 субагент",
     pillLabelMany: "Субагентов: {{count}}",

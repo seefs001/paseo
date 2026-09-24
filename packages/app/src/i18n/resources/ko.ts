@@ -1801,6 +1801,7 @@ export const ko: TranslationResources = {
     backdrop: "메뉴 배경",
   },
   subagents: {
+    openParent: "부모 에이전트로 돌아가기",
     title: "하위 에이전트",
     pillLabelOne: "하위 에이전트 1개",
     pillLabelMany: "하위 에이전트 {{count}}개",

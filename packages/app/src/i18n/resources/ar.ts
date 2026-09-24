@@ -1791,6 +1791,7 @@ export const ar: TranslationResources = {
     backdrop: "خلفية القائمة",
   },
   subagents: {
+    openParent: "العودة إلى الوكيل الأب",
     title: "الوكلاء الفرعيون",
     pillLabelOne: "وكيل فرعي واحد",
     pillLabelMany: "{{count}} وكلاء فرعيين",
