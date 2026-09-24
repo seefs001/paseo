@@ -6899,3 +6899,89 @@ test("reviewed plugin updates gate before requests and preserve exact proposal d
     ]);
   }
 });
+
+test.each([true, false])(
+  "records skill usage only for accepted sends (accepted=%s)",
+  async (accepted) => {
+    const mock = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "skills",
+      transportFactory: () => mock.transport,
+      reconnect: { enabled: false },
+    });
+    clients.push(client);
+    const connection = client.connect();
+    mock.triggerOpen({ features: { skillCatalog: true } });
+    await connection;
+    const sending = client.sendAgentMessage(
+      "agent",
+      "[$review](/skills/review/SKILL.md) [$review](/skills/review/SKILL.md)",
+      { messageId: "submitted-1" },
+    );
+    void sending.catch(() => undefined);
+    expect(mock.sent).toHaveLength(1);
+    const request = parseSentFrame(mock.sent[0]);
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "send_agent_message_response",
+        payload: {
+          requestId: request.requestId,
+          agentId: "agent",
+          accepted,
+          error: accepted ? null : "rejected",
+        },
+      }),
+    );
+    if (!accepted) {
+      await expect(sending).rejects.toThrow("rejected");
+      expect(mock.sent).toHaveLength(1);
+      return;
+    }
+    await sending;
+    expect(mock.sent).toHaveLength(2);
+    const usage = parseSentFrame(mock.sent[1]);
+    expect(usage).toMatchObject({
+      type: "skills.usage.record.request",
+      submissionId: "submitted-1",
+      paths: ["/skills/review/SKILL.md"],
+    });
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "skills.usage.record.response",
+        payload: { requestId: usage.requestId },
+      }),
+    );
+  },
+);
+
+test("skill usage failure does not reject an accepted prompt, and old hosts receive no usage RPC", async () => {
+  const mock = createMockTransport();
+  const logger = createMockLogger();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "skills-failure",
+    logger,
+    transportFactory: () => mock.transport,
+    reconnect: { enabled: false },
+  });
+  clients.push(client);
+  const connection = client.connect();
+  mock.triggerOpen();
+  await connection;
+  await client.recordSkillUsage("old", ["/skills/review/SKILL.md"]);
+  expect(mock.sent).toHaveLength(0);
+  const usage = vi.spyOn(client, "recordSkillUsage").mockRejectedValue(new Error("disk full"));
+  const sending = client.sendAgentMessage("agent", "[$review](/skills/review/SKILL.md)");
+  const request = parseSentFrame(mock.sent[0]);
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "send_agent_message_response",
+      payload: { requestId: request.requestId, agentId: "agent", accepted: true, error: null },
+    }),
+  );
+  await expect(sending).resolves.toBeUndefined();
+  expect(logger.warn).toHaveBeenCalledOnce();
+  expect(mock.sent).toHaveLength(1);
+  usage.mockRestore();
+});

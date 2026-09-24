@@ -1524,6 +1524,15 @@ export const ar: TranslationResources = {
     later: "لاحقاً",
     stashRestored: "تمت استعادة التغييرات المخفية",
   },
+  skillPicker: {
+    loading: "جارٍ تحميل المهارات…",
+    empty: "لا توجد مهارات في {{directory}}",
+    noMatches: "لا توجد مهارات مطابقة",
+    noDescription: "لا يوجد وصف",
+    usage: "{{count}} استخدامات",
+    updateHost: "حدّث هذا المضيف لاختيار المهارات",
+    loadFailed: "تعذر تحميل المهارات. أغلق القائمة وحاول مجددًا.",
+  },
   agentAutocomplete: {
     searchingWorkspace: "جارٍ البحث في مساحة العمل...",
     loadingCommands: "جارٍ تحميل الأوامر...",

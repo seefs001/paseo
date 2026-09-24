@@ -1541,6 +1541,15 @@ export const ja: TranslationResources = {
     later: "後で",
     stashRestored: "スタッシュした変更を復元しました",
   },
+  skillPicker: {
+    loading: "スキルを読み込み中…",
+    empty: "{{directory}} にスキルがありません",
+    noMatches: "一致するスキルがありません",
+    noDescription: "説明なし",
+    usage: "使用 {{count}} 回",
+    updateHost: "スキル選択にはホストを更新してください",
+    loadFailed: "スキルを読み込めません。閉じて再試行してください。",
+  },
   agentAutocomplete: {
     searchingWorkspace: "ワークスペースを検索中...",
     loadingCommands: "コマンドを読み込み中...",

@@ -1570,6 +1570,15 @@ export const es: TranslationResources = {
     later: "Más tarde",
     stashRestored: "Se restauraron los cambios ocultos",
   },
+  skillPicker: {
+    loading: "Cargando habilidades…",
+    empty: "No hay habilidades en {{directory}}",
+    noMatches: "No hay habilidades coincidentes",
+    noDescription: "Sin descripción",
+    usage: "{{count}} usos",
+    updateHost: "Actualiza este host para seleccionar habilidades",
+    loadFailed: "No se pudieron cargar las habilidades. Cierra y vuelve a intentarlo.",
+  },
   agentAutocomplete: {
     searchingWorkspace: "Buscando espacio de trabajo...",
     loadingCommands: "Cargando comandos...",

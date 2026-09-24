@@ -1,3 +1,4 @@
+import { submittedSkillPaths } from "@getpaseo/protocol/skills";
 import { subscribeTimeline, type TimelineMessage } from "./timeline-subscription/index.js";
 import { ProviderSnapshotUpdates } from "./provider-snapshots/index.js";
 import {
@@ -2758,6 +2759,7 @@ export class DaemonClient {
       config: resolveAgentConfig(options),
     });
     if (result.error || !result.agent) throw new Error(result.error ?? "Agent creation failed");
+    this.recordSubmittedSkills(`create:${result.agent.id}`, options.initialPrompt ?? "");
     return result.agent;
   }
 
@@ -3376,6 +3378,7 @@ export class DaemonClient {
     if (!payload.accepted) {
       throw new Error(payload.error ?? "sendAgentMessage rejected");
     }
+    this.recordSubmittedSkills(messageId, text);
   }
 
   async sendMessage(agentId: string, text: string, options?: SendMessageOptions): Promise<void> {
@@ -4459,6 +4462,9 @@ export class DaemonClient {
         ? { agent: { ...input.agent, config: resolveAgentConfig(input.agent) } }
         : {}),
     });
+    if (!result.error && result.agent) {
+      this.recordSubmittedSkills(`create:${result.agent.id}`, input.agent?.initialPrompt ?? "");
+    }
     return {
       ...result,
       workspace: result.workspace ?? null,
@@ -5227,6 +5233,34 @@ export class DaemonClient {
       responseType: "plugin.logs.get.response",
     });
     return payload.entries;
+  }
+
+  async listSkills() {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      message: { type: "skills.list.request", requestId },
+      responseType: "skills.list.response",
+    });
+  }
+
+  private recordSubmittedSkills(submissionId: string, text: string): void {
+    const paths = submittedSkillPaths(text);
+    if (paths.length === 0) return;
+    // Count only accepted prompts, including initial prompts and automatically drained queues.
+    // Bookkeeping failure must never cause the caller to retry an accepted prompt.
+    void this.recordSkillUsage(submissionId, paths).catch((error) => {
+      this.logger.warn({ error }, "Failed to record skill usage");
+    });
+  }
+
+  async recordSkillUsage(submissionId: string, paths: string[]): Promise<void> {
+    // COMPAT(skillCatalog): added after v0.9.1, remove gate after 2027-09-24.
+    if (this.lastServerInfoMessage?.features?.skillCatalog !== true) return;
+    const requestId = this.createRequestId();
+    await this.sendCorrelatedSessionRequest({
+      message: { type: "skills.usage.record.request", requestId, submissionId, paths },
+      responseType: "skills.usage.record.response",
+    });
   }
 
   async getAgentSkillsStatus(): Promise<AgentSkillsStatus> {

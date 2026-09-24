@@ -7,6 +7,54 @@ import {
 } from "./messages";
 
 describe("agent skills protocol", () => {
+  it("accepts host skill discovery without an agent and bounds usage records", () => {
+    expect(
+      SessionInboundMessageSchema.safeParse({
+        type: "skills.list.request",
+        requestId: "catalog",
+      }).success,
+    ).toBe(true);
+    expect(
+      SessionInboundMessageSchema.safeParse({
+        type: "skills.usage.record.request",
+        requestId: "usage",
+        submissionId: "message-1",
+        paths: ["/skills/review/SKILL.md"],
+      }).success,
+    ).toBe(true);
+    expect(
+      SessionInboundMessageSchema.safeParse({
+        type: "skills.usage.record.request",
+        requestId: "usage",
+        submissionId: "",
+        paths: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      SessionOutboundMessageSchema.safeParse({
+        type: "skills.list.response",
+        payload: {
+          requestId: "catalog",
+          directory: "/home/user/.agents/skills",
+          skipped: 0,
+          skills: [
+            {
+              path: "/skills/review/SKILL.md",
+              name: "review",
+              description: "Review changes",
+              usageCount: 2,
+              lastUsedAt: 1,
+            },
+          ],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      ServerInfoStatusPayloadSchema.parse({ status: "server_info", serverId: "old", features: {} })
+        .features.skillCatalog,
+    ).toBeUndefined();
+  });
+
   it("parses dotted selection requests and confirmation", () => {
     expect(
       AgentSkillsSaveSelectionRequestSchema.parse({

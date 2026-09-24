@@ -1549,6 +1549,15 @@ export const en = {
     later: "Later",
     stashRestored: "Stashed changes restored",
   },
+  skillPicker: {
+    loading: "Loading skills...",
+    empty: "No skills found in {{directory}}",
+    noMatches: "No matching skills",
+    noDescription: "No description",
+    usage: "{{count}} uses",
+    updateHost: "Update this host to use the skill picker",
+    loadFailed: "Could not load skills. Close the picker and try again.",
+  },
   agentAutocomplete: {
     searchingWorkspace: "Searching workspace...",
     loadingCommands: "Loading commands...",

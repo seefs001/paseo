@@ -1,3 +1,4 @@
+import type { SkillCatalogEntry } from "@getpaseo/protocol/skills";
 import { expect, test, type Page } from "../support/fixtures";
 import { composerLocator, expectComposerVisible } from "../support/helpers/composer";
 import {
@@ -358,7 +359,130 @@ function expectPopoverDoesNotDisappearAfterFirstVisible(frames: PopoverFrame[]):
   ).toBeUndefined();
 }
 
+function isSkillUsageRequest(request: Record<string, unknown>): boolean {
+  return request.type === "skills.usage.record.request";
+}
+
+async function installSkillCatalogStub(
+  page: Page,
+  skills: readonly SkillCatalogEntry[],
+  requests: Record<string, unknown>[],
+): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      if (typeof message === "string") {
+        const frame = JSON.parse(message);
+        if (frame.type === "session") requests.push(frame.message);
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      if (typeof message !== "string") return ws.send(message);
+      const frame = JSON.parse(message);
+      if (frame.type === "session" && frame.message?.type === "skills.list.response") {
+        frame.message.payload = {
+          ...frame.message.payload,
+          directory: "~/.agents/skills",
+          skills,
+          skipped: 0,
+        };
+        ws.send(JSON.stringify(frame));
+        return;
+      }
+      ws.send(message);
+    });
+  });
+}
+
 test.describe("Composer autocomplete", () => {
+  test("shared skills support dollar and yen, frequency order, keyboard selection and draft composers", async ({
+    page,
+  }) => {
+    const skills = [
+      {
+        name: "alpha-review",
+        description: "Review the selected changes",
+        path: "/skills/alpha/SKILL.md",
+        usageCount: 2,
+        lastUsedAt: 1,
+      },
+      {
+        name: "zebra-debug",
+        description: "Find the root cause of a failure",
+        path: "/skills/zebra/SKILL.md",
+        usageCount: 10,
+        lastUsedAt: 1,
+      },
+      ...Array.from({ length: 12 }, (_, index) => ({
+        name: `extra-${index}`,
+        description: `Additional skill ${index}`,
+        path: `/skills/extra-${index}/SKILL.md`,
+        usageCount: 0,
+        lastUsedAt: 0,
+      })),
+    ];
+    const requests: Record<string, unknown>[] = [];
+    await installSkillCatalogStub(page, skills, requests);
+    const session = await openReadyMockAgent(page);
+    try {
+      const input = composerLocator(page);
+      const popup = page.getByTestId("composer-autocomplete-popover");
+      await input.fill("$");
+      await expect(popup).toBeVisible();
+      await expect(popup.getByRole("button").first()).toContainText("$zebra-debug");
+      await expect(popup.getByRole("button").first()).toBeInViewport();
+      await expect(popup).toContainText("Find the root cause of a failure");
+      await input.press("Enter");
+      await expect(input).toHaveValue("[$zebra-debug](/skills/zebra/SKILL.md) ");
+      await expect(popup).not.toBeVisible();
+      expect(requests.filter(isSkillUsageRequest)).toEqual([]);
+      await input.press("Enter");
+      await expect(input).toHaveValue("");
+      await expect.poll(() => requests.filter(isSkillUsageRequest).length).toBe(1);
+
+      await input.fill("¥review");
+      await expect(popup.getByRole("button")).toHaveCount(1);
+      await input.press("Escape");
+      await expect(input).toHaveValue("¥review");
+      await expect(popup).not.toBeVisible();
+      await input.fill("￥changes");
+      await expect(popup).toContainText("$alpha-review");
+      await input.press("Tab");
+      await expect(input).toHaveValue("[$alpha-review](/skills/alpha/SKILL.md) ");
+      await input.fill("$no-such-skill");
+      await expect(popup).toContainText("No matching skills");
+      await input.press("Escape");
+      await expect(popup).not.toBeVisible();
+      await input.fill("$100");
+      await expect(popup).not.toBeVisible();
+
+      await openAppWideNewWorkspace(page);
+      const draft = composerLocator(page);
+      await draft.fill("$");
+      await expect(popup.getByRole("button").first()).toContainText("$zebra-debug");
+      await draft.press("ArrowDown");
+      await draft.press("Tab");
+      await expect(draft).toHaveValue("[$alpha-review](/skills/alpha/SKILL.md) ");
+      await draft.fill("$");
+      await expect(popup.getByRole("button").first()).toBeInViewport();
+      await page.screenshot({ path: test.info().outputPath("skills-desktop.png") });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await draft.click();
+      await draft.fill("¥");
+      await expect(popup.getByRole("button").first()).toBeInViewport();
+      await page.screenshot({ path: test.info().outputPath("skills-compact.png") });
+      await popup.getByRole("button").first().click();
+      await expect(draft).toHaveValue("[$zebra-debug](/skills/zebra/SKILL.md) ");
+      expect(requests.filter((r) => r.type === "list_commands_request")).toEqual([]);
+      for (const request of requests.filter((r) => r.type === "skills.list.request")) {
+        expect(request).not.toHaveProperty("agentId");
+      }
+    } finally {
+      await session.cleanup();
+    }
+  });
+
   test("stays visible after returning from app-wide routes", async ({ page }) => {
     await installListCommandsStub(page);
     const serverId = getServerId();

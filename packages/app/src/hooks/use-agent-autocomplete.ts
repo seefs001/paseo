@@ -1,3 +1,4 @@
+import { useSkillAutocomplete } from "@/skills/use-skill-autocomplete";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
@@ -50,7 +51,7 @@ import {
   type FileMentionRange,
 } from "@/utils/file-mention-autocomplete";
 
-interface UseAgentAutocompleteInput {
+export interface UseAgentAutocompleteInput {
   userInput: string;
   cursorIndex: number;
   setUserInput: (nextValue: string) => void;
@@ -67,13 +68,13 @@ interface UseAgentAutocompleteInput {
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
 }
 
-interface AgentAutocompleteKeyPressEvent {
+export interface AgentAutocompleteKeyPressEvent {
   key: string;
   preventDefault: () => void;
   input: AgentAutocompleteInputSnapshot;
 }
 
-interface AgentAutocompleteInputSnapshot {
+export interface AgentAutocompleteInputSnapshot {
   text: string;
   selection: { start: number; end: number };
 }
@@ -791,6 +792,7 @@ function resolveAutocompleteEmptyText(mode: AutocompleteMode, t: TFunction): str
 }
 
 export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAutocompleteResult {
+  const skills = useSkillAutocomplete(input);
   const { t } = useTranslation();
   const {
     userInput,
@@ -1032,6 +1034,8 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
   const loadingText = resolveAutocompleteLoadingText(mode, t);
   const emptyText = resolveAutocompleteEmptyText(mode, t);
+
+  if (skills.isActive) return skills;
 
   return {
     isVisible,

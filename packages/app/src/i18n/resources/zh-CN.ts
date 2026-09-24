@@ -1507,6 +1507,15 @@ export const zhCN: TranslationResources = {
     later: "稍后",
     stashRestored: "Stashed 变更已恢复",
   },
+  skillPicker: {
+    loading: "正在加载技能…",
+    empty: "{{directory}} 中没有可用技能",
+    noMatches: "没有匹配的技能",
+    noDescription: "暂无描述",
+    usage: "使用 {{count}} 次",
+    updateHost: "请更新此主机以使用技能选择器",
+    loadFailed: "无法加载技能，请关闭列表后重试。",
+  },
   agentAutocomplete: {
     searchingWorkspace: "正在搜索 workspace...",
     loadingCommands: "正在加载 commands...",

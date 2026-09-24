@@ -1555,6 +1555,15 @@ export const ptBR: TranslationResources = {
     later: "Depois",
     stashRestored: "Alterações em stash restauradas",
   },
+  skillPicker: {
+    loading: "Carregando habilidades…",
+    empty: "Nenhuma habilidade em {{directory}}",
+    noMatches: "Nenhuma habilidade correspondente",
+    noDescription: "Sem descrição",
+    usage: "{{count}} usos",
+    updateHost: "Atualize este host para selecionar habilidades",
+    loadFailed: "Não foi possível carregar as habilidades. Feche e tente novamente.",
+  },
   agentAutocomplete: {
     searchingWorkspace: "Buscando workspace...",
     loadingCommands: "Carregando comandos...",
