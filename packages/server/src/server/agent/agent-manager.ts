@@ -61,6 +61,7 @@ import {
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
+import { buildConfigOverrides } from "../persistence-hooks.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -2253,23 +2254,66 @@ export class AgentManager {
     workspaceId: string,
     agentId: string,
   ): Promise<SessionTitleContext | null> {
-    const record = await this.requireRegistry().get(agentId);
-    if (!record || record.workspaceId !== workspaceId || record.archivedAt) return null;
-    // Read committed history without resuming providers or changing session residency.
-    const rows = this.durableTimelineStore
-      ? (await this.durableTimelineStore.fetchCommitted(agentId, { direction: "tail", limit: 30 }))
-          .rows
-      : this.timelineStore.getRows(agentId);
-    const messages = rows.flatMap(({ item }) => {
-      if (item.type !== "user_message" && item.type !== "assistant_message") return [];
-      return [`${item.type}: ${item.text.slice(-600)}`];
-    });
-    return {
-      agentId,
-      title: record.title ?? null,
-      cwd: record.cwd,
-      excerpt: messages.slice(-6).join("\n").slice(-3600),
-    };
+    return this.trackAgentRegistrationOperation(
+      this.runLifecycleMutation(agentId, async () => {
+        const record = await this.requireRegistry().get(agentId);
+        if (!record || record.workspaceId !== workspaceId || record.archivedAt || record.internal)
+          return null;
+        const messages: string[] = [];
+        const collect = (item: AgentTimelineItem) => {
+          if (item.type !== "user_message" && item.type !== "assistant_message") return;
+          if (item.type === "user_message" && isSystemInjectedEnvelope(item.text)) return;
+          messages.push(`${item.type}: ${item.text.slice(-600)}`);
+          if (messages.length > 6) messages.shift();
+        };
+        if (this.durableTimelineStore) {
+          const { rows } = await this.durableTimelineStore.fetchCommitted(agentId, {
+            direction: "tail",
+            limit: 30,
+          });
+          for (const { item } of rows) collect(item);
+        } else if (this.timelineStore.has(agentId)) {
+          for (const { item } of this.timelineStore.getRows(agentId)) collect(item);
+        } else if (record.persistence) {
+          // Restored tabs can refer to stored agents whose timeline has never entered this daemon's cache.
+          this.assertAcceptingAgentRegistrations();
+          const client = this.requireClient(record.provider);
+          const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+            { ...buildConfigOverrides(record), provider: record.provider, cwd: record.cwd },
+            agentId,
+            { purpose: "history" },
+          );
+          const launchContext = await this.buildLaunchContext(
+            agentId,
+            client,
+            storedConfig.cwd,
+            paseoToolPolicy,
+            undefined,
+            { reason: "resume", purpose: "history", workspaceId },
+          );
+          const session = await client.resumeSession(
+            record.persistence,
+            this.resolveProviderLaunchConfig(launchConfig, launchContext),
+            launchContext,
+            { purpose: "history" },
+          );
+          try {
+            // ponytail: providers stream full history; retain six messages until they offer tail reads.
+            for await (const event of session.streamHistory()) {
+              if (event.type === "timeline") collect(event.item);
+            }
+          } finally {
+            await session.close();
+          }
+        }
+        return {
+          agentId,
+          title: record.title ?? null,
+          cwd: record.cwd,
+          excerpt: messages.join("\n").slice(-3600),
+        };
+      }),
+    );
   }
 
   async applySessionTitle(

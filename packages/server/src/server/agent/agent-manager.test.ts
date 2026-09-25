@@ -14,6 +14,7 @@ import {
   type ManagedAgent,
 } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
+import { SessionTitles } from "./session-titles.js";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
 import { toAgentPayload } from "./agent-projections.js";
 import { projectTimelineRows } from "./timeline-projection.js";
@@ -11240,6 +11241,100 @@ test("concurrent native restores run once before resuming the same agent", async
   } finally {
     restoreAllowed.resolve();
     if (agentId) await manager.closeAgent(agentId);
+    await storage.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("session title previews read stored history after a daemon restart", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stored-session-titles-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const original = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await original.createAgent(
+    { provider: "codex", cwd: workdir, title: "Original" },
+    undefined,
+    { workspaceId: "workspace-one" },
+  );
+  await original.closeAgent(agent.id);
+  await original.flush();
+  const before = await storage.get(agent.id);
+  const purposes: Array<AgentResumeSessionOptions | undefined> = [];
+  let closedSessions = 0;
+  let historyError: Error | null = null;
+  const client = new (class extends TestAgentClient {
+    override async resumeSession(
+      _handle: AgentPersistenceHandle,
+      config?: Partial<AgentSessionConfig>,
+      _launchContext?: AgentLaunchContext,
+      options?: AgentResumeSessionOptions,
+    ): Promise<AgentSession> {
+      purposes.push(options);
+      return new (class extends TestAgentSession {
+        override async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
+          if (historyError) throw historyError;
+          yield {
+            type: "timeline",
+            provider: "codex",
+            item: { type: "user_message", text: "Fix session sorting" },
+          };
+        }
+
+        override async close(): Promise<void> {
+          closedSessions += 1;
+        }
+      })({ provider: "codex", cwd: config?.cwd ?? workdir });
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  const titles = new SessionTitles(manager, {
+    async generate({ prompt, schema }) {
+      expect(prompt).toContain("Fix session sorting");
+      return schema.parse({ titles: [{ agentId: agent.id, title: "Fix session sorting" }] });
+    },
+  });
+  try {
+    expect(manager.getAgent(agent.id)).toBeNull();
+    expect(
+      await titles.preview({
+        workspaceId: "workspace-one",
+        agentIds: [agent.id],
+        prompt: "Name the task",
+      }),
+    ).toEqual({
+      proposals: [{ agentId: agent.id, previousTitle: "Original", title: "Fix session sorting" }],
+      skipped: [],
+    });
+    expect(purposes).toEqual([{ purpose: "history" }]);
+    expect(closedSessions).toBe(1);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    expect(await storage.get(agent.id)).toEqual(before);
+
+    historyError = new Error("History unavailable");
+    await expect(manager.readSessionTitleContext("workspace-one", agent.id)).rejects.toThrow(
+      "History unavailable",
+    );
+    expect(closedSessions).toBe(2);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    expect(await storage.get(agent.id)).toEqual(before);
+
+    await storage.upsert({ ...before!, persistence: null });
+    expect(
+      await titles.preview({
+        workspaceId: "workspace-one",
+        agentIds: [agent.id],
+        prompt: "Name the task",
+      }),
+    ).toEqual({
+      proposals: [],
+      skipped: [{ agentId: agent.id, reason: "empty" }],
+    });
+    expect(purposes).toHaveLength(2);
+  } finally {
+    await manager.closeAgent(agent.id);
     await storage.flush();
     rmSync(workdir, { recursive: true, force: true });
   }
