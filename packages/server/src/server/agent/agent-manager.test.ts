@@ -11244,3 +11244,55 @@ test("concurrent native restores run once before resuming the same agent", async
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("session titles preserve manual renames and update stored sessions without restarting providers", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-session-titles-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const client = new TestAgentClient();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  const agent = await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Original" },
+    undefined,
+    { workspaceId: "workspace-one" },
+  );
+  try {
+    await manager.appendTimelineItem(agent.id, {
+      type: "user_message",
+      text: "Fix session sorting",
+    });
+    await manager.flush();
+    expect(await manager.readSessionTitleContext("workspace-one", agent.id)).toMatchObject({
+      title: "Original",
+      agentId: agent.id,
+    });
+    const [, conflicted] = await Promise.all([
+      manager.updateAgentMetadata(agent.id, { title: "Manual name" }),
+      manager.applySessionTitle("workspace-one", {
+        agentId: agent.id,
+        previousTitle: "Original",
+        title: "Suggested",
+      }),
+    ]);
+    expect(conflicted.status).toBe("conflict");
+    expect((await storage.get(agent.id))?.title).toBe("Manual name");
+    await manager.closeAgent(agent.id);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    expect(await manager.readSessionTitleContext("workspace-one", agent.id)).toMatchObject({
+      title: "Manual name",
+      excerpt: "user_message: Fix session sorting",
+    });
+    const before = await storage.get(agent.id);
+    const proposal = { agentId: agent.id, previousTitle: "Manual name", title: "New name" };
+    expect((await manager.applySessionTitle("workspace-one", proposal)).status).toBe("applied");
+    const applied = await storage.get(agent.id);
+    expect(applied?.lastActivityAt).toBe(before?.lastActivityAt);
+    expect((await manager.applySessionTitle("workspace-one", proposal)).status).toBe("applied");
+    expect((await storage.get(agent.id))?.updatedAt).toBe(applied?.updatedAt);
+    expect(client.createdConfigs).toHaveLength(1);
+    expect(client.resumeOverrides).toHaveLength(0);
+    expect((await manager.applySessionTitle("other-workspace", proposal)).status).toBe("missing");
+  } finally {
+    await manager.closeAgent(agent.id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

@@ -591,6 +591,24 @@ describe("saveAppSettings", () => {
     });
   });
 
+  it("persists session title instructions without replacing other preferences", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify(DEFAULT_CLIENT_SETTINGS),
+      }),
+    });
+    const queryClient = new QueryClient();
+    await saveAppSettings({
+      queryClient,
+      updates: { sessionTitlePrompt: "Use Chinese task names" },
+      deps,
+    });
+    expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toMatchObject({
+      ...DEFAULT_CLIENT_SETTINGS,
+      sessionTitlePrompt: "Use Chinese task names",
+    });
+  });
+
   it("saves terminal scrollback through app settings persistence", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({

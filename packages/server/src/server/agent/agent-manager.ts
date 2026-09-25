@@ -1,3 +1,8 @@
+import type { SessionTitleContext } from "./session-titles.js";
+import type {
+  SessionTitleProposal,
+  SessionTitleApplyResult,
+} from "@getpaseo/protocol/session-titles";
 import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
@@ -2242,6 +2247,49 @@ export class AgentManager {
     }
 
     await this.unarchiveSnapshot(matched.id);
+  }
+
+  async readSessionTitleContext(
+    workspaceId: string,
+    agentId: string,
+  ): Promise<SessionTitleContext | null> {
+    const record = await this.requireRegistry().get(agentId);
+    if (!record || record.workspaceId !== workspaceId || record.archivedAt) return null;
+    // Read committed history without resuming providers or changing session residency.
+    const rows = this.durableTimelineStore
+      ? (await this.durableTimelineStore.fetchCommitted(agentId, { direction: "tail", limit: 30 }))
+          .rows
+      : this.timelineStore.getRows(agentId);
+    const messages = rows.flatMap(({ item }) => {
+      if (item.type !== "user_message" && item.type !== "assistant_message") return [];
+      return [`${item.type}: ${item.text.slice(-600)}`];
+    });
+    return {
+      agentId,
+      title: record.title ?? null,
+      cwd: record.cwd,
+      excerpt: messages.slice(-6).join("\n").slice(-3600),
+    };
+  }
+
+  async applySessionTitle(
+    workspaceId: string,
+    proposal: SessionTitleProposal,
+  ): Promise<SessionTitleApplyResult> {
+    return this.runLifecycleMutation(proposal.agentId, async () => {
+      const record = await this.requireRegistry().get(proposal.agentId);
+      if (!record || record.workspaceId !== workspaceId || record.archivedAt) {
+        return { agentId: proposal.agentId, status: "missing" };
+      }
+      const currentTitle = record.title ?? null;
+      const title = proposal.title.trim();
+      if (!title) return { agentId: proposal.agentId, status: "failed" };
+      if (currentTitle === title) return { agentId: proposal.agentId, status: "applied" };
+      if (currentTitle !== proposal.previousTitle)
+        return { agentId: proposal.agentId, status: "conflict" };
+      await this.updateAgentMetadataUnlocked(proposal.agentId, { title });
+      return { agentId: proposal.agentId, status: "applied" };
+    });
   }
 
   async updateAgentMetadata(

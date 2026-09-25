@@ -1,3 +1,4 @@
+import { SessionTitles } from "./agent/session-titles.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
@@ -728,6 +729,7 @@ export class Session {
   private readonly daemonConfigStore: DaemonConfigStore;
   private readonly pushNotifications: PushNotifications;
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
+  private readonly sessionTitles: SessionTitles;
   private readonly skillCatalog: SkillCatalog | undefined;
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
   private unsubscribeAgentEvents: (() => void) | null = null;
@@ -870,6 +872,15 @@ export class Session {
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
     this.skillCatalog = options.skillCatalog;
+    this.sessionTitles = new SessionTitles(
+      agentManager,
+      createAgentStructuredTextGeneration({
+        agentManager,
+        providerSnapshotManager,
+        readDaemonConfig: () => this.readStructuredGenerationDaemonConfig(),
+        getFocusedSelection: (cwd) => this.getFocusedAgentSelectionForCwd(cwd),
+      }),
+    );
     this.sessionLogger = logger.child({
       module: "session",
       clientId: this.clientId,
@@ -3048,6 +3059,22 @@ export class Session {
 
   private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {
     switch (msg.type) {
+      case "agent.titles.preview.request": {
+        const preview = await this.sessionTitles.preview(msg);
+        this.emit({
+          type: "agent.titles.preview.response",
+          payload: { requestId: msg.requestId, ...preview },
+        });
+        return;
+      }
+      case "agent.titles.apply.request": {
+        const results = await this.sessionTitles.apply(msg.workspaceId, msg.proposals);
+        this.emit({
+          type: "agent.titles.apply.response",
+          payload: { requestId: msg.requestId, results },
+        });
+        return;
+      }
       case "skills.list.request": {
         if (!this.skillCatalog) throw new Error("Skill catalog is unavailable");
         const catalog = await this.skillCatalog.list();

@@ -1,3 +1,4 @@
+import type { SessionTitleProposal } from "@getpaseo/protocol/session-titles";
 import { submittedSkillPaths } from "@getpaseo/protocol/skills";
 import { subscribeTimeline, type TimelineMessage } from "./timeline-subscription/index.js";
 import { ProviderSnapshotUpdates } from "./provider-snapshots/index.js";
@@ -5233,6 +5234,24 @@ export class DaemonClient {
       responseType: "plugin.logs.get.response",
     });
     return payload.entries;
+  }
+
+  async previewSessionTitles(workspaceId: string, agentIds: string[], prompt: string) {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      message: { type: "agent.titles.preview.request", requestId, workspaceId, agentIds, prompt },
+      responseType: "agent.titles.preview.response",
+      timeout: 0,
+    });
+  }
+
+  async applySessionTitles(workspaceId: string, proposals: SessionTitleProposal[]) {
+    const requestId = this.createRequestId();
+    const response = await this.sendCorrelatedSessionRequest({
+      message: { type: "agent.titles.apply.request", requestId, workspaceId, proposals },
+      responseType: "agent.titles.apply.response",
+    });
+    return response.results;
   }
 
   async listSkills() {

@@ -6,6 +6,8 @@ type OutboundOperation = SessionOutboundMessage["type"];
 export type PermissionRequirement = DaemonPermission | readonly DaemonPermission[] | null;
 
 const INBOUND_PERMISSION = {
+  "agent.titles.preview.request": "workspace.write",
+  "agent.titles.apply.request": "workspace.write",
   "skills.list.request": "daemon.read",
   "skills.usage.record.request": "workspace.write",
   abort_request: "workspace.write",
@@ -216,6 +218,8 @@ const INBOUND_PERMISSION = {
 } as const satisfies Record<InboundOperation, PermissionRequirement>;
 
 const OUTBOUND_PERMISSION = {
+  "agent.titles.preview.response": "workspace.write",
+  "agent.titles.apply.response": "workspace.write",
   "skills.list.response": "daemon.read",
   "skills.usage.record.response": "workspace.write",
   "agent.create.response": ["workspace.write", "hub.execute"],
