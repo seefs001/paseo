@@ -1,3 +1,4 @@
+import { SessionPicker } from "@/session-picker";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
@@ -3758,6 +3759,13 @@ function WorkspaceScreenContent({
   const headerRight = useMemo(
     () => (
       <View style={styles.headerRight}>
+        {isMobile ? (
+          <SessionPicker
+            key={`${normalizedServerId}:${normalizedWorkspaceId}`}
+            serverId={normalizedServerId}
+            workspaceId={normalizedWorkspaceId}
+          />
+        ) : null}
         <PluginHeaderButtons serverId={normalizedServerId} workspaceId={normalizedWorkspaceId} />
         {!isMobile && workspaceDescriptor && workspaceDescriptor.scripts.length > 0 ? (
           <WorkspaceScriptsButton

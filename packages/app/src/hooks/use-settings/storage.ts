@@ -70,6 +70,7 @@ export interface AppSettings {
   pluginThemeId: string | null;
   language: AppLanguage;
   sendBehavior: SendBehavior;
+  sessionTitlePrompt: string;
   serviceUrlBehavior: ServiceUrlBehavior;
   terminalScrollbackLines: number;
   useLegacyTerminalRenderer: boolean;
@@ -124,6 +125,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   pluginThemeId: null,
   language: "system",
   sendBehavior: "steer",
+  sessionTitlePrompt: "",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   useLegacyTerminalRenderer: false,
@@ -199,6 +201,7 @@ const StoredAppSettingsSchema = z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
+    sessionTitlePrompt: z.string().max(4000).catch(""),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(
       MIN_TERMINAL_SCROLLBACK_LINES,

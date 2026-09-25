@@ -1,3 +1,4 @@
+import { useSidebarRecency } from "./sidebar-recency";
 import React, { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import {
   useSidebarWorkspacesList,
@@ -139,12 +140,17 @@ export function SidebarModelProvider({
     visibleWorkspaceKeys,
   ]);
   const pinnedKeys = usePinnedSidebarKeys(filteredProjects);
+  const workspaceRecency = useSidebarRecency({
+    workspaces: filteredWorkspaceEntriesByKey,
+    enabled: active !== false,
+  });
   const projectionInput = useMemo(
     () => ({
       projects: filteredProjects,
       pinnedKeys,
       pinnedWorkspaceOrder,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
+      workspaceRecency,
       projectNamesByViewKey: list.projectNamesByViewKey,
       groupMode,
       pinnedCollapsed,
@@ -161,6 +167,7 @@ export function SidebarModelProvider({
       pinnedKeys,
       pinnedWorkspaceOrder,
       filteredWorkspaceEntriesByKey,
+      workspaceRecency,
     ],
   );
   const projection = useMemo(() => buildSidebarProjection(projectionInput), [projectionInput]);

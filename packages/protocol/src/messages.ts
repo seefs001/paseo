@@ -1,4 +1,10 @@
 import {
+  SessionTitlesPreviewRequestSchema,
+  SessionTitlesPreviewResponseSchema,
+  SessionTitlesApplyRequestSchema,
+  SessionTitlesApplyResponseSchema,
+} from "./session-titles.js";
+import {
   SkillsListRequestSchema,
   SkillsListResponseSchema,
   SkillsRecordUsageRequestSchema,
@@ -3162,6 +3168,8 @@ export const SubscriptionReleaseResponseSchema = z.object({
 });
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  SessionTitlesPreviewRequestSchema,
+  SessionTitlesApplyRequestSchema,
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
@@ -3606,6 +3614,8 @@ export const ServerInfoStatusPayloadSchema = z
         skillManagement: z.boolean().optional(),
         // COMPAT(skillCatalog): added after v0.9.1, remove gate after 2027-09-24.
         skillCatalog: z.boolean().optional(),
+        // COMPAT(sessionTitles): added after v0.9.1, remove gate after 2027-09-25.
+        sessionTitles: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -6738,6 +6748,8 @@ export const AgentSkillsImportLegacySelectionResponseSchema = z.object({
 });
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  SessionTitlesPreviewResponseSchema,
+  SessionTitlesApplyResponseSchema,
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,
   SessionEventsSetSubscriptionResponseSchema,

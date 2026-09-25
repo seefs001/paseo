@@ -108,3 +108,53 @@ test("projects, workspaces, and pinned chats reorder with an immediate mouse dra
     await secondProject.cleanup();
   }
 });
+
+test("latest workspace updates reorder ordinary sidebar rows without moving pinned rows", async ({
+  page,
+}) => {
+  const project = await seedWorkspace({ repoPrefix: "sidebar-recency-" });
+  try {
+    const created = await project.client.createWorkspace({
+      source: { kind: "directory", path: project.repoPath, projectId: project.projectId },
+      title: "Second workspace",
+    });
+    if (!created.workspace) throw new Error(created.error ?? "Missing workspace");
+    const first = await project.client.createAgent({
+      provider: "mock",
+      model: "e2e-fast-stream",
+      modeId: "load-test",
+      cwd: project.repoPath,
+      workspaceId: project.workspaceId,
+      title: "First session",
+    });
+    const second = await project.client.createAgent({
+      provider: "mock",
+      model: "e2e-fast-stream",
+      modeId: "load-test",
+      cwd: project.repoPath,
+      workspaceId: created.workspace.id,
+      title: "Second session",
+    });
+    await gotoAppShell(page);
+    await waitForSidebarHydration(page);
+    const firstId = `sidebar-workspace-row-${getServerId()}:${project.workspaceId}`;
+    const secondId = `sidebar-workspace-row-${getServerId()}:${created.workspace.id}`;
+    const rows = page.locator(`[data-testid="${firstId}"], [data-testid="${secondId}"]`);
+    await expect(rows).toHaveCount(2);
+    await project.client.updateAgent(second.id, { name: "Second updated" });
+    await expect.poll(() => rowTestIds(rows)).toEqual([secondId, firstId]);
+    await project.client.updateAgent(first.id, {
+      name: "First updated without a status transition",
+    });
+    await expect.poll(() => rowTestIds(rows)).toEqual([firstId, secondId]);
+    await project.client.updateAgent(second.id, { name: "Second updated again" });
+    await expect.poll(() => rowTestIds(rows)).toEqual([secondId, firstId]);
+    await project.client.setWorkspacePinned(project.workspaceId, true);
+    await expect.poll(() => rowTestIds(rows)).toEqual([firstId, secondId]);
+    await project.client.updateAgent(second.id, { name: "Still below the pinned workspace" });
+    await expect.poll(() => rowTestIds(rows)).toEqual([firstId, secondId]);
+    await page.screenshot({ path: test.info().outputPath("sidebar-latest-updates.png") });
+  } finally {
+    await project.cleanup();
+  }
+});

@@ -1,3 +1,4 @@
+import { SessionPicker } from "@/session-picker";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
   useCallback,
@@ -258,6 +259,7 @@ function WorkspacePaneToolbarActions({
   showMaximizeAction,
   paneMaximized,
   serverId,
+  workspaceId,
   paneId,
   newTabShortcutKeys,
   onSplitRight,
@@ -269,6 +271,7 @@ function WorkspacePaneToolbarActions({
   showMaximizeAction: boolean;
   paneMaximized: boolean;
   serverId: string;
+  workspaceId: string;
   paneId?: string;
   newTabShortcutKeys: ShortcutKey[][] | null;
   onSplitRight?: () => void;
@@ -296,10 +299,14 @@ function WorkspacePaneToolbarActions({
     [splitDownKeys],
   );
   const maximizeActionVisible = showMaximizeAction && Boolean(onTogglePaneMaximized);
-  if (!showNewTabButton && !splitActionsVisible && !maximizeActionVisible) return null;
 
   return (
     <ToolbarControls style={styles.paneSplitActions}>
+      <SessionPicker
+        key={`${serverId}:${workspaceId}`}
+        serverId={serverId}
+        workspaceId={workspaceId}
+      />
       {showNewTabButton ? (
         <WorkspaceNewTabButton
           placement="toolbar"
@@ -1050,7 +1057,8 @@ function ResolvedWorkspaceDesktopTabsRow({
         0,
         DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH +
           (focusModeEnabled ? exitFocusModeWidth : 0) +
-          (showPaneSplitActions ? PANE_SPLIT_ACTIONS_RESERVED_WIDTH : 0) +
+          PANE_SPLIT_ACTIONS_RESERVED_WIDTH +
+          (showPaneSplitActions ? PANE_MAXIMIZE_ACTION_RESERVED_WIDTH : 0) +
           (showPaneMaximizeAction ? PANE_MAXIMIZE_ACTION_RESERVED_WIDTH : 0),
       ),
       rowPaddingHorizontal: TAB_ROW_PADDING_HORIZONTAL,
@@ -1387,6 +1395,7 @@ function ResolvedWorkspaceDesktopTabsRow({
         showMaximizeAction={showPaneMaximizeAction}
         paneMaximized={paneMaximized}
         serverId={normalizedServerId}
+        workspaceId={normalizedWorkspaceId}
         paneId={paneId}
         newTabShortcutKeys={newTabKeys}
         onSplitRight={onSplitRight}

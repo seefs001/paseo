@@ -7,6 +7,7 @@ import {
 import type {
   SidebarProjectEntry,
   SidebarWorkspaceEntry,
+  SidebarWorkspacePlacement,
 } from "@/hooks/use-sidebar-workspaces-list";
 import type { SidebarGroupMode } from "@/stores/sidebar-view-store";
 import {
@@ -40,6 +41,7 @@ export interface SidebarProjectionInput {
   pinnedKeys: PinnedSidebarKeys;
   pinnedWorkspaceOrder: string[];
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
+  workspaceRecency: ReadonlyMap<string, number>;
   projectNamesByViewKey: Map<string, string>;
   groupMode: SidebarGroupMode;
   pinnedCollapsed: boolean;
@@ -53,6 +55,18 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
     keys: input.pinnedKeys,
     pinnedWorkspaceOrder: input.pinnedWorkspaceOrder,
   });
+  function compareRecency(a: SidebarWorkspacePlacement, b: SidebarWorkspacePlacement): number {
+    const aRank = input.workspaceRecency.get(a.workspaceKey) ?? Number.MAX_SAFE_INTEGER;
+    const bRank = input.workspaceRecency.get(b.workspaceKey) ?? Number.MAX_SAFE_INTEGER;
+    return aRank - bRank;
+  }
+  pinnedGroups.unpinnedProjects = pinnedGroups.unpinnedProjects.map((project) => {
+    if (project.workspaces.length < 2) return project;
+    const workspaces = [...project.workspaces].sort(compareRecency);
+    if (workspaces.every((workspace, index) => workspace === project.workspaces[index]))
+      return project;
+    return Object.assign({}, project, { workspaces });
+  });
   const pinnedWorkspaceKeys = new Set(input.pinnedKeys.pinnedWorkspaceKeys);
   const unpinnedWorkspaces = Array.from(input.workspaceEntriesByKey.values()).filter(
     (workspace) => !pinnedWorkspaceKeys.has(workspace.workspaceKey),
@@ -61,6 +75,7 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   // two cannot disagree and a new grouping mode is a compile error here rather than a silent
   // fall-through to the project rows.
   const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
+  for (const group of workspaceGroups) group.rows.sort(compareRecency);
 
   const sections: SidebarShortcutSection[] = [];
   if (!input.pinnedCollapsed) {

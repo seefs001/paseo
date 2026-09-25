@@ -71,6 +71,7 @@ function projectionInput(options?: {
   const unpinned = makeWorkspace("unpinned", "needs_input");
   return {
     projects: [makeProject([pinned.placement, unpinned.placement])],
+    workspaceRecency: new Map<string, number>(),
     pinnedKeys: {
       pinnedWorkspaceKeys: [pinned.placement.workspaceKey],
       pinnedAtByKey: { [pinned.placement.workspaceKey]: "2026-07-12T12:00:00.000Z" },
@@ -174,3 +175,44 @@ describe("buildSidebarProjection", () => {
     ]);
   });
 });
+
+it.each(["project", "status"] as const)(
+  "keeps %s rows and shortcuts in recency order while preserving pins",
+  (groupMode) => {
+    const pinned = makeWorkspace("pinned");
+    const older = makeWorkspace("older");
+    const newer = makeWorkspace("newer");
+    const project = makeProject([pinned.placement, older.placement, newer.placement]);
+    const input = {
+      ...projectionInput({ groupMode }),
+      projects: [project],
+      workspaceRecency: new Map([
+        ["srv:pinned", 3],
+        ["srv:older", 2],
+        ["srv:newer", 1],
+      ]),
+      workspaceEntriesByKey: new Map(
+        [pinned.entry, older.entry, newer.entry].map((entry) => [entry.workspaceKey, entry]),
+      ),
+    };
+    const first = buildSidebarProjection(input);
+    expect(first.pinnedGroups.pinnedChats.map((entry) => entry.workspaceId)).toEqual(["pinned"]);
+    expect(first.shortcutModel.shortcutIndexByWorkspaceKey.get("srv:newer")).toBe(2);
+    expect(first.shortcutModel.shortcutIndexByWorkspaceKey.get("srv:older")).toBe(3);
+    const next = buildSidebarProjection({
+      ...input,
+      workspaceRecency: new Map([
+        ["srv:older", 1],
+        ["srv:newer", 2],
+        ["srv:pinned", 3],
+      ]),
+    });
+    expect(next.shortcutModel.shortcutIndexByWorkspaceKey.get("srv:older")).toBe(2);
+    expect(next.shortcutModel.shortcutIndexByWorkspaceKey.get("srv:newer")).toBe(3);
+    expect(project.workspaces.map((entry) => entry.workspaceId)).toEqual([
+      "pinned",
+      "older",
+      "newer",
+    ]);
+  },
+);
