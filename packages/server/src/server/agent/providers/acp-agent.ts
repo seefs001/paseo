@@ -3831,7 +3831,12 @@ function isMatchCountStub(value: string): boolean {
 }
 
 function matchCountText(rawOutput: Record<string, unknown> | null): string | undefined {
-  const count = readNumber(rawOutput, ["match_count", "totalMatches", "resultCount"]);
+  const count = readNumber(rawOutput, [
+    "match_count",
+    "totalMatches",
+    "resultCount",
+    "result_count",
+  ]);
   return count === undefined ? undefined : `${count} matches`;
 }
 
@@ -3842,7 +3847,7 @@ function formatFileMatches(rawOutput: Record<string, unknown> | null): {
 } {
   const files = rawOutput?.file_matches;
   if (!Array.isArray(files)) {
-    return { count: readNumber(rawOutput, ["match_count", "totalMatches"]) };
+    return { count: readNumber(rawOutput, ["match_count", "totalMatches", "result_count"]) };
   }
   const lines: string[] = [];
   const paths: string[] = [];
@@ -3873,7 +3878,7 @@ function formatFileMatches(rawOutput: Record<string, unknown> | null): {
   return {
     ...(lines.length > 0 ? { text: lines.join("\n") } : {}),
     ...(paths.length > 0 ? { paths } : {}),
-    count: readNumber(rawOutput, ["match_count", "totalMatches"]),
+    count: readNumber(rawOutput, ["match_count", "totalMatches", "result_count"]),
   };
 }
 
@@ -4166,13 +4171,18 @@ function buildEditToolDetail(context: MapToolDetailContext): ToolCallDetail {
 
 function searchFilePaths(
   snapshot: ACPToolSnapshot,
+  rawInput: Record<string, unknown> | null,
   matchPaths: string[] | undefined,
 ): string[] | undefined {
   const locationPaths = snapshot.locations?.map((location) => location.path).filter(Boolean);
   if (locationPaths && locationPaths.length > 0) {
     return locationPaths;
   }
-  return matchPaths;
+  if (matchPaths && matchPaths.length > 0) {
+    return matchPaths;
+  }
+  const searchedPath = readString(rawInput, ["path", "target_directory"]);
+  return searchedPath ? [searchedPath] : undefined;
 }
 
 function searchContent(
@@ -4199,7 +4209,7 @@ function buildSearchAcpToolDetail(context: MapToolDetailContext): ToolCallDetail
   }
   const matches = formatFileMatches(rawOutput);
   const content = searchContent(textContent, rawOutput, matches.text);
-  const filePaths = searchFilePaths(snapshot, matches.paths);
+  const filePaths = searchFilePaths(snapshot, rawInput, matches.paths);
   return {
     type: "search",
     query:

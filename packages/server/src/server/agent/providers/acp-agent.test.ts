@@ -2925,6 +2925,43 @@ describe("ACPAgentSession", () => {
     });
   });
 
+  test("shows a Search tools query instead of the raw title", () => {
+    const internals = asInternals<ACPSessionInternals>(createSession());
+    const events = internals.translateSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "search-tools-1",
+      title: 'Search tools: "paseo list agents"',
+      kind: "other",
+      status: "completed",
+      rawInput: { query: "paseo list agents", limit: 3, variant: "Search" },
+      rawOutput: {
+        type: "SearchTool",
+        result_count: 1,
+        content: '{"results":[{"server":"paseo"}]}',
+      },
+      content: [
+        {
+          type: "content",
+          content: { type: "text", text: '{"results":[{"server":"paseo"}]}' },
+        },
+      ],
+    });
+
+    expect(events).toMatchObject([
+      {
+        item: {
+          name: "search",
+          detail: {
+            type: "search",
+            query: "paseo list agents",
+            content: '{"results":[{"server":"paseo"}]}',
+            numMatches: 1,
+          },
+        },
+      },
+    ]);
+  });
+
   test("shows Grok search matches instead of the match-count stub", () => {
     const internals = asInternals<ACPSessionInternals>(createSession());
     const events = internals.translateSessionUpdate({

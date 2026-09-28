@@ -519,8 +519,42 @@ interface SearchDetail {
   annotations?: string[];
 }
 
+function readSearchToolsResult(
+  toolName: string | undefined,
+  detail: UnknownDetail,
+): string | undefined {
+  if (!toolName?.startsWith("Search tools")) {
+    return undefined;
+  }
+  if (typeof detail.output === "string" && detail.output.length > 0) {
+    return detail.output;
+  }
+  const output = detail.output;
+  if (
+    typeof output !== "object" ||
+    output === null ||
+    Array.isArray(output) ||
+    !("content" in output)
+  ) {
+    return undefined;
+  }
+  return typeof output.content === "string" && output.content.length > 0
+    ? output.content
+    : undefined;
+}
+
 function buildSearchSections(detail: SearchDetail, ds: DetailStyles): ReactNode[] {
   const out: ReactNode[] = [];
+  const query = detail.query?.trim();
+  if (query && query !== detail.content?.trim()) {
+    out.push(
+      <View key="search-query" style={styles.section}>
+        <Text selectable style={styles.scrollText} dataSet={CODE_SURFACE_DATASET}>
+          {query}
+        </Text>
+      </View>,
+    );
+  }
   if (detail.content) {
     out.push(
       <View key="search-content" style={styles.section}>
@@ -741,6 +775,10 @@ function buildDetailSections(
     return [<ScrollablePlainTextSection key="plain-text" text={detail.text} ds={ds} />];
   }
   if (detail.type === "unknown") {
+    const searchToolsText = readSearchToolsResult(toolName, detail);
+    if (searchToolsText) {
+      return [<ScrollablePlainTextSection key="search-tools" text={searchToolsText} ds={ds} />];
+    }
     return buildPaseoUnknownSections(toolName, detail) ?? buildUnknownSections(detail, ds, t);
   }
   return [];

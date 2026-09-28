@@ -135,6 +135,45 @@ describe("shared tool-call display mapping", () => {
     });
   });
 
+  it("shows a match count instead of a long search pattern", () => {
+    const pattern = "function buildSearchAcpToolDetail|function resolveToolCallName";
+    const display = buildToolCallDisplayModel({
+      name: "search",
+      status: "completed",
+      error: null,
+      detail: {
+        type: "search",
+        query: pattern,
+        toolName: "grep",
+        content: "found 5 matches",
+        filePaths: ["packages/server/src/server/agent/providers/acp-agent.ts"],
+      },
+    });
+
+    expect(display).toEqual({
+      displayName: "Search",
+      summary: "5 matches · acp-agent.ts",
+    });
+  });
+
+  it("reads the query out of a Search tools title", () => {
+    const display = buildToolCallDisplayModel({
+      name: 'Search tools: "paseo list agents"',
+      status: "completed",
+      error: null,
+      detail: {
+        type: "unknown",
+        input: { query: "paseo list agents", limit: 5, variant: "Search" },
+        output: { type: "SearchTool", result_count: 1, content: '{"results":[]}' },
+      },
+    });
+
+    expect(display).toEqual({
+      displayName: "Search",
+      summary: "paseo list agents",
+    });
+  });
+
   it("humanizes two-segment MCP tool names", () => {
     const display = buildToolCallDisplayModel({
       name: "nowledge-mem__memory_search",

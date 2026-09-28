@@ -1,4 +1,4 @@
-import type { ToolCallTimelineItem } from "./agent-types.js";
+import type { ToolCallDetail, ToolCallTimelineItem } from "./agent-types.js";
 import { getPaseoToolLeafName, isPaseoToolName } from "./tool-name-normalization.js";
 import { stripCwdPrefix } from "./path-utils.js";
 
@@ -97,7 +97,7 @@ function buildCanonicalDetailDisplay(input: ToolCallDisplayInput): DetailDisplay
     case "search":
       return {
         displayName: "Search",
-        summary: input.detail.query,
+        summary: searchSummary(input.detail),
       };
     case "fetch":
       return {
@@ -129,7 +129,59 @@ function buildCanonicalDetailDisplay(input: ToolCallDisplayInput): DetailDisplay
   }
 }
 
+function pathLabel(filePath: string): string {
+  const parts = filePath.split(/[/\\]/).filter((part) => part.length > 0);
+  return parts.at(-1) ?? filePath;
+}
+
+function searchMatchCount(detail: Extract<ToolCallDetail, { type: "search" }>): number | undefined {
+  if (detail.numMatches !== undefined) {
+    return detail.numMatches;
+  }
+  const stub = detail.content?.match(/^found (\d+) matches?$/i);
+  return stub ? Number(stub[1]) : undefined;
+}
+
+function searchSummary(detail: Extract<ToolCallDetail, { type: "search" }>): string | undefined {
+  const query = detail.query.trim();
+  const shortQuery =
+    query.length > 0 && query.length <= 48 && !query.includes("\n") ? query : undefined;
+  const count = searchMatchCount(detail);
+  const fileCount = detail.filePaths?.length ?? 0;
+  let place: string | undefined;
+  if (fileCount === 1) {
+    place = pathLabel(detail.filePaths?.[0] ?? "");
+  } else if (fileCount > 1) {
+    place = `${fileCount} files`;
+  }
+  if (shortQuery && place) {
+    return `${shortQuery} · ${place}`;
+  }
+  if (shortQuery) {
+    return shortQuery;
+  }
+  if (count !== undefined && place) {
+    return `${count} matches · ${place}`;
+  }
+  if (count !== undefined) {
+    return `${count} matches`;
+  }
+  if (place) {
+    return place;
+  }
+  return query.length > 0 ? query : undefined;
+}
+
+export function searchToolsQuery(name: string): string | undefined {
+  const match = /^Search tools:\s*"([\s\S]*)"\s*$/.exec(name.trim());
+  return match?.[1] && match[1].length > 0 ? match[1] : undefined;
+}
+
 function buildUnknownDetailOverride(input: ToolCallDisplayInput): DetailDisplay {
+  const quotedSearch = searchToolsQuery(input.name);
+  if (quotedSearch) {
+    return { displayName: "Search", summary: quotedSearch };
+  }
   const lowerName = input.name.trim().toLowerCase();
   if (input.detail.type === "unknown" && lowerName === "task") {
     return {
