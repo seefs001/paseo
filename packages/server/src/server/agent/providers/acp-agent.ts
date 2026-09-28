@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
+import stripAnsi from "strip-ansi";
 import { terminateWithTreeKill } from "../../../utils/tree-kill.js";
 import type { ProcessTerminator } from "../../../utils/tree-kill.js";
 import type {
@@ -114,6 +115,7 @@ import {
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
 } from "../provider-launch-config.js";
+import type { ProcessEnvRecord } from "../../paseo-env.js";
 import { renderPromptAttachmentAsText, userVisiblePromptText } from "../prompt-attachments.js";
 import { appendOrReplaceGrowingAssistantMessage, runProviderTurn } from "./provider-runner.js";
 import {
@@ -2874,7 +2876,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       cwd: this.config.cwd,
       ...createProviderEnvSpec({
         runtimeSettings: this.runtimeSettings,
-        overlays: [this.launchEnv],
+        overlays: [this.launchEnv, plainToolOutputEnv()],
       }),
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -3787,6 +3789,231 @@ function mergeToolSnapshot(
   };
 }
 
+function plainToolOutputEnv(): ProcessEnvRecord {
+  return {
+    NO_COLOR: "1",
+    FORCE_COLOR: undefined,
+    CLICOLOR: undefined,
+    CLICOLOR_FORCE: undefined,
+    COLORTERM: undefined,
+  };
+}
+
+function cleanToolText(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const cleaned = stripAnsi(value).replace(/\r\n/g, "\n").replace(/\r/g, "");
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+function isByteList(value: unknown[]): value is number[] {
+  return value.every((item) => typeof item === "number" && item >= 0 && item <= 255);
+}
+
+function textFromUnknown(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return cleanToolText(value);
+  }
+  if (Array.isArray(value) && value.length > 0 && isByteList(value)) {
+    return cleanToolText(Buffer.from(value).toString("utf8"));
+  }
+  return undefined;
+}
+
+function joinToolText(parts: Array<string | undefined>): string | undefined {
+  const text = parts.filter((part): part is string => Boolean(part)).join("\n");
+  return text.length > 0 ? text : undefined;
+}
+
+function isMatchCountStub(value: string): boolean {
+  return /^found \d+ matches?$/i.test(value.trim());
+}
+
+function matchCountText(rawOutput: Record<string, unknown> | null): string | undefined {
+  const count = readNumber(rawOutput, ["match_count", "totalMatches", "resultCount"]);
+  return count === undefined ? undefined : `${count} matches`;
+}
+
+function formatFileMatches(rawOutput: Record<string, unknown> | null): {
+  text?: string;
+  paths?: string[];
+  count?: number;
+} {
+  const files = rawOutput?.file_matches;
+  if (!Array.isArray(files)) {
+    return { count: readNumber(rawOutput, ["match_count", "totalMatches"]) };
+  }
+  const lines: string[] = [];
+  const paths: string[] = [];
+  for (const file of files) {
+    const record = readRecord(file);
+    if (!record) {
+      continue;
+    }
+    const filePath = readString(record, ["path"]);
+    if (filePath) {
+      paths.push(filePath);
+      lines.push(filePath);
+    }
+    const matches = record.matches;
+    if (!Array.isArray(matches)) {
+      continue;
+    }
+    for (const match of matches) {
+      const entry = readRecord(match);
+      const content = textFromUnknown(entry?.content);
+      if (!content) {
+        continue;
+      }
+      const lineNumber = readNumber(entry, ["line_number"]);
+      lines.push(lineNumber === undefined ? content : `${lineNumber}:${content}`);
+    }
+  }
+  return {
+    ...(lines.length > 0 ? { text: lines.join("\n") } : {}),
+    ...(paths.length > 0 ? { paths } : {}),
+    count: readNumber(rawOutput, ["match_count", "totalMatches"]),
+  };
+}
+
+function isDirectoryListing(
+  snapshot: ACPToolSnapshot,
+  rawInput: Record<string, unknown> | null,
+): boolean {
+  if (readString(rawInput, ["target_directory"])) {
+    return true;
+  }
+  return snapshot.title.startsWith("List the ") && snapshot.title.includes("directory");
+}
+
+function directoryListingDetail(
+  snapshot: ACPToolSnapshot,
+  rawInput: Record<string, unknown> | null,
+  rawOutput: Record<string, unknown> | null,
+): ToolCallDetail | undefined {
+  if (!isDirectoryListing(snapshot, rawInput)) {
+    return undefined;
+  }
+  const listed = readRecord(rawOutput?.Content);
+  const text =
+    textFromUnknown(listed?.content) ??
+    textFromUnknown(rawOutput?.content) ??
+    textFromUnknown(rawOutput?.text);
+  const directory =
+    readString(rawInput, ["target_directory", "path"]) ??
+    readString(listed, ["absolute_root_path"]) ??
+    snapshot.title;
+  return {
+    type: "plain_text",
+    label: directory,
+    ...(text ? { text } : {}),
+    icon: "search",
+  };
+}
+
+function searchToolName(
+  rawInput: Record<string, unknown> | null,
+): "search" | "grep" | "glob" | "web_search" {
+  if (readString(rawInput, ["searchTerm"])) {
+    return "web_search";
+  }
+  if (readString(rawInput, ["pattern"])) {
+    return "grep";
+  }
+  if (readString(rawInput, ["glob", "globPattern"])) {
+    return "glob";
+  }
+  return "search";
+}
+
+function unwrapToolInput(rawInput: Record<string, unknown> | null): unknown {
+  if (!rawInput) {
+    return null;
+  }
+  return readRecord(rawInput.tool_input) ?? readRecord(rawInput.args) ?? rawInput;
+}
+
+function unwrapToolOutput(
+  rawOutput: Record<string, unknown> | null,
+  textContent: string | undefined,
+): unknown {
+  const output = readRecord(rawOutput?.output);
+  const okay = textFromUnknown(output?.OkayOutput);
+  if (okay) {
+    return parseToolJson(okay);
+  }
+  const direct = textFromUnknown(rawOutput?.output) ?? textContent;
+  return direct ? parseToolJson(direct) : (rawOutput ?? null);
+}
+
+function parseToolJson(value: string): unknown {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      return JSON.parse(trimmed) as unknown;
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function summarizeToolInput(value: unknown): string | undefined {
+  return readString(readRecord(value), [
+    "query",
+    "pattern",
+    "path",
+    "url",
+    "prompt",
+    "agentId",
+    "searchTerm",
+    "target_directory",
+  ]);
+}
+
+function resolveToolCallName(snapshot: ACPToolSnapshot): string {
+  const input = readRecord(snapshot.rawInput);
+  if (isDirectoryListing(snapshot, input)) {
+    return "list";
+  }
+  if (snapshot.kind !== "other") {
+    return snapshot.kind ?? snapshot.title;
+  }
+  const toolName = readString(input, ["tool_name", "toolName"]);
+  const provider = readString(input, ["providerIdentifier", "server_name"]);
+  if (toolName && provider) {
+    return `${provider} ${toolName}`;
+  }
+  if (toolName) {
+    return toolName;
+  }
+  if (snapshot.title.startsWith("Search tools")) {
+    return "search";
+  }
+  return snapshot.title;
+}
+
+function toolCallMetadata(snapshot: ACPToolSnapshot): Record<string, unknown> {
+  const input = readRecord(snapshot.rawInput);
+  const metadata: Record<string, unknown> = {
+    kind: snapshot.kind ?? undefined,
+    title: snapshot.title,
+  };
+  const description = readString(input, ["description"]);
+  if (description && description !== readString(input, ["command"])) {
+    metadata.description = description;
+  }
+  const summary = summarizeToolInput(unwrapToolInput(input));
+  if (summary) {
+    metadata.summary = summary;
+  }
+  return metadata;
+}
+
 function mapPlanToTimeline(plan: Plan): AgentTimelineItem {
   return {
     type: "todo",
@@ -3803,16 +4030,13 @@ function mapToolSnapshotToTimeline(
 ): ToolCallTimelineItem {
   const status = mapToolStatus(snapshot.status);
   const detail = mapToolDetail(snapshot, terminals);
-  const name = snapshot.kind === "other" ? snapshot.title : (snapshot.kind ?? snapshot.title);
+  const name = resolveToolCallName(snapshot);
   const base = {
     type: "tool_call" as const,
     callId: snapshot.toolCallId,
     name,
     detail,
-    metadata: {
-      kind: snapshot.kind ?? undefined,
-      title: snapshot.title,
-    },
+    metadata: toolCallMetadata(snapshot),
   };
   if (status === "failed") {
     return {
@@ -3899,16 +4123,25 @@ function mapToolDetail(
         text: context.textContent ?? stringifyUnknown(snapshot.rawInput),
       };
     default:
-      return buildDefaultToolDetail(context);
+      return buildOtherToolDetail(context);
   }
 }
 
 function buildReadToolDetail(context: MapToolDetailContext): ToolCallDetail {
   const { snapshot, firstLocation, textContent, rawInput, rawOutput } = context;
+  const fileContent = readRecord(rawOutput?.FileContent);
   return {
     type: "read",
-    filePath: firstLocation ?? readString(rawInput, ["path", "filePath", "file"]) ?? snapshot.title,
-    content: textContent ?? readString(rawOutput, ["content", "text"]),
+    filePath:
+      firstLocation ??
+      readString(rawInput, ["path", "filePath", "file", "target_file", "file_path"]) ??
+      readString(fileContent, ["absolute_path"]) ??
+      snapshot.title,
+    content:
+      textContent ??
+      textFromUnknown(fileContent?.content) ??
+      textFromUnknown(rawOutput?.content) ??
+      textFromUnknown(rawOutput?.text),
     offset: readNumber(rawInput, ["offset", "line"]),
     limit: readNumber(rawInput, ["limit"]),
   };
@@ -3918,24 +4151,64 @@ function buildEditToolDetail(context: MapToolDetailContext): ToolCallDetail {
   const { snapshot, firstLocation, textContent, diffContent, rawInput } = context;
   return {
     type: "edit",
-    filePath: firstLocation ?? readString(rawInput, ["path", "filePath", "file"]) ?? snapshot.title,
-    oldString: diffContent?.oldText ?? readString(rawInput, ["oldText", "oldString"]),
+    filePath:
+      firstLocation ??
+      readString(rawInput, ["path", "filePath", "file", "file_path"]) ??
+      snapshot.title,
+    oldString: diffContent?.oldText ?? readString(rawInput, ["oldText", "oldString", "old_string"]),
     newString:
       snapshot.kind === "delete"
         ? ""
-        : (diffContent?.newText ?? readString(rawInput, ["newText", "newString"])),
+        : (diffContent?.newText ?? readString(rawInput, ["newText", "newString", "new_string"])),
     unifiedDiff: textContent ?? undefined,
   };
 }
 
+function searchFilePaths(
+  snapshot: ACPToolSnapshot,
+  matchPaths: string[] | undefined,
+): string[] | undefined {
+  const locationPaths = snapshot.locations?.map((location) => location.path).filter(Boolean);
+  if (locationPaths && locationPaths.length > 0) {
+    return locationPaths;
+  }
+  return matchPaths;
+}
+
+function searchContent(
+  textContent: string | undefined,
+  rawOutput: Record<string, unknown> | null,
+  matchText: string | undefined,
+): string | undefined {
+  const stub = textContent && isMatchCountStub(textContent) ? undefined : textContent;
+  return (
+    matchText ??
+    stub ??
+    textFromUnknown(rawOutput?.stdout) ??
+    textFromUnknown(rawOutput?.content) ??
+    textFromUnknown(rawOutput?.text) ??
+    matchCountText(rawOutput)
+  );
+}
+
 function buildSearchAcpToolDetail(context: MapToolDetailContext): ToolCallDetail {
   const { snapshot, textContent, rawInput, rawOutput } = context;
+  const listing = directoryListingDetail(snapshot, rawInput, rawOutput);
+  if (listing) {
+    return listing;
+  }
+  const matches = formatFileMatches(rawOutput);
+  const content = searchContent(textContent, rawOutput, matches.text);
+  const filePaths = searchFilePaths(snapshot, matches.paths);
   return {
     type: "search",
-    query: readString(rawInput, ["query", "pattern"]) ?? snapshot.title,
-    toolName: "search",
-    content: textContent ?? readString(rawOutput, ["content", "text"]),
-    filePaths: snapshot.locations?.map((location) => location.path),
+    query:
+      readString(rawInput, ["pattern", "query", "searchTerm", "glob", "globPattern"]) ??
+      snapshot.title,
+    toolName: searchToolName(rawInput),
+    ...(content ? { content } : {}),
+    ...(filePaths ? { filePaths } : {}),
+    ...(matches.count !== undefined ? { numMatches: matches.count } : {}),
   };
 }
 
@@ -3948,9 +4221,18 @@ function buildShellToolDetail(context: MapToolDetailContext): ToolCallDetail {
       buildShellCommand(rawInput) ??
       readString(rawInput, ["command"]) ??
       snapshot.title,
-    cwd: terminalContent?.cwd ?? readString(rawInput, ["cwd"]),
-    output: terminalContent?.output ?? textContent ?? readString(rawOutput, ["output", "text"]),
-    exitCode: terminalContent?.exitCode ?? readNumber(rawOutput, ["exitCode"]),
+    cwd:
+      terminalContent?.cwd ??
+      readString(rawInput, ["cwd"]) ??
+      readString(rawOutput, ["current_dir"]),
+    output:
+      cleanToolText(terminalContent?.output) ??
+      textContent ??
+      joinToolText([
+        textFromUnknown(rawOutput?.stdout) ?? textFromUnknown(rawOutput?.output),
+        textFromUnknown(rawOutput?.stderr),
+      ]),
+    exitCode: terminalContent?.exitCode ?? readNumber(rawOutput, ["exitCode", "exit_code"]),
   };
 }
 
@@ -3963,6 +4245,25 @@ function buildFetchToolDetail(context: MapToolDetailContext): ToolCallDetail {
     result: textContent ?? readString(rawOutput, ["result", "text", "content"]),
     code: readNumber(rawOutput, ["status", "code"]),
   };
+}
+
+function buildOtherToolDetail(context: MapToolDetailContext): ToolCallDetail {
+  const { snapshot, rawInput, rawOutput } = context;
+  const listing = directoryListingDetail(snapshot, rawInput, rawOutput);
+  if (listing) {
+    return listing;
+  }
+  if (snapshot.title.startsWith("Search tools")) {
+    return buildSearchAcpToolDetail(context);
+  }
+  if (readString(rawInput, ["tool_name", "toolName"])) {
+    return {
+      type: "unknown",
+      input: unwrapToolInput(rawInput),
+      output: unwrapToolOutput(rawOutput, context.textContent),
+    };
+  }
+  return buildDefaultToolDetail(context);
 }
 
 function buildDefaultToolDetail(context: MapToolDetailContext): ToolCallDetail {
@@ -3999,7 +4300,7 @@ function extractToolText(content: ToolCallContent[] | null | undefined): string 
   const parts: string[] = [];
   for (const item of content) {
     if (item.type === "content") {
-      const text = contentBlockToText(item.content);
+      const text = cleanToolText(contentBlockToText(item.content));
       if (text) {
         parts.push(text);
       }

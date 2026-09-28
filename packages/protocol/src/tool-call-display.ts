@@ -33,17 +33,18 @@ function humanizeToolName(name: string): string {
   if (!trimmed) {
     return name;
   }
+  const readable = trimmed.replaceAll("__", " ");
   if (isPaseoToolName(trimmed)) {
     const leaf = getPaseoToolLeafName(trimmed);
     if (leaf) {
       return humanizeToolName(leaf);
     }
   }
-  if (/[:./]/.test(trimmed) || trimmed.includes("__")) {
-    return trimmed;
+  if (/[:./]/.test(readable)) {
+    return readable;
   }
 
-  return trimmed
+  return readable
     .replace(/[._-]+/g, " ")
     .split(" ")
     .filter((segment) => segment.length > 0)
@@ -85,7 +86,7 @@ function buildCanonicalDetailDisplay(input: ToolCallDisplayInput): DetailDisplay
     case "shell":
       return {
         displayName: "Shell",
-        summary: input.detail.command,
+        summary: metadataString(input.metadata, "description") ?? input.detail.command,
       };
     case "read":
       return buildFilePathDisplay("Read", input.detail.filePath, input.cwd);
@@ -147,7 +148,16 @@ function buildUnknownDetailOverride(input: ToolCallDisplayInput): DetailDisplay 
       summary: input.detail.type === "plain_text" ? readString(input.detail.label) : undefined,
     };
   }
-  return {};
+  const summary =
+    input.detail.type === "unknown" ? metadataString(input.metadata, "summary") : undefined;
+  return summary ? { summary } : {};
+}
+
+function metadataString(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  return isRecord(metadata) ? readString(metadata[key]) : undefined;
 }
 
 export function buildToolCallDisplayModel(input: ToolCallDisplayInput): ToolCallDisplayModel {

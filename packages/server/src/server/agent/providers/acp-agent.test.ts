@@ -2908,7 +2908,11 @@ describe("ACPAgentSession", () => {
           type: "tool_call",
           name: "nowledge-mem__mem_fs",
           status: "completed",
-          detail: { type: "unknown", input: rawInput, output: rawOutput },
+          detail: {
+            type: "unknown",
+            input: { command: "ls /memories" },
+            output: rawOutput,
+          },
         },
       },
     ]);
@@ -2917,8 +2921,146 @@ describe("ACPAgentSession", () => {
       throw new Error("Expected a tool call timeline event");
     }
     expect(buildToolCallDisplayModel(event.item)).toEqual({
-      displayName: "nowledge-mem__mem_fs",
+      displayName: "Nowledge mem mem fs",
     });
+  });
+
+  test("shows Grok search matches instead of the match-count stub", () => {
+    const internals = asInternals<ACPSessionInternals>(createSession());
+    const events = internals.translateSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "grep-1",
+      title: "^<<<<<<<",
+      kind: "search",
+      status: "completed",
+      rawInput: { pattern: "^<<<<<<<", path: "docs", variant: "Grep" },
+      rawOutput: {
+        type: "GrepSearch",
+        match_count: 1,
+        file_matches: [
+          {
+            path: "docs/providers.md",
+            matches: [{ line_number: 12, content: "\u001b[31mconflict\u001b[0m" }],
+          },
+        ],
+      },
+      content: [{ type: "content", content: { type: "text", text: "found 1 matches" } }],
+    });
+
+    expect(events).toMatchObject([
+      {
+        type: "timeline",
+        item: {
+          name: "search",
+          detail: {
+            type: "search",
+            query: "^<<<<<<<",
+            toolName: "grep",
+            content: "docs/providers.md\n12:conflict",
+            filePaths: ["docs/providers.md"],
+            numMatches: 1,
+          },
+        },
+      },
+    ]);
+  });
+
+  test("strips shell color and keeps the short description on the row", () => {
+    const internals = asInternals<ACPSessionInternals>(createSession());
+    const events = internals.translateSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "shell-1",
+      title: "Execute `ls`",
+      kind: "execute",
+      status: "completed",
+      rawInput: {
+        command: "ls",
+        description: "List Cursor sessions",
+      },
+      rawOutput: {
+        exitCode: 0,
+        stdout: "\u001b[34macp-sessions\u001b[39;49m\u001b[0m\nconfig.json",
+        stderr: "",
+      },
+    });
+
+    expect(events).toMatchObject([
+      {
+        type: "timeline",
+        item: {
+          name: "execute",
+          metadata: { description: "List Cursor sessions" },
+          detail: {
+            type: "shell",
+            command: "ls",
+            output: "acp-sessions\nconfig.json",
+            exitCode: 0,
+          },
+        },
+      },
+    ]);
+    const event = events[0];
+    if (event?.type !== "timeline" || event.item.type !== "tool_call") {
+      throw new Error("Expected a tool call timeline event");
+    }
+    expect(buildToolCallDisplayModel(event.item)).toEqual({
+      displayName: "Shell",
+      summary: "List Cursor sessions",
+    });
+  });
+
+  test("reads Grok directory listings and file paths", () => {
+    const internals = asInternals<ACPSessionInternals>(createSession());
+    const listed = internals.translateSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "list-1",
+      title: "List `/tmp/project`",
+      kind: "other",
+      status: "completed",
+      rawInput: { target_directory: "/tmp/project", variant: "List" },
+      rawOutput: {
+        type: "ListDir",
+        Content: {
+          absolute_root_path: "/tmp/project",
+          content: "\u001b[34msrc\u001b[0m\nREADME.md",
+        },
+      },
+    });
+    const read = internals.translateSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "read-1",
+      title: "Read `/tmp/project/README.md`",
+      kind: "read",
+      status: "completed",
+      locations: [{ path: "/tmp/project/README.md" }],
+      rawInput: { target_file: "/tmp/project/README.md", limit: 20 },
+      content: [{ type: "content", content: { type: "text", text: "hello" } }],
+    });
+
+    expect(listed).toMatchObject([
+      {
+        item: {
+          name: "list",
+          detail: {
+            type: "plain_text",
+            label: "/tmp/project",
+            text: "src\nREADME.md",
+          },
+        },
+      },
+    ]);
+    expect(read).toMatchObject([
+      {
+        item: {
+          detail: {
+            type: "read",
+            filePath: "/tmp/project/README.md",
+            content: "hello",
+            limit: 20,
+          },
+        },
+      },
+    ]);
   });
 
   test("keeps Grok speed across prompt completion and context updates, and clears it for the next turn", async () => {

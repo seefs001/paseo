@@ -135,6 +135,21 @@ describe("shared tool-call display mapping", () => {
     });
   });
 
+  it("humanizes two-segment MCP tool names", () => {
+    const display = buildToolCallDisplayModel({
+      name: "nowledge-mem__memory_search",
+      status: "completed",
+      error: null,
+      detail: { type: "unknown", input: { query: "paseo" }, output: null },
+      metadata: { summary: "paseo" },
+    });
+
+    expect(display).toEqual({
+      displayName: "Nowledge mem memory search",
+      summary: "paseo",
+    });
+  });
+
   it("humanizes Paseo MCP tool names (Claude Code format)", () => {
     const display = buildToolCallDisplayModel({
       name: "mcp__paseo__create_agent",
