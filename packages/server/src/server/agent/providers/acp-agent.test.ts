@@ -4818,7 +4818,7 @@ describe("Grok permission modes", () => {
     for (const { modeId, autoMode, yoloMode } of [...modes, modes[0], modes[0]]) {
       await session.setMode(modeId);
       expect(notifications.at(-1)).toEqual({
-        method: "x.ai/yolo_mode_changed",
+        method: "_x.ai/yolo_mode_changed",
         params: {
           sessionId: "grok-session",
           auto_mode: autoMode,

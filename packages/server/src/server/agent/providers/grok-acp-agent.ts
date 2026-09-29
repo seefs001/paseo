@@ -38,7 +38,8 @@ export const GROK_ACP_OPTIONS = {
   async providerModeWriter({ connection, sessionId, requestedModeId }) {
     const meta = permissionModeMeta(requestedModeId);
     // Paseo owns one Grok process per session; Grok does not filter this notification by sessionId.
-    await connection.extNotification("x.ai/yolo_mode_changed", {
+    // Grok's ACP decoder only delivers extension notifications prefixed with "_", then strips it.
+    await connection.extNotification("_x.ai/yolo_mode_changed", {
       sessionId,
       yolo_mode: meta.yoloMode,
       auto_mode: meta.autoMode,
