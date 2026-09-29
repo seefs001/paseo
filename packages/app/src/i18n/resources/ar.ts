@@ -1568,6 +1568,8 @@ export const ar: TranslationResources = {
     noMentions: "لم يتم العثور على جلسات أو ملفات تعريف أو ملفات للوكيل",
     noCommands: "لم يتم العثور على أي أوامر",
     failedToLoad: "فشل التحميل",
+    chooseProjectForCommands: "اختر مشروعًا لعرض الأوامر",
+    chooseModelForCommands: "اختر نموذجًا لعرض الأوامر",
   },
   loadOlderHistory: {
     failed: "تعذر تحميل السجل الأقدم",

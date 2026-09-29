@@ -1614,6 +1614,8 @@ export const es: TranslationResources = {
     noMentions: "No se encontraron sesiones, perfiles o archivos de agente",
     noCommands: "No se encontraron comandos",
     failedToLoad: "No se pudo cargar",
+    chooseProjectForCommands: "Elige un proyecto para ver los comandos",
+    chooseModelForCommands: "Selecciona un modelo para ver los comandos",
   },
   loadOlderHistory: {
     failed: "No se pudo cargar el historial anterior",

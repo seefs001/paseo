@@ -1578,6 +1578,8 @@ export const ko: TranslationResources = {
     noMentions: "에이전트 세션, 프로필 또는 파일을 찾을 수 없습니다",
     noCommands: "명령을 찾을 수 없습니다",
     failedToLoad: "불러오지 못했습니다",
+    chooseProjectForCommands: "명령을 보려면 프로젝트를 선택하세요",
+    chooseModelForCommands: "명령을 보려면 모델을 선택하세요",
   },
   loadOlderHistory: {
     failed: "이전 기록을 불러올 수 없습니다",

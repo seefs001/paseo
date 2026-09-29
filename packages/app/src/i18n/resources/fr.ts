@@ -1618,6 +1618,8 @@ export const fr: TranslationResources = {
     noMentions: "Aucune session, profil ou fichier d'agent trouvé",
     noCommands: "Aucune commande trouvée",
     failedToLoad: "Échec du chargement",
+    chooseProjectForCommands: "Choisissez un projet pour voir les commandes",
+    chooseModelForCommands: "Sélectionnez un modèle pour voir les commandes",
   },
   loadOlderHistory: {
     failed: "Impossible de charger l'ancien historique",

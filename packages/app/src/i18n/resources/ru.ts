@@ -1597,6 +1597,8 @@ export const ru: TranslationResources = {
     noMentions: "Сессии, профили агентов или файлы не найдены",
     noCommands: "Команды не найдены",
     failedToLoad: "Не удалось загрузить",
+    chooseProjectForCommands: "Выберите проект, чтобы увидеть команды",
+    chooseModelForCommands: "Выберите модель, чтобы увидеть команды",
   },
   loadOlderHistory: {
     failed: "Не удалось загрузить старую историю.",
