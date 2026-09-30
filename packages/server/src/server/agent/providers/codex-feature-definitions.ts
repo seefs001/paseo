@@ -38,16 +38,27 @@ export const CODEX_PLAN_MODE_FEATURE: Omit<AgentFeatureToggle, "value"> = {
   icon: "list-todo",
 };
 
+export const CODEX_MCP_AUTO_ACCEPT_FEATURE: Omit<AgentFeatureToggle, "value"> = {
+  type: "toggle",
+  id: "auto_accept_mcp",
+  label: "MCP",
+  description: "Automatically approves MCP tool calls.",
+  tooltip: "Automatically approve MCP tools",
+  icon: "shield-check",
+};
+
 export function buildCodexFeatures(input: {
   serviceTiers: CodexServiceTier[];
   serviceTier: string;
   planModeEnabled: boolean;
+  mcpAutoAcceptEnabled: boolean;
   planModeAvailable?: boolean;
 }): AgentFeature[] {
   const features = buildCodexSpeedFeature(input.serviceTiers, input.serviceTier);
   if (input.planModeAvailable !== false) {
     features.push({ ...CODEX_PLAN_MODE_FEATURE, value: input.planModeEnabled });
   }
+  features.push({ ...CODEX_MCP_AUTO_ACCEPT_FEATURE, value: input.mcpAutoAcceptEnabled });
   return features;
 }
 

@@ -61,6 +61,20 @@ export const CodexProviderOptionsSchema = z
 
 export type CodexProviderOptions = z.infer<typeof CodexProviderOptionsSchema>;
 
+export function applyCodexMcpAutoAccept(config: Record<string, unknown>): Record<string, unknown> {
+  const mcpServers = readRecord(config.mcp_servers);
+  const serverNames = Object.keys(mcpServers);
+  if (serverNames.length === 0) return config;
+  const nextServers: Record<string, unknown> = {};
+  for (const name of serverNames) {
+    nextServers[name] = {
+      ...readRecord(mcpServers[name]),
+      default_tools_approval_mode: "approve",
+    };
+  }
+  return { ...config, mcp_servers: nextServers };
+}
+
 export function applyCodexToolPolicy(
   config: Record<string, unknown>,
   toolPolicy: ToolPolicy | undefined,

@@ -861,7 +861,7 @@ describe("ClaudeAgentSession features", () => {
     await session.close();
   });
 
-  test("lists fast mode only for supported Opus models", async () => {
+  test("lists MCP auto-accept for every model and fast mode only for Opus", async () => {
     const client = new ClaudeAgentClient({ logger, resolveBinary: async () => "/test/claude/bin" });
 
     await expect(
@@ -870,7 +870,10 @@ describe("ClaudeAgentSession features", () => {
         cwd: process.cwd(),
         model: "claude-opus-4-8",
       }),
-    ).resolves.toEqual([expect.objectContaining({ id: "fast_mode", value: false })]);
+    ).resolves.toEqual([
+      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
+      expect.objectContaining({ id: "fast_mode", value: false }),
+    ]);
 
     await expect(
       client.listFeatures({
@@ -878,7 +881,10 @@ describe("ClaudeAgentSession features", () => {
         cwd: process.cwd(),
         model: "claude-opus-4-8[1m]",
       }),
-    ).resolves.toEqual([expect.objectContaining({ id: "fast_mode", value: false })]);
+    ).resolves.toEqual([
+      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
+      expect.objectContaining({ id: "fast_mode", value: false }),
+    ]);
 
     await expect(
       client.listFeatures({
@@ -886,7 +892,10 @@ describe("ClaudeAgentSession features", () => {
         cwd: process.cwd(),
         model: "claude-opus-4-8-20260101",
       }),
-    ).resolves.toEqual([expect.objectContaining({ id: "fast_mode", value: false })]);
+    ).resolves.toEqual([
+      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
+      expect.objectContaining({ id: "fast_mode", value: false }),
+    ]);
 
     await expect(
       client.listFeatures({
@@ -894,7 +903,10 @@ describe("ClaudeAgentSession features", () => {
         cwd: process.cwd(),
         model: "claude-opus-5",
       }),
-    ).resolves.toEqual([expect.objectContaining({ id: "fast_mode", value: false })]);
+    ).resolves.toEqual([
+      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
+      expect.objectContaining({ id: "fast_mode", value: false }),
+    ]);
 
     await expect(
       client.listFeatures({
@@ -902,7 +914,7 @@ describe("ClaudeAgentSession features", () => {
         cwd: process.cwd(),
         model: "openrouter/anthropic/claude-opus-4-8",
       }),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual([expect.objectContaining({ id: "auto_accept_mcp", value: false })]);
 
     await expect(
       client.listFeatures({
@@ -910,7 +922,7 @@ describe("ClaudeAgentSession features", () => {
         cwd: process.cwd(),
         model: "claude-sonnet-5",
       }),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual([expect.objectContaining({ id: "auto_accept_mcp", value: false })]);
 
     await expect(
       client.listFeatures({
@@ -918,7 +930,53 @@ describe("ClaudeAgentSession features", () => {
         cwd: process.cwd(),
         model: "claude-sonnet-4-6",
       }),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual([expect.objectContaining({ id: "auto_accept_mcp", value: false })]);
+  });
+
+  test("auto-approves MCP tools and still asks for shell tools", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      modeId: "default",
+      featureValues: { auto_accept_mcp: true },
+    });
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+
+    try {
+      await session.startTurn("run the tool");
+      const canUseTool = queryFactory.mock.calls[0]?.[0].options.canUseTool;
+      if (!canUseTool) throw new Error("Expected canUseTool callback");
+
+      await expect(
+        canUseTool("mcp__paseo__speak", { text: "hi" }, { toolUseID: "mcp-1" }),
+      ).resolves.toEqual({
+        behavior: "allow",
+        updatedInput: { text: "hi" },
+      });
+      expect(events.some((event) => event.type === "permission_requested")).toBe(false);
+
+      const abort = new AbortController();
+      const shellPermission = canUseTool(
+        "Bash",
+        { command: "printf test" },
+        { signal: abort.signal, toolUseID: "bash-1" },
+      );
+      expect(session.getPendingPermissions()).toEqual([
+        expect.objectContaining({ name: "Bash", kind: "tool" }),
+      ]);
+      abort.abort();
+      await expect(shellPermission).rejects.toThrow("Permission request aborted");
+    } finally {
+      unsubscribe();
+      await session.close();
+    }
   });
 
   test("passes initial fast mode through Claude flag settings", async () => {

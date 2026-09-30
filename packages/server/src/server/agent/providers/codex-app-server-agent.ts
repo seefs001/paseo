@@ -111,6 +111,7 @@ import {
 } from "../provider-notices.js";
 import type { WorkspaceGitService } from "../../workspace-git-service.js";
 import {
+  applyCodexMcpAutoAccept,
   applyCodexToolPolicy,
   CodexProviderOptionsSchema,
   type CodexProviderOptions,
@@ -3569,6 +3570,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       serviceTiers: this.currentServiceTiers(),
       serviceTier: this.serviceTier ?? "default",
       planModeEnabled: this.planModeEnabled,
+      mcpAutoAcceptEnabled: this.config.featureValues?.auto_accept_mcp === true,
       planModeAvailable: this.hasPlanCollaborationMode(),
     });
   }
@@ -4647,6 +4649,13 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.applyFeatureValue("plan_mode", Boolean(value));
       return;
     }
+    if (featureId === "auto_accept_mcp") {
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        auto_accept_mcp: Boolean(value),
+      };
+      return;
+    }
     throw new Error(`Unknown Codex feature: ${featureId}`);
   }
 
@@ -5340,7 +5349,11 @@ export class CodexAppServerAgentSession implements AgentSession {
       }
       innerConfig.mcp_servers = mcpServers;
     }
-    const configured = applyCodexToolPolicy(innerConfig, this.config.toolPolicy);
+    const withPolicy = applyCodexToolPolicy(innerConfig, this.config.toolPolicy);
+    const configured =
+      this.config.featureValues?.auto_accept_mcp === true
+        ? applyCodexMcpAutoAccept(withPolicy)
+        : withPolicy;
     return Object.keys(configured).length > 0 ? configured : null;
   }
 
@@ -7099,6 +7112,10 @@ export class CodexAppServerAgentSession implements AgentSession {
     const requiredFields = toObjectRecord(parsed.requestedSchema)?.required;
     if (Array.isArray(requiredFields) && requiredFields.length > 0) {
       return Promise.resolve({ action: "decline", content: null, _meta: null });
+    }
+    if (this.config.featureValues?.auto_accept_mcp === true) {
+      this.logger.info({ serverName: parsed.serverName }, "Auto-approving Codex MCP elicitation");
+      return Promise.resolve({ action: "accept", content: {}, _meta: null });
     }
     const requestId = `permission-${randomUUID()}`;
     const request: AgentPermissionRequest = {

@@ -4,7 +4,11 @@ import { createTestLogger } from "../../test-utils/test-logger.js";
 
 import { validateProviderOptions } from "./provider-options.js";
 import { applyClaudeToolPolicy, ClaudeProviderOptionsSchema } from "./providers/claude/options.js";
-import { applyCodexToolPolicy, CodexProviderOptionsSchema } from "./providers/codex/options.js";
+import {
+  applyCodexMcpAutoAccept,
+  applyCodexToolPolicy,
+  CodexProviderOptionsSchema,
+} from "./providers/codex/options.js";
 import {
   buildOpenCodePermissionRules,
   OpenCodeProviderOptionsSchema,
@@ -143,6 +147,30 @@ describe("exact MCP preapproval mappings", () => {
         hubPolicy,
       ),
     ).toThrow("cannot preapprove exact MCP tools for unattended execution");
+  });
+
+  test("Codex auto-accept leaves an exact tool grant in place and approves the server", () => {
+    expect(
+      applyCodexMcpAutoAccept(
+        applyCodexToolPolicy(
+          {
+            mcp_servers: {
+              hub: { url: "http://127.0.0.1/hub" },
+            },
+          },
+          hubPolicy,
+        ),
+      ),
+    ).toEqual({
+      mcp_servers: {
+        hub: {
+          url: "http://127.0.0.1/hub",
+          enabled_tools: ["finish_execution"],
+          default_tools_approval_mode: "approve",
+          tools: { finish_execution: { approval_mode: "approve" } },
+        },
+      },
+    });
   });
 
   test("Codex enables and approves only the granted server tool", () => {

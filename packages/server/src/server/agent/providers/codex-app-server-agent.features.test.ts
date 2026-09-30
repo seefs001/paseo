@@ -54,6 +54,18 @@ function speedFeature(value: string) {
   };
 }
 
+function mcpAutoAcceptFeature(value: boolean) {
+  return {
+    type: "toggle" as const,
+    id: "auto_accept_mcp",
+    label: "MCP",
+    description: "Automatically approves MCP tool calls.",
+    tooltip: "Automatically approve MCP tools",
+    icon: "shield-check",
+    value,
+  };
+}
+
 const TEST_COLLABORATION_MODES: CollaborationModeRecord[] = [
   {
     name: "Code",
@@ -341,7 +353,10 @@ describe("Codex app-server provider features", () => {
       featureValues: { fast_mode: true },
     });
     try {
-      expect(session.features.map((feature) => feature.id)).toEqual(["plan_mode"]);
+      expect(session.features.map((feature) => feature.id)).toEqual([
+        "plan_mode",
+        "auto_accept_mcp",
+      ]);
       await expect(session.setFeature?.("fast_mode", true)).rejects.toThrow(
         `Codex fast mode is not available for model '${model}'`,
       );
@@ -392,6 +407,7 @@ describe("Codex app-server provider features", () => {
         icon: "list-todo",
         value: false,
       },
+      mcpAutoAcceptFeature(false),
     ]);
 
     await session.setFeature?.("service_tier", "priority");
@@ -408,6 +424,7 @@ describe("Codex app-server provider features", () => {
         icon: "list-todo",
         value: true,
       },
+      mcpAutoAcceptFeature(false),
     ]);
   });
 
@@ -424,6 +441,7 @@ describe("Codex app-server provider features", () => {
         icon: "list-todo",
         value: false,
       },
+      mcpAutoAcceptFeature(false),
     ]);
   });
 
@@ -465,6 +483,7 @@ describe("Codex app-server provider features", () => {
         icon: "list-todo",
         value: false,
       },
+      mcpAutoAcceptFeature(false),
     ]);
 
     await session.startTurn("hello");
@@ -543,6 +562,7 @@ describe("Codex app-server provider features", () => {
         icon: "list-todo",
         value: true,
       },
+      mcpAutoAcceptFeature(false),
     ]);
 
     await session.startTurn("hello");
@@ -605,6 +625,7 @@ describe("Codex app-server provider features", () => {
         icon: "list-todo",
         value: false,
       },
+      mcpAutoAcceptFeature(false),
     ]);
     await session.startTurn("hello");
 
@@ -623,6 +644,30 @@ describe("Codex app-server provider features", () => {
       collaborationMode: expect.objectContaining({
         mode: "plan",
       }),
+    });
+  });
+
+  test("approves injected MCP servers on the next turn when the shield is on", async () => {
+    const { session, appServer } = await createConnectedSession({
+      mcpServers: {
+        paseo: { type: "http", url: "http://127.0.0.1/paseo" },
+      },
+    });
+
+    expect(session.features).toContainEqual(mcpAutoAcceptFeature(false));
+    await session.setFeature?.("auto_accept_mcp", true);
+    expect(session.features).toContainEqual(mcpAutoAcceptFeature(true));
+
+    await session.startTurn("hello");
+    await expect(appServer.waitForTurnStart()).resolves.toMatchObject({
+      config: {
+        mcp_servers: {
+          paseo: {
+            url: "http://127.0.0.1/paseo",
+            default_tools_approval_mode: "approve",
+          },
+        },
+      },
     });
   });
 });

@@ -1667,6 +1667,76 @@ describe("Codex app-server provider", () => {
     await session.close();
   });
 
+  test("auto-accepts an MCP approval elicitation when the shield is on", async () => {
+    const appServer = createFakeCodexAppServer();
+    const session = new CodexAppServerAgentSession(
+      createConfig({
+        cwd: "/workspace/project",
+        featureValues: { auto_accept_mcp: true },
+      }),
+      null,
+      createTestLogger(),
+      async () => appServer.child,
+    );
+
+    await session.connect();
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    appServer.requestMcpElicitation({
+      threadId: "thread-1",
+      turnId: "turn-1",
+      serverName: "browser",
+      message: "Allow the browser to open this page?",
+      requestedSchema: {
+        type: "object",
+        properties: {},
+      },
+    });
+
+    await expect(appServer.waitForMcpElicitationDecision()).resolves.toEqual({
+      action: "accept",
+      content: {},
+      _meta: null,
+    });
+    expect(events.some((event) => event.type === "permission_requested")).toBe(false);
+    expect(session.getPendingPermissions()).toEqual([]);
+    await session.close();
+  });
+
+  test("still declines an MCP form that needs input when the shield is on", async () => {
+    const appServer = createFakeCodexAppServer();
+    const session = new CodexAppServerAgentSession(
+      createConfig({
+        cwd: "/workspace/project",
+        featureValues: { auto_accept_mcp: true },
+      }),
+      null,
+      createTestLogger(),
+      async () => appServer.child,
+    );
+
+    await session.connect();
+    appServer.requestMcpElicitation({
+      threadId: "thread-1",
+      turnId: "turn-1",
+      serverName: "browser",
+      message: "Choose a page",
+      requestedSchema: {
+        type: "object",
+        properties: { url: { type: "string" } },
+        required: ["url"],
+      },
+    });
+
+    await expect(appServer.waitForMcpElicitationDecision()).resolves.toEqual({
+      action: "decline",
+      content: null,
+      _meta: null,
+    });
+    await session.close();
+  });
+
   test("initializes Codex app-server without making Paseo the request originator", async () => {
     let initializeParams: unknown;
     const appServer = createFakeCodexAppServer({

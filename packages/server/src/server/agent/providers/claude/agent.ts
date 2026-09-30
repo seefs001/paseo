@@ -1617,6 +1617,7 @@ export class ClaudeAgentClient implements AgentClient {
     return buildClaudeFeatures({
       modelId: claudeConfig.model,
       fastModeEnabled: claudeConfig.featureValues?.fast_mode === true,
+      mcpAutoAcceptEnabled: claudeConfig.featureValues?.auto_accept_mcp === true,
     });
   }
 
@@ -2180,6 +2181,7 @@ class ClaudeAgentSession implements AgentSession {
     return buildClaudeFeatures({
       modelId: this.config.model,
       fastModeEnabled: this.config.featureValues?.fast_mode === true,
+      mcpAutoAcceptEnabled: this.config.featureValues?.auto_accept_mcp === true,
     });
   }
 
@@ -2505,6 +2507,13 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {
+    if (featureId === "auto_accept_mcp") {
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        auto_accept_mcp: Boolean(value),
+      };
+      return;
+    }
     if (featureId !== "fast_mode") {
       throw new Error(`Unknown Claude feature: ${featureId}`);
     }
@@ -4664,6 +4673,15 @@ class ClaudeAgentSession implements AgentSession {
     input,
     options,
   ): Promise<PermissionResult> => {
+    if (
+      this.config.featureValues?.auto_accept_mcp === true &&
+      toolName.startsWith("mcp__") &&
+      this.permissionClearingSteerUuids.size === 0
+    ) {
+      this.logger.info({ toolName }, "Auto-approving Claude MCP tool");
+      return { behavior: "allow", updatedInput: input };
+    }
+
     const requestId = `permission-${randomUUID()}`;
     const kind = resolvePermissionKind(toolName, input);
     const requestInput = normalizeClaudeAskUserQuestionRequestInput(toolName, input);
