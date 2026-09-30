@@ -230,7 +230,7 @@ promise for completion: equal results, including equal discovery timestamps, emi
 
 ## Usage sources
 
-Usage is fetched on demand from plugin usage sources. Each source registers through `server.registerUsageSource()` with an input schema, `fetch(input)`, and optional `discover()`. The daemon discovers configured accounts, validates inputs in the plugin runtime, caches each source/input result for five minutes, and returns `usage.list_reports.response`. A source report has an account key, availability status, plan label, windows, balances, and details. Mark the window the app should show first with `headline: true`.
+Usage is fetched on demand from plugin usage sources. Each source registers through `server.registerUsageSource()` with an input schema, `fetch(input)`, and required `discover()`. The daemon discovers configured accounts, validates inputs in the plugin runtime, caches each source/input result for five minutes, and returns `usage.list_reports.response`. A source report has an account key, availability status, plan label, windows, balances, and details.
 
 Create a built-in source under `plugins/<name>-usage-source/` with the same manifest, entry, `server/`, `shared/`, and `icon.svg` layout as an external plugin. Add its ID to `builtinPlugins` in `packages/server/src/server/plugins/builtin/index.ts`. Keep credential discovery, API parsing, and normalization inside the source; use helpers from `@getpaseo/plugin/server/usage`. The wire shape remains source agnostic. See [plugin usage sources](plugins.md#usage-sources).
 
@@ -326,7 +326,7 @@ export class CopilotACPAgentClient extends ACPAgentClient {
 
 ### 2. Add to the provider manifest
 
-In `packages/server/src/server/agent/provider-manifest.ts`, add mode definitions with UI metadata (icons, color tiers) and a provider definition entry.
+In `packages/protocol/src/provider-manifest.ts`, add mode definitions with UI metadata (icons, color tiers) and a provider definition entry.
 
 First, define the modes with visual metadata:
 
