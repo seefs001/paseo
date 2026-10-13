@@ -1166,6 +1166,15 @@ function createRuntime(
   });
 }
 
+interface PiToolCallEvent {
+  toolCallId: string;
+  toolCall: PiTrackedToolCall;
+  status: "running" | "completed" | "failed";
+  result: PiToolResult;
+  error: unknown;
+  parentToolCallId?: string;
+}
+
 export class PiRpcAgentSession implements AgentSession {
   readonly provider: AgentProvider;
   readonly capabilities: AgentCapabilityFlags;
@@ -2200,7 +2209,14 @@ export class PiRpcAgentSession implements AgentSession {
             turnId: this.currentTurnIdForEvent(),
           });
         }
-        this.emitToolCallEvent(event.toolCallId, toolCall, "running", null, null);
+        this.emitToolCallEvent({
+          toolCallId: event.toolCallId,
+          toolCall,
+          status: "running",
+          result: null,
+          error: null,
+          parentToolCallId: event.parentToolCallId,
+        });
         return;
       }
       case "tool_execution_update": {
@@ -2210,7 +2226,14 @@ export class PiRpcAgentSession implements AgentSession {
         }
 
         const partialResult = parseToolResult(event.partialResult);
-        this.emitToolCallEvent(event.toolCallId, toolCall, "running", partialResult, null);
+        this.emitToolCallEvent({
+          toolCallId: event.toolCallId,
+          toolCall,
+          status: "running",
+          result: partialResult,
+          error: null,
+          parentToolCallId: event.parentToolCallId,
+        });
         return;
       }
       case "tool_execution_end": {
@@ -2293,7 +2316,14 @@ export class PiRpcAgentSession implements AgentSession {
       status,
       result,
     });
-    this.emitToolCallEvent(event.toolCallId, toolCall, status, result, error);
+    this.emitToolCallEvent({
+      toolCallId: event.toolCallId,
+      toolCall,
+      status,
+      result,
+      error,
+      parentToolCallId: event.parentToolCallId,
+    });
   }
 
   private emitCompactionTimeline(input: {
@@ -2399,13 +2429,14 @@ export class PiRpcAgentSession implements AgentSession {
     }
   }
 
-  private emitToolCallEvent(
-    toolCallId: string,
-    toolCall: PiTrackedToolCall,
-    status: "running" | "completed" | "failed",
-    result: PiToolResult,
-    error: unknown,
-  ): boolean {
+  private emitToolCallEvent({
+    toolCallId,
+    toolCall,
+    status,
+    result,
+    error,
+    parentToolCallId,
+  }: PiToolCallEvent): boolean {
     const turnId = this.currentTurnIdForEvent();
     const mapping = this.extensionHost.mapToolCall({
       callId: toolCallId,
@@ -2423,6 +2454,7 @@ export class PiRpcAgentSession implements AgentSession {
       callId: toolCallId,
       name: mapping?.name ?? toolCall.toolName,
       detail,
+      ...(parentToolCallId ? { metadata: { parentToolCallId } } : {}),
     };
     const item =
       status === "failed" ? { ...baseItem, status, error } : { ...baseItem, status, error: null };

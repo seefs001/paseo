@@ -432,6 +432,61 @@ class SessionEvents {
 }
 
 describe("PiRpcAgentSession", () => {
+  test("preserves codemode parentage through nested tool execution without hiding direct tools", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    await session.startTurn("run");
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "code",
+      toolName: "codemode",
+      args: { code: 'await tools.bash({ command: "pwd" })' },
+    });
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "code/1",
+      parentToolCallId: "code",
+      toolName: "bash",
+      args: { command: "pwd" },
+    });
+    fakeSession.emit({
+      type: "tool_execution_update",
+      toolCallId: "code/1",
+      parentToolCallId: "code",
+      toolName: "bash",
+      partialResult: { content: [{ type: "text", text: "/repo" }] },
+    });
+    fakeSession.emit({
+      type: "tool_execution_end",
+      toolCallId: "code/1",
+      parentToolCallId: "code",
+      toolName: "bash",
+      result: { content: [{ type: "text", text: "/repo" }] },
+      isError: false,
+    });
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "direct",
+      toolName: "read",
+      args: { path: "/repo/README.md" },
+    });
+    const tools = events.timelineItems().filter((item) => item.type === "tool_call");
+    expect(
+      tools.map((item) => ({
+        callId: item.callId,
+        status: item.status,
+        parent: item.metadata?.parentToolCallId,
+      })),
+    ).toEqual([
+      { callId: "code", status: "running", parent: undefined },
+      { callId: "code/1", status: "running", parent: "code" },
+      { callId: "code/1", status: "running", parent: "code" },
+      { callId: "code/1", status: "completed", parent: "code" },
+      { callId: "direct", status: "running", parent: undefined },
+    ]);
+    await session.close();
+  });
+
   test("completes a turn and answers a dialog when an adapter throws", async () => {
     const { pi, session, events } = await createSession();
     Object.assign(session, {

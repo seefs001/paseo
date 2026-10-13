@@ -175,12 +175,14 @@ export type PiAgentSessionEvent =
   | {
       type: "tool_execution_start";
       toolCallId: string;
+      parentToolCallId?: string;
       toolName: string;
       args: unknown;
     }
   | {
       type: "tool_execution_update";
       toolCallId: string;
+      parentToolCallId?: string;
       toolName: string;
       args?: unknown;
       partialResult: unknown;
@@ -188,6 +190,7 @@ export type PiAgentSessionEvent =
   | {
       type: "tool_execution_end";
       toolCallId: string;
+      parentToolCallId?: string;
       toolName: string;
       result: unknown;
       isError?: boolean;

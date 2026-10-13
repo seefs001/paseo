@@ -2,6 +2,7 @@ import type { AssistantMessageItem, StreamItem, UserMessageItem } from "@/types/
 import type { TimelineItemTransform } from "@/plugins/timeline/model";
 import { projectPluginTimelineItems } from "@/plugins/timeline/projection";
 import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
+import { createCodemodeProjection } from "@/tool-calls/codemode";
 import {
   prepareToolCallHistory,
   projectToolCallDetailLevel,
@@ -54,6 +55,7 @@ function isReusableBlock(block: AssistantMessageItem, source: AssistantMessageIt
 
 /** Source messages reach plugins before any Markdown splitting or Overview grouping. */
 export function createStreamPresentation() {
+  const projectCodemode = createCodemodeProjection();
   const userMessageCache = new WeakMap<UserMessageItem, UserMessageItem>();
 
   function presentUserMessage(item: UserMessageItem): UserMessageItem {
@@ -172,15 +174,16 @@ export function createStreamPresentation() {
       displayHistory = historyRows;
       promotedRows = nextPromoted;
     }
-    if (preparedTail !== displayTail || preparedLevel !== input.level) {
-      preparedHistory = prepareToolCallHistory(input.level, displayTail);
-      preparedTail = displayTail;
+    const nested = projectCodemode(displayTail, head);
+    if (preparedTail !== nested.tail || preparedLevel !== input.level) {
+      preparedHistory = prepareToolCallHistory(input.level, nested.tail);
+      preparedTail = nested.tail;
       preparedLevel = input.level;
     }
     return projectToolCallDetailLevel({
       level: input.level,
-      tail: displayTail,
-      head,
+      tail: nested.tail,
+      head: nested.head,
       preparedHistory,
       isTurnActive: input.isTurnActive,
     });
