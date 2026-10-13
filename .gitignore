@@ -34,6 +34,40 @@ pnpm-debug.log*
 *.tsbuildinfo
 tsconfig.tsbuildinfo
 
+# Accidental in-place TypeScript emits. Keep JS-only tooling and fixtures visible.
+/packages/*/src/**/*.js
+/packages/app/e2e/browser/**/*.js
+/packages/app/e2e/helpers/**/*.js
+/packages/app/e2e/support/**/*.js
+/packages/app/perf/**/*.js
+/packages/app/test-stubs/**/*.js
+/packages/cli/tests/**/*.js
+/packages/client/examples/**/*.js
+/packages/desktop/e2e/*.spec.js
+/packages/desktop/e2e/support/**/*.js
+/packages/expo-two-way-audio/examples/*/App.js
+/packages/expo-two-way-audio/examples/flow-api/auth.js
+/packages/expo-two-way-audio/examples/flow-api/volume-display.js
+/packages/protocol/codegen/**/*.js
+/packages/protocol/tests/**/*.js
+/packages/server/scripts/**/*.js
+/packages/website/e2e/*.spec.js
+/plugin-examples/**/*.js
+/plugins/**/*.js
+/packages/app/index.js
+/packages/app/native-release-version.test.js
+/packages/app/modules/paseo-scroll/app.plugin.test.js
+/packages/app/plugins/with-paste-input.test.js
+/packages/*/playwright.config.js
+/packages/app/playwright.profile.config.js
+/packages/*/vitest.config.js
+/packages/app/vitest.setup.js
+/packages/website/vite.config.js
+/vitest.config.js
+/scripts/benchmark-terminal-latency.js
+/scripts/measure-relay-latency.js
+/scripts/test-support/npm-registry.mjs
+
 # IDEs
 .vscode/
 .idea/
