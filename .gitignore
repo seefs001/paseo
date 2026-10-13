@@ -95,3 +95,6 @@ app.json
 *.heapsnapshot
 
 package-lock.json
+
+# Project-local Serena configuration and memories.
+.serena/

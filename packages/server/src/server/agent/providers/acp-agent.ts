@@ -79,6 +79,7 @@ import {
   type AgentPersistenceHandle,
   type AgentPromptInput,
   type AgentResumePurpose,
+  type AgentCreateSessionOptions,
   type AgentResumeSessionOptions,
   type AgentRunOptions,
   type AgentRunResult,
@@ -519,6 +520,7 @@ interface ACPAgentSessionOptions {
   extensionCommandsParser?: ACPExtensionCommandsParser;
   handle?: AgentPersistenceHandle;
   resumePurpose?: AgentResumePurpose;
+  configuredModelIds?: readonly string[];
   agentId?: string;
   launchEnv?: Record<string, string>;
   waitForInitialCommands?: boolean;
@@ -1009,6 +1011,7 @@ export class ACPAgentClient implements AgentClient {
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
+    options?: AgentCreateSessionOptions,
   ): Promise<AgentSession> {
     this.assertProvider(config);
     await this.prepareSession(config, launchContext);
@@ -1038,6 +1041,7 @@ export class ACPAgentClient implements AgentClient {
           supportsMcpServers:
             providerOptions.supportsMcpServers ?? this.capabilities.supportsMcpServers,
         },
+        configuredModelIds: options?.configuredModelIds,
         agentId: launchContext?.agentId,
         launchEnv: launchContext?.env,
         extensionCommandsParser: this.extensionCommandsParser,
@@ -1103,6 +1107,7 @@ export class ACPAgentClient implements AgentClient {
       },
       handle,
       resumePurpose: options?.purpose,
+      configuredModelIds: options?.configuredModelIds,
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
       extensionCommandsParser: this.extensionCommandsParser,
@@ -1786,6 +1791,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     configOptions: SessionConfigOption[],
   ) => SessionConfigOption[];
   private readonly configFeatureOptions: ACPConfigFeatureOption[];
+  private readonly configuredModelIds: ReadonlySet<string>;
   private readonly clientCapabilities?: ACPClientCapabilities;
   private readonly clientCapabilityMeta?: ACPClientCapabilityMeta;
   private readonly modeIdTransformer?: (modeId: string) => string | null;
@@ -1840,6 +1846,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private fallbackAssistantMessageId: string | null = null;
   private closed = false;
   private historyPending = false;
+  private historyRuntimeReleased = false;
   private replayingHistory = false;
   private bootstrapThreadEventPending = false;
   private readonly terminateProcess: ProcessTerminator;
@@ -1857,6 +1864,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.sessionResponseTransformer = options.sessionResponseTransformer;
     this.configOptionsTransformer = options.configOptionsTransformer;
     this.configFeatureOptions = options.configFeatureOptions ?? [];
+    this.configuredModelIds = new Set(options.configuredModelIds);
     this.clientCapabilities = options.clientCapabilities;
     this.clientCapabilityMeta = options.clientCapabilityMeta;
     this.modeIdTransformer = options.modeIdTransformer;
@@ -1963,9 +1971,36 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }
 
       await this.applyConfiguredOverrides();
+
+      if (this.resumePurpose === "history") {
+        await this.releaseHistoryRuntime();
+      }
     } catch (error) {
       await this.closeAfterInitializationFailure(error);
     }
+  }
+
+  // History resumes exist to replay persisted events into the canonical
+  // timeline; the provider process is released once replay finishes so
+  // archived agents hold no resident runtime. Interactive work goes through
+  // reloadAgentSession, which spawns a fresh process.
+  private async releaseHistoryRuntime(): Promise<void> {
+    const child = this.child;
+    if (child) {
+      const result = await this.terminateProcess(child, {
+        gracefulTimeoutMs: 2_000,
+        forceTimeoutMs: 2_000,
+      });
+      if (result === "kill-timeout") {
+        // Keep the child registered so close() can retry the shutdown.
+        this.logger.warn("ACP history resume could not release the provider process");
+        return;
+      }
+    }
+    this.historyRuntimeReleased = true;
+    this.connection = null;
+    this.child = null;
+    this.settleCommandsReady();
   }
 
   private async closeAfterInitializationFailure(error: unknown): Promise<never> {
@@ -2309,12 +2344,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
 
+    await this.setModelWithSelection({ modelId, selection: this.resolveModelSelection(modelId) });
+  }
+
+  private resolveModelSelection(modelId: string): ACPModelSelection {
     const selection = resolveACPModelSelection({
       modelId,
       availableModels: this.availableModels,
       configOptions: this.configOptions,
     });
-    await this.setModelWithSelection({ modelId, selection });
+    if (selection.availableModel || !this.configuredModelIds.has(modelId)) {
+      return selection;
+    }
+    // A model the user added in provider config is applied even when the agent does not advertise it.
+    return { ...selection, availableModel: { modelId, name: modelId } };
   }
 
   private async setModelWithSelection({
@@ -2330,11 +2373,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
     if (selection.configOption && selection.configChoice) {
       const modelOption = selection.configOption;
-      const response = await this.connection.setSessionConfigOption({
-        sessionId: this.sessionId,
-        configId: modelOption.id,
-        value: modelId,
-      });
+      const { connection, sessionId } = this;
+      const response = await this.runACPRequest(() =>
+        connection.setSessionConfigOption({
+          sessionId,
+          configId: modelOption.id,
+          value: modelId,
+        }),
+      );
       this.currentModel = this.applyConfigOptionResponse({
         response,
         configId: modelOption.id,
@@ -2351,21 +2397,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
 
-    if (selection.hasAvailableModels) {
-      if (!selection.availableModel) {
-        this.warnInvalidSelection(
-          modelId,
-          `is not a valid ${this.provider} model. Available options: ${this.availableModels
-            ?.map((model) => model.modelId)
-            .join(", ")}`,
-        );
-        return;
-      }
+    if (selection.hasAvailableModels && !selection.availableModel) {
+      this.warnInvalidSelection(
+        modelId,
+        `is not a valid ${this.provider} model. Available options: ${this.availableModels
+          ?.map((model) => model.modelId)
+          .join(", ")}`,
+      );
+      return;
+    }
 
-      if (typeof this.connection.unstable_setSessionModel !== "function") {
-        throw new Error(this.modelSelectionUnavailableMessage());
-      }
-
+    if (
+      selection.availableModel &&
+      typeof this.connection.unstable_setSessionModel === "function"
+    ) {
       try {
         await this.connection.unstable_setSessionModel({
           sessionId: this.sessionId,
@@ -2994,7 +3039,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     });
     const spawnError = rejectOnSpawnError(child, stderrChunks);
     child.once("exit", (code, signal) => {
-      if (this.closed) {
+      if (this.closed || this.historyRuntimeReleased) {
         return;
       }
       if (this.activeForegroundTurnId) {
@@ -3088,13 +3133,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const configuredModelId = this.config.model;
     let switchedModel = false;
     if (configuredModelId && configuredModelId !== this.currentModel) {
-      const selection = resolveACPModelSelection({
-        modelId: configuredModelId,
-        availableModels: this.availableModels,
-        configOptions: this.configOptions,
-      });
       try {
-        await this.setModelWithSelection({ modelId: configuredModelId, selection });
+        await this.setModelWithSelection({
+          modelId: configuredModelId,
+          selection: this.resolveModelSelection(configuredModelId),
+        });
         switchedModel = true;
       } catch (error) {
         if (!this.isModelSelectionUnavailableError(error)) {

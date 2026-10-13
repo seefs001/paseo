@@ -1,10 +1,11 @@
+import { buildAgentMessageDisplay } from "./agent-message-display.js";
 import type { ToolCallDetail, ToolCallTimelineItem } from "./agent-types.js";
 import { getPaseoToolLeafName, isPaseoToolName } from "./tool-name-normalization.js";
 import { stripCwdPrefix } from "./path-utils.js";
 
 export type ToolCallDisplayInput = Pick<
   ToolCallTimelineItem,
-  "name" | "status" | "error" | "metadata" | "detail"
+  "name" | "status" | "error" | "metadata" | "detail" | "agentMessage"
 > & {
   cwd?: string;
 };
@@ -213,6 +214,9 @@ function metadataString(
 }
 
 export function buildToolCallDisplayModel(input: ToolCallDisplayInput): ToolCallDisplayModel {
+  if (input.agentMessage) {
+    return { displayName: buildAgentMessageDisplay(input.agentMessage).displayName };
+  }
   const canonicalDisplay = buildCanonicalDetailDisplay(input);
   const unknownDetailOverride = buildUnknownDetailOverride(input);
   const displayName =
