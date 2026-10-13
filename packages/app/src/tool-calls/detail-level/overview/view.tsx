@@ -14,6 +14,8 @@ interface OverviewGroupProps {
   isLastInSequence: boolean;
   onExpandedChange: (groupId: string, expanded: boolean) => void;
   children: ReactNode;
+  label?: string;
+  isError?: boolean;
 }
 
 const TOOL_CALL_GROUP_MAX_HEIGHT = 400;
@@ -59,10 +61,14 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
   isLastInSequence,
   onExpandedChange,
   children,
+  label,
+  isError,
 }: OverviewGroupProps) {
   const scrollRef = useRef<ScrollView>(null);
   const isCompact = useIsCompactFormFactor();
   const aggregateSummary = useOverviewSummary(group.summary);
+  const title = label ?? aggregateSummary;
+  const secondaryLabel = label ? aggregateSummary : undefined;
   const scrollToLatest = useCallback(() => {
     scrollRef.current?.scrollToEnd({ animated: false });
   }, []);
@@ -93,14 +99,16 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
       <>
         <ExpandableBadge
           testID="tool-call-group"
-          label={aggregateSummary}
+          label={title}
+          secondaryLabel={secondaryLabel}
+          isError={isError}
           icon={Wrench}
           isLoading={group.isLoading}
           isExpanded={false}
           isLastInSequence={isLastInSequence}
           onToggle={toggle}
         />
-        <OverviewToolCallGroupSheet visible={expanded} summary={aggregateSummary} onClose={close}>
+        <OverviewToolCallGroupSheet visible={expanded} summary={title} onClose={close}>
           {children}
         </OverviewToolCallGroupSheet>
       </>
@@ -110,7 +118,9 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
   return (
     <ExpandableBadge
       testID="tool-call-group"
-      label={aggregateSummary}
+      label={title}
+      secondaryLabel={secondaryLabel}
+      isError={isError}
       icon={Wrench}
       isLoading={group.isLoading}
       isExpanded={expanded}

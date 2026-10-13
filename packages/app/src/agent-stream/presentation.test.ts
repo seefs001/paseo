@@ -94,6 +94,161 @@ function pluginData(items: StreamItem[]): unknown[] {
   return items.flatMap((item) => (item.kind === "plugin" ? [item.data] : []));
 }
 
+function piCall(
+  callId: string,
+  name: string,
+  options: {
+    parent?: string;
+    status?: "running" | "completed" | "failed";
+    calls?: unknown[];
+  } = {},
+): ToolCallItem {
+  return {
+    kind: "tool_call",
+    id: `tool-${callId}`,
+    timestamp: new Date("2026-01-01T00:00:00.000Z"),
+    payload: {
+      source: "agent",
+      data: {
+        provider: "pi",
+        callId,
+        name,
+        status: options.status ?? "completed",
+        error: options.status === "failed" ? "failed" : null,
+        metadata: options.parent ? { parentToolCallId: options.parent } : undefined,
+        detail: {
+          type: "unknown",
+          input: { code: "script" },
+          output: { details: { calls: options.calls ?? [] } },
+        },
+      },
+    },
+  };
+}
+
+describe("Pi codemode presentation", () => {
+  it.each(["detailed", "overview"] as const)(
+    "folds concurrent nested calls into their own parent in %s mode",
+    (level) => {
+      const present = createStreamPresentation();
+      const first = piCall("first", "codemode", { status: "running" });
+      const second = piCall("second", "codemode", { status: "running" });
+      const read = piCall("read", "read", { parent: "first", status: "running" });
+      const bash = piCall("bash", "bash", { parent: "second", status: "failed" });
+      const direct = piCall("direct", "bash");
+      const tail = [first, second, direct];
+      const head = [read, bash];
+      const result = present({ tail, head, level, isTurnActive: true, transform: undefined });
+      const visible =
+        level === "overview" ? result.groupsByHostId.get(first.id)!.run.calls : result.tail;
+      expect(visible).toEqual([
+        { ...first, nestedCalls: [read] },
+        { ...second, nestedCalls: [bash] },
+        direct,
+      ]);
+      expect(result.head).toEqual([]);
+      expect(tail).toEqual([first, second, direct]);
+      expect(head).toEqual([read, bash]);
+    },
+  );
+
+  it("reconstructs persisted summaries and prefers full live details without duplicates", () => {
+    const present = createStreamPresentation();
+    const parent = piCall("code", "codemode", {
+      calls: [
+        { id: "code/1", name: "read", args: '{"path":"a.ts"}', status: "ok" },
+        { id: "code/2", name: "bash", args: '{"command":"test"}', status: "error", error: "boom" },
+        { id: "code/3", name: "bash", args: '{"command":"sleep 10"}', status: "cancelled" },
+        { malformed: true },
+      ],
+    });
+    const live = piCall("code/1", "read", { parent: "code" });
+    const options = {
+      level: "detailed" as const,
+      isTurnActive: false,
+      transform: undefined,
+      head: [],
+    };
+    const restored = present({ ...options, tail: [parent] });
+    expect(restored.tail).toMatchObject([
+      {
+        id: parent.id,
+        nestedCalls: [
+          { payload: { data: { callId: "code/1", status: "completed" } } },
+          { payload: { data: { callId: "code/2", status: "failed", error: "boom" } } },
+          { payload: { data: { callId: "code/3", status: "canceled" } } },
+        ],
+      },
+    ]);
+    const updated = present({ ...options, tail: [parent, live] });
+    expect(updated.tail).toHaveLength(1);
+    const host = updated.tail[0];
+    if (host.kind !== "tool_call") throw new Error("Expected codemode host");
+    expect(host.nestedCalls).toHaveLength(3);
+    expect(host.nestedCalls?.[0]).toBe(live);
+  });
+
+  it("keeps overview loading while the script continues after its children complete", () => {
+    const present = createStreamPresentation();
+    const parent = piCall("code", "codemode", { status: "running" });
+    const child = piCall("code/1", "read", { parent: "code" });
+    const options = {
+      level: "overview" as const,
+      isTurnActive: true,
+      transform: undefined,
+      head: [],
+    };
+    const result = present({ ...options, tail: [parent, child] });
+    expect(result.groupsByHostId.get(parent.id)).toMatchObject({
+      isLoading: true,
+      summary: { otherToolCount: 1 },
+    });
+    const next = present({ ...options, tail: [parent, child, piCall("direct", "bash")] });
+    expect(next.groupsByHostId.get(parent.id)?.run.calls[0]).toBe(
+      result.groupsByHostId.get(parent.id)?.run.calls[0],
+    );
+  });
+
+  it("does not duplicate interrupted children whose persisted ids are placeholders", () => {
+    const parent = piCall("code", "codemode", {
+      status: "failed",
+      calls: [{ id: "code/?", name: "bash", args: "{}", status: "cancelled" }],
+    });
+    const child = piCall("code/1", "bash", { parent: "code", status: "failed" });
+    const present = createStreamPresentation();
+    const result = present({
+      level: "detailed",
+      tail: [parent, child],
+      head: [],
+      isTurnActive: false,
+      transform: undefined,
+    });
+    expect(result.tail).toEqual([{ ...parent, nestedCalls: [child] }]);
+  });
+
+  it("keeps orphans visible and ignores running placeholder ids", () => {
+    const present = createStreamPresentation();
+    const parent = piCall("code", "codemode", {
+      status: "running",
+      calls: [{ id: "code/?", name: "read", args: "{}", status: "running" }],
+    });
+    const live = piCall("code/1", "read", { parent: "code", status: "running" });
+    const orphan = piCall("orphan", "bash", { parent: "unloaded" });
+    const tail = [parent, live, orphan];
+    const options = { level: "detailed" as const, isTurnActive: true, transform: undefined, tail };
+    const result = present({ ...options, head: [] });
+    expect(result.tail).toEqual([{ ...parent, nestedCalls: [live] }, orphan]);
+    const text: StreamItem = {
+      kind: "assistant_message",
+      id: "text",
+      text: "Next",
+      timestamp: new Date(0),
+    };
+    const next = present({ ...options, head: [text] });
+    expect(next.tail).toBe(result.tail);
+  });
+});
+
 const presentationOptions = { level: "overview" as const, isTurnActive: true };
 
 function streamHarness(transform?: TimelineItemTransform) {

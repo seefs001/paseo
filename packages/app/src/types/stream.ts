@@ -767,6 +767,8 @@ export interface ToolCallItem {
   turnId?: string;
   timestamp: Date;
   payload: ToolCallPayload;
+  /** Presentation-only children; canonical timeline rows remain flat. */
+  nestedCalls?: readonly ToolCallItem[];
 }
 
 export type AgentToolCallItem = ToolCallItem & {

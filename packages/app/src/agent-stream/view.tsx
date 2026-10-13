@@ -64,6 +64,7 @@ import { QuestionFormCard } from "@/components/question-form-card";
 import { ToolCallSheetProvider } from "@/components/tool-call-sheet";
 import { createStreamPresentation, getStreamItemMessageId } from "./presentation";
 import { OverviewToolCallGroupView } from "@/tool-calls/detail-level/overview/view";
+import { buildOverviewGroup } from "@/tool-calls/detail-level/overview/model";
 import { type AgentStreamRenderModel, buildAgentStreamRenderModel } from "./model";
 import { resolveStreamRenderStrategy } from "./strategy-resolver";
 import { type StreamSegmentRenderers, type StreamViewportHandle } from "./strategy";
@@ -761,15 +762,60 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
 
     const renderSingleToolCallItem = useCallback(
-      (
+      function renderCall(
         item: Extract<StreamItem, { kind: "tool_call" }>,
         isLastInSequence: boolean,
         maxDetailHeight?: number,
-      ) => {
+      ): React.ReactNode {
         const { payload } = item;
 
         if (payload.source === "agent") {
           const data = payload.data;
+          const nestedCalls = item.nestedCalls;
+          const latest = nestedCalls?.at(-1);
+          if (nestedCalls && latest) {
+            const groupId = `${item.id}:nested`;
+            const expanded = expandedToolCallGroupIds.has(groupId);
+            const group = buildOverviewGroup({
+              id: groupId,
+              calls: nestedCalls,
+              latest,
+              isSealed: data.status !== "running",
+            });
+            group.isLoading ||= data.status === "running";
+            const hasFailedChild = nestedCalls.some(
+              (call) => call.payload.data.status === "failed",
+            );
+            return (
+              <OverviewToolCallGroupView
+                group={group}
+                label={data.name}
+                isError={data.status === "failed" || hasFailedChild}
+                expanded={expanded}
+                isLastInSequence={isLastInSequence}
+                onExpandedChange={setToolCallGroupExpanded}
+              >
+                {expanded ? (
+                  <>
+                    <ToolCallDetailsContent
+                      toolName={data.name}
+                      detail={data.detail}
+                      maxHeight={GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT}
+                    />
+                    {nestedCalls.map((call, index) => (
+                      <React.Fragment key={call.id}>
+                        {renderCall(
+                          call,
+                          index === nestedCalls.length - 1,
+                          GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT,
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </>
+                ) : null}
+              </OverviewToolCallGroupView>
+            );
+          }
 
           if (
             data.name === "speak" &&
@@ -815,7 +861,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           />
         );
       },
-      [context.cwd, setInlineDetailsExpanded, handleToolCallOpenFile],
+      [
+        context.cwd,
+        setInlineDetailsExpanded,
+        handleToolCallOpenFile,
+        expandedToolCallGroupIds,
+        setToolCallGroupExpanded,
+      ],
     );
 
     // Read through a stable event so live group updates do not change the renderer identity
@@ -828,6 +880,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         const group = getToolCallGroup(item.id);
         if (!group) {
           return renderSingleToolCallItem(item, layoutItem.isLastInToolSequence);
+        }
+        const single = group.run.calls.length === 1 ? group.run.calls[0] : undefined;
+        if (single?.nestedCalls) {
+          return renderSingleToolCallItem(single, layoutItem.isLastInToolSequence);
         }
         const expanded = expandedToolCallGroupIds.has(group.run.id);
         return (
