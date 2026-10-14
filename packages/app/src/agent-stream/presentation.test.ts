@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import type { AgentStreamEventPayload } from "@getpaseo/protocol/messages";
+import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { runPluginClientBundle, type PluginClientRuntime } from "@/plugins/evaluate";
 import type { InstalledPlugin } from "@/plugins/types";
 import {
@@ -101,6 +102,7 @@ function piCall(
     parent?: string;
     status?: "running" | "completed" | "failed";
     calls?: unknown[];
+    detail?: ToolCallDetail;
   } = {},
 ): ToolCallItem {
   return {
@@ -116,7 +118,7 @@ function piCall(
         status: options.status ?? "completed",
         error: options.status === "failed" ? "failed" : null,
         metadata: options.parent ? { parentToolCallId: options.parent } : undefined,
-        detail: {
+        detail: options.detail ?? {
           type: "unknown",
           input: { code: "script" },
           output: { details: { calls: options.calls ?? [] } },
@@ -151,6 +153,45 @@ describe("Pi codemode presentation", () => {
       expect(head).toEqual([read, bash]);
     },
   );
+
+  it("aggregates nested and direct tools in overview without counting the codemode wrapper", () => {
+    const present = createStreamPresentation();
+    const parent = piCall("code", "codemode");
+    const read = piCall("code/1", "read", {
+      parent: "code",
+      detail: { type: "read", filePath: "a.ts", content: "source" },
+    });
+    const command = piCall("code/2", "bash", {
+      parent: "code",
+      detail: { type: "shell", command: "pwd", output: "/workspace", exitCode: 0 },
+    });
+    const direct = piCall("direct", "read", {
+      detail: { type: "read", filePath: "b.ts", content: "other source" },
+    });
+    const options = {
+      tail: [parent, read, command, direct],
+      head: [],
+      isTurnActive: false,
+      transform: undefined,
+    };
+    const overview = present({ ...options, level: "overview" });
+    const group = overview.groupsByHostId.get(parent.id);
+    expect(group?.summary).toEqual({
+      readFileCount: 2,
+      commandCount: 1,
+      editedFileCount: 0,
+      searchCount: 0,
+      otherToolCount: 0,
+      paseoCallCount: 0,
+    });
+    expect(group?.run.calls).toEqual([{ ...parent, nestedCalls: [read, command] }, direct]);
+    expect(group?.isLoading).toBe(false);
+
+    const detailed = present({ ...options, level: "detailed" });
+    expect(detailed.tail).toEqual(group?.run.calls);
+    expect(detailed.head).toEqual([]);
+    expect(options.tail).toEqual([parent, read, command, direct]);
+  });
 
   it("reconstructs persisted summaries and prefers full live details without duplicates", () => {
     const present = createStreamPresentation();

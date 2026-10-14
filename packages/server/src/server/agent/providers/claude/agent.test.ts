@@ -2863,6 +2863,7 @@ describe("ClaudeAgentSession context window usage", () => {
           type: "usage_updated",
           provider: "claude",
           usage: {
+            contextWindowMaxTokens: 200_000,
             contextWindowUsedTokens: 150,
           },
         }),
@@ -2898,7 +2899,13 @@ describe("ClaudeAgentSession context window usage", () => {
 
   test("selected 1M Claude models seed active context window usage from the catalog", async () => {
     const session = await createSessionForTurns(
-      [[createInitMessage(), createMessageStartEvent(), createSuccessResult()]],
+      [
+        [
+          { ...createInitMessage(), model: "claude-sonnet-5[1m]" },
+          createMessageStartEvent(),
+          createSuccessResult(),
+        ],
+      ],
       { model: "claude-sonnet-5[1m]" },
     );
 
@@ -2938,6 +2945,7 @@ describe("ClaudeAgentSession context window usage", () => {
           type: "usage_updated",
           provider: "claude",
           usage: {
+            contextWindowMaxTokens: 200_000,
             contextWindowUsedTokens: 175,
           },
         }),
@@ -2980,6 +2988,7 @@ describe("ClaudeAgentSession context window usage", () => {
           type: "usage_updated",
           provider: "claude",
           usage: {
+            contextWindowMaxTokens: 200_000,
             contextWindowUsedTokens: 20_300,
           },
         }),
@@ -3021,6 +3030,7 @@ describe("ClaudeAgentSession context window usage", () => {
           type: "usage_updated",
           provider: "claude",
           usage: {
+            contextWindowMaxTokens: 200_000,
             contextWindowUsedTokens: 1_069,
           },
         }),
@@ -3084,6 +3094,7 @@ describe("ClaudeAgentSession context window usage", () => {
           type: "usage_updated",
           provider: "claude",
           usage: {
+            contextWindowMaxTokens: 200_000,
             contextWindowUsedTokens: 55,
           },
         }),
@@ -3093,6 +3104,7 @@ describe("ClaudeAgentSession context window usage", () => {
           type: "usage_updated",
           provider: "claude",
           usage: {
+            contextWindowMaxTokens: 200_000,
             contextWindowUsedTokens: 62,
           },
         }),
@@ -3130,6 +3142,7 @@ describe("ClaudeAgentSession context window usage", () => {
           type: "usage_updated",
           provider: "claude",
           usage: {
+            contextWindowMaxTokens: 200_000,
             contextWindowUsedTokens: 704,
           },
         }),
