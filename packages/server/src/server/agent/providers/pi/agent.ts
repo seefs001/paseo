@@ -98,6 +98,8 @@ const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = "medium";
 const PI_BINARY_COMMAND = process.env.PI_COMMAND ?? process.env.PI_ACP_PI_COMMAND ?? "pi";
 const PASEO_PI_TREE_EXTENSION_COMMAND = "paseo_tree";
 const PASEO_PI_CAPTURE_EXTENSION_COMMAND = "paseo_capture_entries";
+const PASEO_PI_FAST_MODE_EXTENSION_COMMAND = "paseo_fast_mode";
+const PI_FAST_MODE_APIS: readonly string[] = ["openai-responses", "openai-codex-responses"];
 const PASEO_PI_REWIND_ENTRY_TYPE = "paseo_rewind";
 const PASEO_PI_ENTRY_CAPTURE_MARKER = "PASEO_ENTRY_CAPTURE";
 const PASEO_PI_SUBMITTED_USER_ENTRY_MARKER = "PASEO_SUBMITTED_USER_ENTRY";
@@ -144,6 +146,7 @@ function mapPiSlashCommands(
     handledCommands.map((command) => [command.name, { ...command }]),
   );
   for (const command of commands) {
+    if (command.name === PASEO_PI_FAST_MODE_EXTENSION_COMMAND) continue;
     const knownCommand = mappedCommands.get(command.name);
     mappedCommands.set(command.name, {
       name: command.name,
@@ -187,6 +190,16 @@ export interface PiRpcAgentClientOptions {
   runtimeSettings?: ProviderRuntimeSettings;
   runtime?: PiRuntime;
   usagePollScheduler?: PiUsagePollScheduler;
+}
+
+class PiFeatureError extends Error {
+  constructor(
+    readonly featureId: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "PiFeatureError";
+  }
 }
 
 interface PiPromptPayload {
@@ -269,6 +282,7 @@ type PiMcpInjection =
   | { kind: "adapter"; configFile: PiTempFile };
 
 interface PiPaseoExtensionOptions {
+  fastModeEnabled: boolean;
   systemPrompt?: string;
   mcpServers?: Record<string, PiMcpServerConfig>;
 }
@@ -614,6 +628,7 @@ function createPiMcpConfigFile(
 }
 
 function createPiPaseoExtensionFile({
+  fastModeEnabled,
   systemPrompt,
   mcpServers = {},
 }: PiPaseoExtensionOptions): PiTempFile {
@@ -680,6 +695,13 @@ function createPiPaseoExtensionFile({
 	    pi.registerMcpServer(name, config);
 	  }
 	  const submittedUserMessages = [];
+	  let fastModeEnabled = ${JSON.stringify(fastModeEnabled)};
+	  const fastModeApis = ${JSON.stringify(PI_FAST_MODE_APIS)};
+	  // Pi has no service-tier RPC. Keep the override local to this session's requests.
+	  pi.on("before_provider_request", (event, ctx) => {
+	    if (!fastModeEnabled || !fastModeApis.includes(ctx.model?.api)) return;
+	    return { ...event.payload, service_tier: "priority" };
+	  });
 	  ${piExtensionRuntimeBridge}
 
 	  function emitSubmittedUserEntries(ctx) {
@@ -731,6 +753,25 @@ function createPiPaseoExtensionFile({
 	  pi.on("turn_end", async (_event, ctx) => {
 	    emitSubmittedUserEntries(ctx);
 	    emitEntryCapture(ctx, "turn_end");
+	  });
+
+	  pi.registerCommand("${PASEO_PI_FAST_MODE_EXTENSION_COMMAND}", {
+	    description: "Internal Paseo priority processing control",
+	    handler: async (args, ctx) => {
+	      const payload = decodePayload(args.trim());
+	      try {
+	        if (typeof payload.enabled !== "boolean") {
+	          throw new Error("Pi fast mode requires a boolean");
+	        }
+	        if (!fastModeApis.includes(ctx.model?.api)) {
+	          throw new Error("Pi fast mode is unavailable for this model");
+	        }
+	        fastModeEnabled = payload.enabled;
+	        emitCommandResult(ctx, payload.requestId, { ok: true, result: fastModeEnabled });
+	      } catch (error) {
+	        emitCommandResult(ctx, payload.requestId, { ok: false, error: String(error) });
+	      }
+	    },
 	  });
 
 	  pi.registerCommand("${PASEO_PI_CAPTURE_EXTENSION_COMMAND}", {
@@ -1658,6 +1699,59 @@ export class PiRpcAgentSession implements AgentSession {
     this.config.model = `${model.provider}/${model.id}`;
   }
 
+  get features(): AgentFeature[] {
+    if (!PI_FAST_MODE_APIS.includes(this.state.model?.api ?? "")) return [];
+    return [
+      {
+        type: "toggle",
+        id: "fast_mode",
+        label: "Fast",
+        description:
+          "Request priority processing. Availability and extra usage depend on the provider.",
+        tooltip: "Toggle priority processing",
+        icon: "zap",
+        value: this.config.featureValues?.fast_mode === true,
+      },
+    ];
+  }
+
+  async setFeature(featureId: string, value: unknown): Promise<void> {
+    if (featureId !== "fast_mode") {
+      throw new PiFeatureError(featureId, `Unknown Pi feature: ${featureId}`);
+    }
+    if (typeof value !== "boolean") {
+      throw new PiFeatureError(featureId, "Pi fast mode requires a boolean");
+    }
+    if (this.closed) {
+      throw new PiFeatureError(featureId, "Pi session is closed");
+    }
+    if (!PI_FAST_MODE_APIS.includes(this.state.model?.api ?? "")) {
+      throw new PiFeatureError(featureId, "Pi fast mode is unavailable for this model");
+    }
+    const requestId = randomUUID();
+    const resultPromise = this.waitForExtensionResult(requestId);
+    const payload = Buffer.from(JSON.stringify({ requestId, enabled: value })).toString(
+      "base64url",
+    );
+    try {
+      const [enabled] = await Promise.all([
+        resultPromise,
+        this.runtimeSession.prompt(`/${PASEO_PI_FAST_MODE_EXTENSION_COMMAND} ${payload}`),
+      ]);
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        fast_mode: z.boolean().parse(enabled),
+      };
+    } catch (error) {
+      // A rejected prompt never produces an extension result; release its pending request too.
+      this.rejectExtensionResult(
+        requestId,
+        new PiFeatureError(featureId, toDiagnosticErrorMessage(error)),
+      );
+      throw error;
+    }
+  }
+
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
     const thinkingLevel = normalizePiThinkingOption(thinkingOptionId) ?? DEFAULT_PI_THINKING_LEVEL;
     await this.runtimeSession.setThinkingLevel(thinkingLevel);
@@ -2547,6 +2641,7 @@ export class PiRpcAgentClient implements AgentClient {
     const mcp = await this.prepareMcpInjection(config.cwd, config.mcpServers, mcpEnv, runtime);
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
+      fastModeEnabled: config.featureValues?.fast_mode === true,
       systemPrompt: composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
       mcpServers: mcp?.kind === "builtin" ? mcp.servers : undefined,
     });
@@ -2559,7 +2654,7 @@ export class PiRpcAgentClient implements AgentClient {
         noSession: config.internal === true,
         env: launchContext?.env,
         mcpConfigPath: mcpConfigFile?.path,
-        extensionPaths: paseoExtension ? [paseoExtension.path] : undefined,
+        extensionPaths: [paseoExtension.path],
       });
     } catch (error) {
       mcpConfigFile?.cleanup();
@@ -2614,6 +2709,7 @@ export class PiRpcAgentClient implements AgentClient {
     );
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
+      fastModeEnabled: resumeConfig.config.featureValues?.fast_mode === true,
       systemPrompt: composeSystemPromptParts(
         resumeConfig.config.systemPrompt,
         resumeConfig.config.daemonAppendSystemPrompt,

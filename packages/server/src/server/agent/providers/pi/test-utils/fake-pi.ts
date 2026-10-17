@@ -107,6 +107,7 @@ export class FakePiSession implements PiRuntimeSession {
   readonly steerCalls: Array<{ message: string; imageCount: number }> = [];
   steerError: Error | null = null;
   readonly controlRequests: string[] = [];
+  readonly extensionCommands = new Map<string, (args: string) => Promise<void>>();
   clearQueueError: Error | null = null;
   readonly compactRequests: Array<{ customInstructions?: string }> = [];
   readonly setAutoCompactionRequests: boolean[] = [];
@@ -196,6 +197,8 @@ export class FakePiSession implements PiRuntimeSession {
         }
       }
     }
+    const [command, ...args] = message.split(" ");
+    await this.extensionCommands.get(command!)?.(args.join(" "));
     this.handleTreeNavigationCommand(message);
     this.handleEntryCaptureCommand(message);
     return this.promptAck;

@@ -122,6 +122,10 @@ function readUtf8File(pathname: string): string {
 
 type PaseoExtensionListener = (event: unknown, context?: unknown) => unknown;
 
+interface PaseoExtensionCommand {
+  handler: (args: string, context: unknown) => Promise<void>;
+}
+
 interface PiSessionEntry {
   type: "message";
   id: string;
@@ -161,23 +165,45 @@ function parseEntryCapture(notification: string): unknown {
 async function loadPaseoExtensionListeners(
   extensionPath: string,
   registerMcpServer: (name: string, config: unknown) => void = () => undefined,
+  registerCommand: (name: string, command: PaseoExtensionCommand) => void = () => undefined,
 ): Promise<Map<string, PaseoExtensionListener>> {
   const listeners = new Map<string, PaseoExtensionListener>();
   const extension = (await import(pathToFileURL(extensionPath).href)) as {
     default: (piApi: {
       on: (event: string, listener: PaseoExtensionListener) => void;
       events: { on: () => void };
-      registerCommand: () => void;
+      registerCommand: (name: string, command: PaseoExtensionCommand) => void;
       registerMcpServer: (name: string, config: unknown) => void;
     }) => void;
   };
   extension.default({
     on: (event, listener) => listeners.set(event, listener),
     events: { on: () => undefined },
-    registerCommand: () => undefined,
+    registerCommand,
     registerMcpServer,
   });
   return listeners;
+}
+
+async function connectPaseoExtension(pi: FakePi): Promise<Map<string, PaseoExtensionListener>> {
+  const runtime = pi.latestSession();
+  const extensionPath = pi.recordedLaunches.at(-1)!.extensionPaths![0]!;
+  return loadPaseoExtensionListeners(extensionPath, undefined, (name, command) => {
+    runtime.extensionCommands.set(`/${name}`, async (args) => {
+      await command.handler(args, {
+        model: runtime.state.model,
+        ui: {
+          notify: (message: string) =>
+            runtime.emit({
+              type: "extension_ui_request",
+              method: "notify",
+              id: "test-command-result",
+              message,
+            }),
+        },
+      });
+    });
+  });
 }
 
 async function readRegisteredMcpServers(extensionPath: string): Promise<Record<string, unknown>> {
@@ -1919,6 +1945,231 @@ describe("PiRpcAgentSession", () => {
     await expect(
       applyPaseoExtensionSystemPrompt(actualLaunch.extensionPaths[0]!, "Pi project prompt"),
     ).resolves.toBe("Pi project prompt\n\nAgent prompt\n\nDaemon prompt");
+  });
+
+  test.each(["openai-responses", "openai-codex-responses"])(
+    "requests priority processing for %s when Fast is enabled",
+    async (api) => {
+      const pi = new FakePi();
+      const model = { provider: "openai", id: "gpt-5.4", api };
+      pi.queueSessionSetup((runtime) => {
+        runtime.state = { ...runtime.state, model };
+      });
+      const session = await createClient(pi).createSession(
+        createConfig({ featureValues: { fast_mode: true } }),
+      );
+      onTestFinished(() => session.close());
+      expect(session.features).toEqual([
+        {
+          type: "toggle",
+          id: "fast_mode",
+          label: "Fast",
+          description:
+            "Request priority processing. Availability and extra usage depend on the provider.",
+          tooltip: "Toggle priority processing",
+          icon: "zap",
+          value: true,
+        },
+      ]);
+      const listeners = await loadPaseoExtensionListeners(
+        pi.recordedLaunches[0]!.extensionPaths![0]!,
+      );
+      const payload = { model: model.id, input: [], service_tier: "auto" };
+      expect(await listeners.get("before_provider_request")?.({ payload }, { model })).toEqual({
+        ...payload,
+        service_tier: "priority",
+      });
+      expect(payload.service_tier).toBe("auto");
+    },
+  );
+
+  test("toggles Fast through the generated Pi extension without changing thinking or the timeline", async () => {
+    const pi = new FakePi();
+    const model = { provider: "openai-codex", id: "gpt-5.4", api: "openai-codex-responses" };
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = { ...runtime.state, model };
+    });
+    const config = createConfig();
+    const session = await createClient(pi).createSession(config);
+    onTestFinished(() => session.close());
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    const listeners = await connectPaseoExtension(pi);
+    const payload = { model: model.id, input: [] };
+    const beforeRequest = () => listeners.get("before_provider_request")?.({ payload }, { model });
+
+    expect(session.features?.[0]?.value).toBe(false);
+    expect(await beforeRequest()).toBeUndefined();
+    await session.setFeature!("fast_mode", true);
+    expect(session.features?.[0]?.value).toBe(true);
+    expect(config.featureValues).toEqual({ fast_mode: true });
+    expect(await beforeRequest()).toEqual({ ...payload, service_tier: "priority" });
+
+    await session.setFeature!("fast_mode", false);
+    expect(session.features?.[0]?.value).toBe(false);
+    expect(config.featureValues).toEqual({ fast_mode: false });
+    expect(await beforeRequest()).toBeUndefined();
+    expect(pi.latestSession().setThinkingLevelRequests).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  test.each([undefined, "anthropic-messages", "openai-completions"])(
+    "does not offer or apply Fast for unsupported API %s",
+    async (api) => {
+      const pi = new FakePi();
+      const model = { provider: "custom", id: "other-model", api };
+      pi.queueSessionSetup((runtime) => {
+        runtime.state = { ...runtime.state, model };
+      });
+      const session = await createClient(pi).createSession(
+        createConfig({ featureValues: { fast_mode: true } }),
+      );
+      onTestFinished(() => session.close());
+      const listeners = await connectPaseoExtension(pi);
+      expect(session.features).toEqual([]);
+      expect(
+        await listeners.get("before_provider_request")?.(
+          { payload: { model: model.id } },
+          { model },
+        ),
+      ).toBeUndefined();
+      await expect(session.setFeature!("fast_mode", true)).rejects.toThrow(
+        "unavailable for this model",
+      );
+      expect(pi.latestSession().prompts).toEqual([]);
+    },
+  );
+
+  test("keeps the Fast preference while switching to an unsupported model and back", async () => {
+    const pi = new FakePi();
+    const model = { provider: "openai", id: "gpt-5.4", api: "openai-responses" };
+    const unsupported = { provider: "anthropic", id: "claude-sonnet", api: "anthropic-messages" };
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = { ...runtime.state, model };
+    });
+    const config = createConfig({ featureValues: { fast_mode: true } });
+    const session = await createClient(pi).createSession(config);
+    onTestFinished(() => session.close());
+    const runtime = pi.latestSession();
+    const listeners = await connectPaseoExtension(pi);
+    runtime.setModelResult = unsupported;
+    await session.setModel!("anthropic/claude-sonnet");
+    expect(session.features).toEqual([]);
+    expect(
+      await listeners.get("before_provider_request")?.(
+        { payload: {} },
+        { model: runtime.state.model },
+      ),
+    ).toBeUndefined();
+    expect(config.featureValues).toEqual({ fast_mode: true });
+
+    runtime.setModelResult = model;
+    await session.setModel!("openai/gpt-5.4");
+    expect(session.features?.[0]?.value).toBe(true);
+    expect(
+      await listeners.get("before_provider_request")?.(
+        { payload: {} },
+        { model: runtime.state.model },
+      ),
+    ).toEqual({ service_tier: "priority" });
+  });
+
+  test("restores the saved Fast preference when resuming a Pi session", async () => {
+    const pi = new FakePi();
+    const model = { provider: "openai", id: "gpt-5.4", api: "openai-responses" };
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = { ...runtime.state, model };
+    });
+    const config = createConfig({ featureValues: { other_feature: "keep" } });
+    const client = createClient(pi);
+    const session = await client.createSession(config);
+    onTestFinished(() => session.close());
+    await connectPaseoExtension(pi);
+    await session.setFeature!("fast_mode", true);
+    await session.setFeature!("fast_mode", true);
+    expect(config.featureValues).toEqual({ other_feature: "keep", fast_mode: true });
+    const handle = session.describePersistence()!;
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = { ...runtime.state, model };
+    });
+    const resumed = await client.resumeSession(handle, config);
+    onTestFinished(() => resumed.close());
+    const listeners = await connectPaseoExtension(pi);
+    expect(resumed.features?.[0]?.value).toBe(true);
+    expect(await listeners.get("before_provider_request")?.({ payload: {} }, { model })).toEqual({
+      service_tier: "priority",
+    });
+  });
+
+  test("keeps Fast disabled if Pi rejects a model change race", async () => {
+    const pi = new FakePi();
+    const model = { provider: "openai", id: "gpt-5.4", api: "openai-responses" };
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = { ...runtime.state, model };
+    });
+    const config = createConfig();
+    const session = await createClient(pi).createSession(config);
+    onTestFinished(() => session.close());
+    const listeners = await connectPaseoExtension(pi);
+    const runtime = pi.latestSession();
+    runtime.state = { ...runtime.state, model: RESTRICTED_THINKING_MODEL };
+    await expect(session.setFeature!("fast_mode", true)).rejects.toThrow(
+      "unavailable for this model",
+    );
+    expect(session.features?.[0]?.value).toBe(false);
+    expect(config.featureValues).toBeUndefined();
+    expect(
+      await listeners.get("before_provider_request")?.({ payload: {} }, { model }),
+    ).toBeUndefined();
+  });
+
+  test("keeps Fast disabled after a transport failure and allows retry", async () => {
+    const pi = new FakePi();
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = {
+        ...runtime.state,
+        model: { provider: "openai", id: "gpt-5.4", api: "openai-responses" },
+      };
+    });
+    const session = await createClient(pi).createSession(createConfig());
+    onTestFinished(() => session.close());
+    await connectPaseoExtension(pi);
+    const runtime = pi.latestSession();
+    runtime.holdNextPrompt();
+    const failure = expect(session.setFeature!("fast_mode", true)).rejects.toThrow(
+      "Pi disconnected",
+    );
+    await runtime.failHeldPrompt(new Error("Pi disconnected"));
+    await failure;
+    expect(session.features?.[0]?.value).toBe(false);
+    await session.setFeature!("fast_mode", true);
+    expect(session.features?.[0]?.value).toBe(true);
+  });
+
+  test("rejects invalid Fast controls and controls on closed sessions", async () => {
+    const pi = new FakePi();
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = {
+        ...runtime.state,
+        model: { provider: "openai", id: "gpt-5.4", api: "openai-responses" },
+      };
+    });
+    const session = await createClient(pi).createSession(createConfig());
+    await expect(session.setFeature!("other", true)).rejects.toThrow("Unknown Pi feature");
+    await expect(session.setFeature!("fast_mode", "true")).rejects.toThrow("requires a boolean");
+    await session.close();
+    await expect(session.setFeature!("fast_mode", true)).rejects.toThrow("Pi session is closed");
+    expect(pi.latestSession().prompts).toEqual([]);
+  });
+
+  test("does not expose the internal Fast control as a user slash command", async () => {
+    const { pi, session } = await createSession();
+    onTestFinished(() => session.close());
+    pi.latestSession().commands = [{ name: "paseo_fast_mode", source: "extension" }];
+    expect((await session.listCommands()).map((command) => command.name)).toEqual([
+      "compact",
+      "autocompact",
+    ]);
   });
 
   test("updates model and thinking through Pi runtime commands", async () => {
