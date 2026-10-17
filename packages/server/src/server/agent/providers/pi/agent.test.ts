@@ -3263,15 +3263,66 @@ describe("PiRpcAgentClient", () => {
     },
   );
 
-  test("lists no draft features without starting a Pi session", async () => {
+  test.each(["openai-responses", "openai-codex-responses"])(
+    "lists Fast in draft and profile configuration for %s",
+    async (api) => {
+      const pi = new FakePi();
+      pi.queueSessionSetup((runtime) => {
+        runtime.state = {
+          ...runtime.state,
+          model: { provider: "custom", id: "responses-model", api },
+        };
+      });
+      const client = createClient(pi);
+      const features = await client.listFeatures(
+        createConfig({ model: "custom/responses-model", featureValues: { fast_mode: true } }),
+      );
+      expect(features).toMatchObject([{ id: "fast_mode", type: "toggle", value: true }]);
+      expect(pi.recordedLaunches).toMatchObject([
+        { model: "custom/responses-model", noSession: true },
+      ]);
+      expect(pi.latestSession().closed).toBe(true);
+      expect(pi.latestSession().prompts).toEqual([]);
+    },
+  );
+
+  test("lists Fast disabled by default for Pi's resolved default model", async () => {
     const pi = new FakePi();
-    const client = createClient(pi);
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = {
+        ...runtime.state,
+        model: { provider: "openai", id: "gpt-5.4", api: "openai-responses" },
+      };
+    });
+    const features = await createClient(pi).listFeatures(createConfig());
+    expect(features).toMatchObject([{ id: "fast_mode", value: false }]);
+    expect(pi.recordedLaunches).toMatchObject([{ noSession: true }]);
+    expect(pi.latestSession().closed).toBe(true);
+  });
 
+  test("hides draft Fast when a model's actual API does not support it", async () => {
+    const pi = new FakePi();
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = {
+        ...runtime.state,
+        model: { provider: "openai", id: "custom-model", api: "openai-completions" },
+      };
+    });
     await expect(
-      client.listFeatures(createConfig({ model: "openrouter/test/model" })),
+      createClient(pi).listFeatures(createConfig({ model: "openai/custom-model" })),
     ).resolves.toEqual([]);
+    expect(pi.latestSession().closed).toBe(true);
+  });
 
-    expect(pi.recordedLaunches).toHaveLength(0);
+  test("closes the draft feature probe when Pi state discovery fails", async () => {
+    const pi = new FakePi();
+    pi.queueSessionSetup((runtime) => {
+      runtime.getStateError = new Error("Pi state unavailable");
+    });
+    await expect(createClient(pi).listFeatures(createConfig())).rejects.toThrow(
+      "Pi state unavailable",
+    );
+    expect(pi.latestSession().closed).toBe(true);
   });
 
   test("maps extension, prompt, and skill commands to Paseo slash commands", async () => {

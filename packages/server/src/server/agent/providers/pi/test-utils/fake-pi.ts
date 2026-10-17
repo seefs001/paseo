@@ -124,6 +124,7 @@ export class FakePiSession implements PiRuntimeSession {
   // The user entries on the current branch that getMessages() replays.
   contextUserEntries: FakePiUserEntry[] = [];
   abortRequested = false;
+  closed = false;
   readonly canceledExtensionUiRequests: string[] = [];
   readonly extensionUiResponses: Array<{
     id: string;
@@ -392,7 +393,9 @@ export class FakePiSession implements PiRuntimeSession {
     this.respondToExtensionUiRequest(id, { cancelled: true });
   }
 
-  async close(): Promise<void> {}
+  async close(): Promise<void> {
+    this.closed = true;
+  }
 
   emit(event: PiRuntimeEvent): void {
     for (const subscriber of this.subscribers) {

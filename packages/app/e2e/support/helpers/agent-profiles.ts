@@ -112,6 +112,7 @@ export async function seedModelProvider(input: {
   models: SeededProviderModel[];
   extends?: "claude" | "pi";
   command?: string[];
+  env?: Record<string, string>;
 }): Promise<HostSeed> {
   const client = await connectAgentProfilesClient();
   await client.patchDaemonConfig({
@@ -122,6 +123,7 @@ export async function seedModelProvider(input: {
         description: `${input.label} test provider`,
         enabled: true,
         command: input.command ?? ["node"],
+        env: input.env,
         models: input.models,
       },
     },

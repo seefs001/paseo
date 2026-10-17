@@ -192,6 +192,22 @@ export interface PiRpcAgentClientOptions {
   usagePollScheduler?: PiUsagePollScheduler;
 }
 
+function buildPiFeatures(state: PiSessionState, config: AgentSessionConfig): AgentFeature[] {
+  if (!PI_FAST_MODE_APIS.includes(state.model?.api ?? "")) return [];
+  return [
+    {
+      type: "toggle",
+      id: "fast_mode",
+      label: "Fast",
+      description:
+        "Request priority processing. Availability and extra usage depend on the provider.",
+      tooltip: "Toggle priority processing",
+      icon: "zap",
+      value: config.featureValues?.fast_mode === true,
+    },
+  ];
+}
+
 class PiFeatureError extends Error {
   constructor(
     readonly featureId: string,
@@ -1700,19 +1716,7 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   get features(): AgentFeature[] {
-    if (!PI_FAST_MODE_APIS.includes(this.state.model?.api ?? "")) return [];
-    return [
-      {
-        type: "toggle",
-        id: "fast_mode",
-        label: "Fast",
-        description:
-          "Request priority processing. Availability and extra usage depend on the provider.",
-        tooltip: "Toggle priority processing",
-        icon: "zap",
-        value: this.config.featureValues?.fast_mode === true,
-      },
-    ];
+    return buildPiFeatures(this.state, this.config);
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {
@@ -2834,8 +2838,19 @@ export class PiRpcAgentClient implements AgentClient {
     }
   }
 
-  async listFeatures(_config: AgentSessionConfig): Promise<AgentFeature[]> {
-    return [];
+  async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
+    const options = PiProviderOptionsSchema.parse(config.providerOptions ?? {});
+    // Resolve the selected model's actual API, including custom Pi providers, without saving a session.
+    const session = await this.resolveRuntime(options.rpcTimeoutMs).startSession({
+      cwd: config.cwd,
+      model: config.model,
+      noSession: true,
+    });
+    try {
+      return buildPiFeatures(await session.getState(), config);
+    } finally {
+      await session.close();
+    }
   }
 
   async listImportableSessions(
