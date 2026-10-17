@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import type {
   PiRuntime,
   PiRuntimeLaunch,
@@ -107,6 +108,8 @@ export class FakePiSession implements PiRuntimeSession {
   readonly steerCalls: Array<{ message: string; imageCount: number }> = [];
   steerError: Error | null = null;
   readonly controlRequests: string[] = [];
+  readonly htmlExports: string[] = [];
+  exportHtmlError: Error | null = null;
   readonly extensionCommands = new Map<string, (args: string) => Promise<void>>();
   clearQueueError: Error | null = null;
   readonly compactRequests: Array<{ customInstructions?: string }> = [];
@@ -347,6 +350,13 @@ export class FakePiSession implements PiRuntimeSession {
 
   async request(command: { type: string; [key: string]: unknown }): Promise<unknown> {
     switch (command.type) {
+      case "export_html": {
+        const outputPath = String(command.outputPath);
+        this.htmlExports.push(outputPath);
+        if (this.exportHtmlError) throw this.exportHtmlError;
+        await writeFile(outputPath, "<!doctype html><title>Pi session</title>");
+        return { path: outputPath };
+      }
       case "set_subagent_subscription":
         await this.setSubagentSubscription(command.level as FakePiSubagentSubscriptionLevel);
         return {};

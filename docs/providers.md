@@ -100,6 +100,13 @@ A provider that can register runtime tools directly should set `supportsNativePa
 
 Pi is a process-backed provider. Paseo requires the user to have the `pi` binary installed and talks to it through `pi --mode rpc`; the server package does not embed Pi's SDK/runtime packages.
 
+Paseo handles Pi `/share` through the live session's `export_html` RPC and the host's GitHub CLI.
+It always creates a secret gist, including when Pi's TUI is configured to use Radius; Radius sharing
+is not supported in Paseo. The host needs `gh` installed and authenticated. Secret gists are unlisted,
+not access-controlled: anyone with the link can read the exported conversation, including tool output.
+Sharing does not interrupt a running turn. Upload failures are shown in the timeline; after a timeout,
+check `gh gist list` before retrying because the remote upload may have completed.
+
 Pi has no service-tier RPC. Paseo's Fast toggle uses the generated integration extension to request
 `service_tier: "priority"` for `openai-responses` and `openai-codex-responses` models. This does not
 change thinking effort or Pi's global configuration. The preference survives model changes and

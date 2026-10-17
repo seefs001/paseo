@@ -66,6 +66,7 @@ import {
 } from "./history-mapper.js";
 import { materializeProviderImage } from "../provider-image-output.js";
 import { PiCliRuntime } from "./cli-runtime.js";
+import { sharePiSession, type PiShareGh } from "./share.js";
 import {
   createPiExtensionHost,
   piExtensionRuntimeBridge,
@@ -129,6 +130,12 @@ const PI_HANDLED_BUILTIN_SLASH_COMMANDS: AgentSlashCommand[] = [
     argumentHint: "[on|off|toggle]",
     kind: "command",
   },
+  {
+    name: "share",
+    description: "Share this session via a secret GitHub gist (anyone with the link can view)",
+    argumentHint: "",
+    kind: "command",
+  },
 ];
 
 function mapPiCommandKind(source: PiRpcSlashCommand["source"]): AgentSlashCommandKind {
@@ -190,6 +197,7 @@ export interface PiRpcAgentClientOptions {
   runtimeSettings?: ProviderRuntimeSettings;
   runtime?: PiRuntime;
   usagePollScheduler?: PiUsagePollScheduler;
+  shareGh?: PiShareGh;
 }
 
 function buildPiFeatures(state: PiSessionState, config: AgentSessionConfig): AgentFeature[] {
@@ -273,6 +281,7 @@ interface PiRpcAgentSessionOptions {
   extensionTimeoutMs?: number;
   logger: Logger;
   usagePollScheduler?: PiUsagePollScheduler;
+  shareGh?: PiShareGh;
 }
 
 interface PiResumeConfig {
@@ -1258,6 +1267,8 @@ export class PiRpcAgentSession implements AgentSession {
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
+  private sharing = false;
+  private readonly shareGh?: PiShareGh;
   private commandCache: AgentSlashCommand[] | null = null;
   private state: PiSessionState;
   private readonly currentModeId: string | null;
@@ -1285,6 +1296,7 @@ export class PiRpcAgentSession implements AgentSession {
 
   constructor(options: PiRpcAgentSessionOptions) {
     this.runtimeSession = options.runtimeSession;
+    this.shareGh = options.shareGh;
     this.config = options.config;
     this.state = options.initialState;
     this.config.thinkingOptionId = this.state.thinkingLevel;
@@ -1698,6 +1710,13 @@ export class PiRpcAgentSession implements AgentSession {
         },
       };
     }
+    if (commandName === "share") {
+      return {
+        run: async ({ emit }) => {
+          await this.executeShareCommand(parsed.args, emit);
+        },
+      };
+    }
     return null;
   }
 
@@ -1882,6 +1901,45 @@ export class PiRpcAgentSession implements AgentSession {
     const rawArgs =
       firstWhitespaceIdx === -1 ? "" : withoutPrefix.slice(firstWhitespaceIdx + 1).trim();
     return rawArgs.length > 0 ? { commandName, args: rawArgs } : { commandName };
+  }
+
+  private async executeShareCommand(
+    args: string | undefined,
+    emit: (event: AgentStreamEvent) => void,
+  ): Promise<void> {
+    const reply = (text: string): void => {
+      emit({
+        type: "timeline",
+        provider: this.provider,
+        item: { type: "assistant_message", text },
+      });
+    };
+    if (args) {
+      reply(
+        "[Error] Usage: /share (uploads to a secret GitHub gist; anyone with the link can view)",
+      );
+      return;
+    }
+    if (this.sharing) {
+      reply("[Error] A Pi session share is already running. Wait for its result before retrying.");
+      return;
+    }
+    this.sharing = true;
+    reply("Sharing session to a secret GitHub gist. Anyone with the link can view it...");
+    try {
+      const { viewerUrl, gistUrl } = await sharePiSession({
+        runtimeSession: this.runtimeSession,
+        cwd: this.config.cwd,
+        signal: this.closeController.signal,
+        runGh: this.shareGh,
+      });
+      reply(`Share URL: ${viewerUrl}\n\nGist: ${gistUrl}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      reply(`[Error] Failed to share Pi session: ${message}`);
+    } finally {
+      this.sharing = false;
+    }
   }
 
   private async executeCompactCommand(
@@ -2622,6 +2680,7 @@ export class PiRpcAgentClient implements AgentClient {
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly runtime?: PiRuntime;
   private readonly usagePollScheduler?: PiUsagePollScheduler;
+  private readonly shareGh?: PiShareGh;
 
   constructor(options: PiRpcAgentClientOptions) {
     this.provider = PI_PROVIDER;
@@ -2630,6 +2689,7 @@ export class PiRpcAgentClient implements AgentClient {
     this.runtimeSettings = options.runtimeSettings;
     this.runtime = options.runtime;
     this.usagePollScheduler = options.usagePollScheduler;
+    this.shareGh = options.shareGh;
   }
 
   async createSession(
@@ -2675,6 +2735,7 @@ export class PiRpcAgentClient implements AgentClient {
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
+        shareGh: this.shareGh,
       });
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
@@ -2750,6 +2811,7 @@ export class PiRpcAgentClient implements AgentClient {
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
+        shareGh: this.shareGh,
       });
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
