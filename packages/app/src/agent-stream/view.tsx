@@ -766,10 +766,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             const hasFailedChild = nestedCalls.some(
               (call) => call.payload.data.status === "failed",
             );
+            const isCodemode = data.name === "codemode";
+            // The codemode result is the script dump. Children carry the calls,
+            // and only the script's own text stays on the parent.
+            const showCodemodeOutput = isCodemode && data.detail.type === "plain_text";
             return (
               <OverviewToolCallGroupView
                 group={group}
-                label={data.name}
+                label={isCodemode ? "Script" : data.name}
                 isError={data.status === "failed" || hasFailedChild}
                 expanded={expanded}
                 isLastInSequence={isLastInSequence}
@@ -777,11 +781,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               >
                 {expanded ? (
                   <>
-                    <ToolCallDetailsContent
-                      toolName={data.name}
-                      detail={data.detail}
-                      maxHeight={GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT}
-                    />
+                    {isCodemode ? null : (
+                      <ToolCallDetailsContent
+                        toolName={data.name}
+                        detail={data.detail}
+                        maxHeight={GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT}
+                      />
+                    )}
                     {nestedCalls.map((call, index) => (
                       <React.Fragment key={call.id}>
                         {renderCall(
@@ -791,6 +797,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                         )}
                       </React.Fragment>
                     ))}
+                    {showCodemodeOutput ? (
+                      <ToolCallDetailsContent
+                        toolName={data.name}
+                        detail={data.detail}
+                        maxHeight={GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT}
+                      />
+                    ) : null}
                   </>
                 ) : null}
               </OverviewToolCallGroupView>

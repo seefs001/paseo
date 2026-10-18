@@ -1,21 +1,95 @@
 import { describe, expect, test } from "vitest";
 
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
-import { streamPiHistory, type PiCapturedUserMessageEntry } from "./history-mapper.js";
+import {
+  streamPiHistory,
+  type PiCapturedUserMessageEntry,
+  type PiHistoryMarker,
+} from "./history-mapper.js";
 import type { PiAgentMessage } from "./rpc-types.js";
 
 async function collectHistory(
   messages: PiAgentMessage[],
   userEntries: PiCapturedUserMessageEntry[] = [],
+  markers: PiHistoryMarker[] = [],
 ): Promise<AgentStreamEvent[]> {
   const events: AgentStreamEvent[] = [];
-  for await (const event of streamPiHistory("pi", messages, userEntries)) {
+  for await (const event of streamPiHistory("pi", messages, userEntries, {}, undefined, markers)) {
     events.push(event);
   }
   return events;
 }
 
 describe("Pi history mapper", () => {
+  test("inserts web search and fetch cards where the branch recorded them", async () => {
+    const events = await collectHistory(
+      [
+        { role: "user", content: "look this up" },
+        { role: "assistant", content: [{ type: "text", text: "done" }] },
+      ],
+      [],
+      [
+        { kind: "message" },
+        {
+          kind: "web",
+          id: "search-1",
+          search: {
+            queries: [
+              { query: "paseo share", results: [{ title: "Docs", url: "https://paseo.sh" }] },
+            ],
+          },
+        },
+        { kind: "message" },
+        {
+          kind: "web",
+          id: "fetch-1",
+          fetch: { pages: [{ url: "https://paseo.sh/docs", title: "Paseo" }] },
+        },
+      ],
+    );
+
+    expect(events.map((event) => event.item)).toEqual([
+      { type: "user_message", text: "look this up" },
+      {
+        type: "tool_call",
+        callId: "search-1:search:0",
+        name: "web_search",
+        status: "completed",
+        detail: {
+          type: "search",
+          query: "paseo share",
+          toolName: "web_search",
+          webResults: [{ title: "Docs", url: "https://paseo.sh" }],
+        },
+        error: null,
+      },
+      {
+        type: "assistant_message",
+        text: "done",
+        messageId: "pi-history-assistant-1",
+      },
+      {
+        type: "tool_call",
+        callId: "fetch-1:fetch:0",
+        name: "fetch_content",
+        status: "completed",
+        detail: { type: "fetch", url: "https://paseo.sh/docs", result: "Paseo" },
+        error: null,
+      },
+    ]);
+  });
+
+  test("keeps replaying messages when branch markers do not line up", async () => {
+    const events = await collectHistory(
+      [{ role: "user", content: "still here" }],
+      [],
+      [{ kind: "message" }, { kind: "message" }],
+    );
+    expect(events.map((event) => event.item)).toEqual([
+      { type: "user_message", text: "still here" },
+    ]);
+  });
+
   test("renders visible custom messages as completed tools and hides private context", async () => {
     const events = await collectHistory([
       {

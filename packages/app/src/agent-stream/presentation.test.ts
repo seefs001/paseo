@@ -267,6 +267,122 @@ describe("Pi codemode presentation", () => {
     expect(result.tail).toEqual([{ ...parent, nestedCalls: [child] }]);
   });
 
+  it("restores read and shell cards from codemode args, including a truncated command", () => {
+    const calls = [
+      {
+        id: "code/1",
+        name: "read",
+        args: '{"path":"src/a.ts","offset":10,"limit":20}',
+        status: "ok",
+      },
+      {
+        id: "code/2",
+        name: "bash",
+        args: '{"command":"git status --short && echo done',
+        status: "ok",
+      },
+      {
+        id: "code/3",
+        name: "scopeweaver_get_task",
+        args: '{"task_id":"42"}',
+        status: "ok",
+      },
+    ];
+    const parent = piCall("code", "codemode", {
+      detail: {
+        type: "unknown",
+        input: { code: "script" },
+        output: {
+          content: [
+            {
+              type: "text",
+              text: "Script completed\nWall time 0.2 seconds\nOutput:\n==> text 1/1 <==\nfound it",
+            },
+          ],
+          details: {
+            calls,
+            fullOutputPath: "/tmp/codemode-full.txt",
+          },
+        },
+      },
+    });
+    const present = createStreamPresentation();
+    const result = present({
+      level: "detailed",
+      tail: [parent],
+      head: [],
+      isTurnActive: false,
+      transform: undefined,
+    });
+    const host = result.tail[0];
+    if (host?.kind !== "tool_call" || host.payload.source !== "agent") {
+      throw new Error("Expected codemode host");
+    }
+    expect(host.payload.data.detail).toEqual({
+      type: "plain_text",
+      label: "Output",
+      text: "==> text 1/1 <==\nfound it",
+    });
+    expect(
+      host.nestedCalls?.map((call) => {
+        if (call.payload.source !== "agent") throw new Error("Expected an agent tool call");
+        return call.payload.data;
+      }),
+    ).toEqual([
+      {
+        provider: "pi",
+        callId: "code/1",
+        name: "read",
+        status: "completed",
+        error: null,
+        detail: { type: "read", filePath: "src/a.ts", offset: 10, limit: 20 },
+        metadata: { parentToolCallId: "code" },
+      },
+      {
+        provider: "pi",
+        callId: "code/2",
+        name: "bash",
+        status: "completed",
+        error: null,
+        detail: { type: "shell", command: "git status --short && echo done", exitCode: null },
+        metadata: { parentToolCallId: "code" },
+      },
+      {
+        provider: "pi",
+        callId: "code/3",
+        name: "scopeweaver_get_task",
+        status: "completed",
+        error: null,
+        detail: { type: "unknown", input: { task_id: "42" }, output: null },
+        metadata: { parentToolCallId: "code", summary: "42" },
+      },
+      {
+        provider: "pi",
+        callId: "code:full-output",
+        name: "read",
+        status: "completed",
+        error: null,
+        detail: { type: "read", filePath: "/tmp/codemode-full.txt" },
+        metadata: { parentToolCallId: "code" },
+      },
+    ]);
+    const overview = createStreamPresentation()({
+      level: "overview",
+      tail: [parent],
+      head: [],
+      isTurnActive: false,
+      transform: undefined,
+    });
+    expect(overview.groupsByHostId.get(parent.id)?.summary).toEqual({
+      readFileCount: 2,
+      commandCount: 1,
+      editedFileCount: 0,
+      searchCount: 0,
+      otherToolCount: 1,
+      paseoCallCount: 0,
+    });
+  });
+
   it("keeps orphans visible and ignores running placeholder ids", () => {
     const present = createStreamPresentation();
     const parent = piCall("code", "codemode", {
@@ -287,6 +403,53 @@ describe("Pi codemode presentation", () => {
     };
     const next = present({ ...options, head: [text] });
     expect(next.tail).toBe(result.tail);
+  });
+});
+
+function thought(id: string, text: string, status: "ready" | "loading" = "ready"): StreamItem {
+  return {
+    kind: "thought",
+    id,
+    text,
+    timestamp: new Date(0),
+    status,
+  };
+}
+
+describe("short reasoning before a tool", () => {
+  it("hides a ready note shorter than 120 characters and keeps the other cases", () => {
+    const tool = piCall("read", "read");
+    const answer: StreamItem = {
+      kind: "assistant_message",
+      id: "answer",
+      text: "done",
+      timestamp: new Date(0),
+    };
+    const result = createStreamPresentation()({
+      level: "detailed",
+      isTurnActive: false,
+      transform: undefined,
+      tail: [
+        thought("short", "checking the mapper"),
+        tool,
+        thought("kept", "checking the mapper"),
+        answer,
+        thought("long", "x".repeat(120)),
+        piCall("bash", "bash"),
+        thought("live", "still thinking", "loading"),
+        piCall("edit", "edit"),
+      ],
+      head: [],
+    });
+    expect(result.tail.map((item) => item.id)).toEqual([
+      "tool-read",
+      "kept",
+      "answer",
+      "long",
+      "tool-bash",
+      "live",
+      "tool-edit",
+    ]);
   });
 });
 

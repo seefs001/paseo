@@ -1887,8 +1887,88 @@ describe("PiRpcAgentSession", () => {
           { id: "one", parentId: null, text: "first" },
           { id: "two", parentId: "one-reply", text: "second" },
         ],
+        contextMarkers: [
+          { kind: "message" },
+          { kind: "message" },
+          { kind: "message" },
+          { kind: "message" },
+        ],
       },
     ]);
+  });
+
+  test("captures web search cards on the branch and skips codemode storage", async () => {
+    const pi = new FakePi();
+    const session = await createClient(pi).createSession(createConfig());
+    onTestFinished(() => session.close());
+    const listeners = await loadPaseoExtensionListeners(pi.recordedLaunches[0]!.extensionPaths[0]!);
+    const entries = [
+      piUserEntry({ id: "one", parentId: null, text: "search" }),
+      {
+        type: "custom",
+        customType: "codemode-store",
+        id: "store",
+        parentId: "one",
+        data: { set: {}, delete: [] },
+      },
+      {
+        type: "custom",
+        customType: "web-search-results",
+        id: "search-1",
+        parentId: "store",
+        data: {
+          type: "search",
+          queries: [
+            {
+              query: "paseo",
+              answer: "long answer",
+              results: [{ title: "Paseo", url: "https://paseo.sh", snippet: "hidden" }],
+            },
+          ],
+        },
+      },
+      {
+        type: "custom",
+        customType: "web-search-results",
+        id: "fetch-1",
+        parentId: "search-1",
+        data: {
+          type: "fetch",
+          urlMetadata: [{ url: "https://paseo.sh", title: "Paseo", error: "timed out" }],
+        },
+      },
+      piAssistantEntry("reply", "fetch-1"),
+    ];
+    const notifications: string[] = [];
+    await listeners.get("session_start")?.(
+      {},
+      {
+        sessionManager: {
+          getEntries: () => entries,
+          buildContextEntries: () => entries,
+        },
+        ui: { notify: (message: string) => notifications.push(message) },
+      },
+    );
+
+    expect(parseEntryCapture(notifications[0] ?? "")).toMatchObject({
+      contextMarkers: [
+        { kind: "message" },
+        {
+          kind: "web",
+          id: "search-1",
+          search: {
+            queries: [{ query: "paseo", results: [{ title: "Paseo", url: "https://paseo.sh" }] }],
+          },
+        },
+        {
+          kind: "web",
+          id: "fetch-1",
+          fetch: { pages: [{ url: "https://paseo.sh", title: "Paseo", error: "timed out" }] },
+        },
+        { kind: "message" },
+      ],
+    });
   });
 
   test("appends agent and daemon prompts after Pi's discovered system prompt", async () => {

@@ -61,8 +61,10 @@ import {
 } from "../diagnostic-utils.js";
 import {
   getUserMessageText,
+  parsePiHistoryMarkers,
   streamPiHistory,
   type PiCapturedUserMessageEntry,
+  type PiHistoryMarker,
 } from "./history-mapper.js";
 import { materializeProviderImage } from "../provider-image-output.js";
 import { PiCliRuntime } from "./cli-runtime.js";
@@ -693,6 +695,67 @@ function createPiPaseoExtensionFile({
 	    };
 	}
 
+	function clipText(value, max) {
+	  if (typeof value !== "string") return undefined;
+	  const trimmed = value.trim();
+	  if (!trimmed) return undefined;
+	  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+	}
+
+	function toContextMarkers(entries) {
+	  const markers = [];
+	  for (const entry of entries) {
+	    if (entry.type === "message" && entry.message && typeof entry.message.role === "string") {
+	      markers.push({ kind: "message" });
+	      continue;
+	    }
+	    if (entry.type !== "custom" || entry.customType !== "web-search-results" || !entry.data) {
+	      continue;
+	    }
+	    const data = entry.data;
+	    if (data.type === "search" && Array.isArray(data.queries)) {
+	      const queries = [];
+	      for (const query of data.queries) {
+	        const text = clipText(query && query.query, 300);
+	        if (!text) continue;
+	        const results = [];
+	        if (Array.isArray(query.results)) {
+	          for (const result of query.results) {
+	            const title = clipText(result && result.title, 160);
+	            const url = result && typeof result.url === "string" ? result.url : undefined;
+	            if (!title || !url) continue;
+	            results.push({ title, url });
+	            if (results.length === 5) break;
+	          }
+	        }
+	        queries.push(results.length > 0 ? { query: text, results } : { query: text });
+	        if (queries.length === 4) break;
+	      }
+	      if (queries.length > 0) {
+	        markers.push({ kind: "web", id: String(entry.id), search: { queries } });
+	      }
+	      continue;
+	    }
+	    if (data.type === "fetch" && Array.isArray(data.urlMetadata)) {
+	      const pages = [];
+	      for (const page of data.urlMetadata) {
+	        if (!page || typeof page.url !== "string" || !page.url.trim()) continue;
+	        const item = { url: page.url };
+	        const title = clipText(page.title, 160);
+	        const error = clipText(page.error, 160);
+	        if (title) item.title = title;
+	        if (error) item.error = error;
+	        pages.push(item);
+	        if (pages.length === 6) break;
+	      }
+	      if (pages.length > 0) {
+	        markers.push({ kind: "web", id: String(entry.id), fetch: { pages } });
+	      }
+	    }
+	  }
+	  return markers;
+	}
+
 	function emitEntryCapture(ctx, reason, requestId) {
 	  ctx.ui.notify(
 	    "${PASEO_PI_ENTRY_CAPTURE_MARKER} " +
@@ -703,6 +766,7 @@ function createPiPaseoExtensionFile({
 	        treeEntries: toCapturedUserEntries(ctx.sessionManager.getEntries()),
 	        // The entries getMessages() replays, so the nth one is the nth replayed user message.
 	        contextEntries: toCapturedUserEntries(ctx.sessionManager.buildContextEntries()),
+	        contextMarkers: toContextMarkers(ctx.sessionManager.buildContextEntries()),
 	      }),
 	    "info",
 	  );
@@ -1262,6 +1326,7 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly pendingSteerSubmissions: PiPendingSteerSubmission[] = [];
   currentLeafOverrideId: string | null | undefined;
   private readonly contextUserEntries: PiCapturedEntry[] = [];
+  private contextMarkers: PiHistoryMarker[] = [];
   private readonly treeUserEntriesById = new Map<string, PiCapturedEntry>();
   private readonly pendingExtensionResults = new Map<string, PendingExtensionResult>();
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
@@ -1497,6 +1562,7 @@ export class PiRpcAgentSession implements AgentSession {
       {},
       // At most eight 2 MiB child files per replay; later cards retain their summaries.
       createPiExtensionHost(this.logger, undefined, 16 * 1024 * 1024),
+      this.contextMarkers,
       this.closeController.signal,
     );
   }
@@ -2094,8 +2160,10 @@ export class PiRpcAgentSession implements AgentSession {
   private recordCapturedUserEntries(input: {
     treeEntries: PiCapturedEntry[];
     contextEntries: PiCapturedEntry[];
+    contextMarkers: PiHistoryMarker[];
   }): void {
     this.contextUserEntries.splice(0, this.contextUserEntries.length, ...input.contextEntries);
+    this.contextMarkers = input.contextMarkers;
     this.treeUserEntriesById.clear();
     for (const entry of input.treeEntries) {
       this.treeUserEntriesById.set(entry.id, entry);
@@ -2137,6 +2205,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.recordCapturedUserEntries({
       treeEntries: parseCapturedEntries(payload.treeEntries),
       contextEntries: parseCapturedEntries(payload.contextEntries),
+      contextMarkers: parsePiHistoryMarkers(payload.contextMarkers),
     });
     if (typeof payload.requestId === "string") {
       this.resolveExtensionResult(payload.requestId, undefined);

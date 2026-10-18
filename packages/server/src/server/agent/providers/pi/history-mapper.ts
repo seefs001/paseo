@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { mapCustomMessageToToolCall } from "../custom-message.js";
 import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
 import {
@@ -18,6 +19,60 @@ import {
 export interface PiCapturedUserMessageEntry {
   id: string;
   text: string;
+}
+
+const PiHistoryMarkerSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("message") }),
+  z.object({
+    kind: z.literal("web"),
+    id: z.string().min(1),
+    search: z
+      .object({
+        queries: z.array(
+          z.object({
+            query: z.string(),
+            results: z.array(z.object({ title: z.string(), url: z.string() })).optional(),
+          }),
+        ),
+      })
+      .optional(),
+    fetch: z
+      .object({
+        pages: z.array(
+          z.object({
+            url: z.string(),
+            title: z.string().optional(),
+            error: z.string().optional(),
+          }),
+        ),
+      })
+      .optional(),
+  }),
+]);
+
+export type PiHistoryMarker = z.infer<typeof PiHistoryMarkerSchema>;
+type PiWebHistoryMarker = Extract<PiHistoryMarker, { kind: "web" }>;
+
+export function parsePiHistoryMarkers(value: unknown): PiHistoryMarker[] {
+  if (!Array.isArray(value)) return [];
+  const markers: PiHistoryMarker[] = [];
+  for (const entry of value) {
+    const parsed = PiHistoryMarkerSchema.safeParse(entry);
+    if (parsed.success) markers.push(parsed.data);
+  }
+  return markers;
+}
+
+function historyMarkersMatch(
+  messages: readonly PiAgentMessage[],
+  markers: readonly PiHistoryMarker[],
+): boolean {
+  if (markers.length === 0) return false;
+  let messageMarkers = 0;
+  for (const marker of markers) {
+    if (marker.kind === "message") messageMarkers += 1;
+  }
+  return messageMarkers === messages.length;
 }
 
 export interface PiHistoryMapperHooks {
@@ -71,31 +126,40 @@ export class PiHistoryMapper {
     private readonly extensionHost: PiExtensionHost = createPiExtensionHost(),
   ) {}
 
-  mapMessages(messages: readonly PiAgentMessage[]): AgentStreamEvent[] {
-    const events: AgentStreamEvent[] = [];
-
-    for (const message of messages) {
-      switch (message.role) {
-        case "user":
-          events.push(...this.mapUserMessage(message));
-          break;
-        case "custom":
-          events.push(...this.mapCustomMessage(message));
-          break;
-        case "assistant":
-          events.push(...this.mapAssistantMessage(message));
-          break;
-        case "toolResult": {
-          events.push(...this.mapToolResultMessage(message));
-          break;
-        }
-        case "bashExecution":
-          events.push(this.mapBashExecutionMessage(message));
-          break;
-      }
+  mapMessages(
+    messages: readonly PiAgentMessage[],
+    markers: readonly PiHistoryMarker[] = [],
+  ): AgentStreamEvent[] {
+    if (!historyMarkersMatch(messages, markers)) {
+      return messages.flatMap((message) => this.mapMessage(message));
     }
-
+    const events: AgentStreamEvent[] = [];
+    let messageIndex = 0;
+    for (const marker of markers) {
+      if (marker.kind === "message") {
+        const message = messages[messageIndex];
+        messageIndex += 1;
+        if (message) events.push(...this.mapMessage(message));
+        continue;
+      }
+      events.push(...webHistoryEvents(this.provider, marker));
+    }
     return events;
+  }
+
+  private mapMessage(message: PiAgentMessage): AgentStreamEvent[] {
+    switch (message.role) {
+      case "user":
+        return this.mapUserMessage(message);
+      case "custom":
+        return this.mapCustomMessage(message);
+      case "assistant":
+        return this.mapAssistantMessage(message);
+      case "toolResult":
+        return this.mapToolResultMessage(message);
+      case "bashExecution":
+        return [this.mapBashExecutionMessage(message)];
+    }
   }
 
   async hydrate(): Promise<AgentStreamEvent[]> {
@@ -294,10 +358,11 @@ export async function* streamPiHistory(
   hooks: PiHistoryMapperHooks = {},
   // At most eight 2 MiB child files per replay; remaining cards keep their summaries.
   extensionHost: PiExtensionHost = createPiExtensionHost(undefined, undefined, 16 * 1024 * 1024),
+  markers: readonly PiHistoryMarker[] = [],
   signal?: AbortSignal,
 ): AsyncGenerator<AgentStreamEvent> {
   const mapper = new PiHistoryMapper(provider, userEntries, hooks, extensionHost);
-  for (const event of mapper.mapMessages(messages)) {
+  for (const event of mapper.mapMessages(messages, markers)) {
     if (signal?.aborted) return;
     if (event) {
       yield event;
@@ -307,6 +372,51 @@ export async function* streamPiHistory(
     if (signal?.aborted) return;
     yield event;
   }
+}
+
+function webHistoryEvents(provider: string, marker: PiWebHistoryMarker): AgentStreamEvent[] {
+  const events: AgentStreamEvent[] = [];
+  const queries = marker.search ? marker.search.queries : [];
+  for (const [index, query] of queries.entries()) {
+    const detail: ToolCallDetail = {
+      type: "search",
+      query: query.query,
+      toolName: "web_search",
+      ...(query.results ? { webResults: query.results } : {}),
+    };
+    events.push(webToolEvent(provider, `${marker.id}:search:${index}`, "web_search", detail));
+  }
+  const pages = marker.fetch ? marker.fetch.pages : [];
+  for (const [index, page] of pages.entries()) {
+    const result = page.title ?? page.error;
+    const detail: ToolCallDetail = {
+      type: "fetch",
+      url: page.url,
+      ...(result ? { result } : {}),
+    };
+    events.push(webToolEvent(provider, `${marker.id}:fetch:${index}`, "fetch_content", detail));
+  }
+  return events;
+}
+
+function webToolEvent(
+  provider: string,
+  callId: string,
+  name: string,
+  detail: ToolCallDetail,
+): AgentStreamEvent {
+  return {
+    type: "timeline",
+    provider,
+    item: {
+      type: "tool_call",
+      callId,
+      name,
+      status: "completed",
+      detail,
+      error: null,
+    },
+  };
 }
 
 function toToolResultTimelineItem(input: {

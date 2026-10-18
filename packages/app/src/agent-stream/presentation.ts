@@ -23,6 +23,42 @@ export function getStreamItemMessageId(item: StreamItem): string {
   return item.id;
 }
 
+const SHORT_REASONING_CHARS = 120;
+
+function isShortReasoningBeforeTool(item: StreamItem, after: StreamItem | undefined): boolean {
+  return (
+    item.kind === "thought" &&
+    item.status === "ready" &&
+    item.text.trim().length < SHORT_REASONING_CHARS &&
+    after?.kind === "tool_call"
+  );
+}
+
+/** Short reasoning is the model's scratch note for the next tool, not its own row. */
+function hideShortReasoningBeforeTools(items: StreamItem[]): StreamItem[] {
+  let changed = false;
+  const next: StreamItem[] = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item) continue;
+    if (isShortReasoningBeforeTool(item, items[index + 1])) {
+      changed = true;
+      continue;
+    }
+    next.push(item);
+  }
+  return changed ? next : items;
+}
+
+function dropBoundaryShortReasoning(
+  items: StreamItem[],
+  following: StreamItem | undefined,
+): StreamItem[] {
+  const last = items.at(-1);
+  if (!last || !isShortReasoningBeforeTool(last, following)) return items;
+  return items.slice(0, -1);
+}
+
 /** Source messages reach plugins before display projection. */
 export function createStreamPresentation() {
   const projectCodemode = createCodemodeProjection();
@@ -46,6 +82,8 @@ export function createStreamPresentation() {
   let historySource: StreamItem[] | undefined;
   let historyTransform: TimelineItemTransform | undefined;
   let historyRows: StreamItem[] = [];
+  let reasoningTailSource: StreamItem[] | undefined;
+  let reasoningTail: StreamItem[] = [];
   let preparedTail: StreamItem[] | undefined;
   let preparedLevel: ToolCallDetailLevel | undefined;
   let preparedHistory: PreparedToolCallHistory | null = null;
@@ -68,7 +106,15 @@ export function createStreamPresentation() {
       const blocks = presentRows(item);
       head.push(...blocks);
     }
-    const nested = projectCodemode(historyRows, head);
+    if (reasoningTailSource !== historyRows) {
+      reasoningTail = hideShortReasoningBeforeTools(historyRows);
+      reasoningTailSource = historyRows;
+    }
+    const visibleHead = hideShortReasoningBeforeTools(head);
+    const nested = projectCodemode(
+      dropBoundaryShortReasoning(reasoningTail, visibleHead[0]),
+      visibleHead,
+    );
     if (preparedTail !== nested.tail || preparedLevel !== input.level) {
       preparedHistory = prepareToolCallHistory(input.level, nested.tail);
       preparedTail = nested.tail;
