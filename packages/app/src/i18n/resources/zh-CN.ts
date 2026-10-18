@@ -223,6 +223,12 @@ export const zhCN: TranslationResources = {
       on: "开启",
       off: "关闭",
     },
+    tools: {
+      title: "工具",
+      open: "工具",
+      openWithValue: "工具（{{value}}）",
+      scopeweaverDescription: "安全测试任务",
+    },
     mode: {
       title: "Mode",
       searchPlaceholder: "搜索 modes...",

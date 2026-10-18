@@ -225,6 +225,12 @@ export const es: TranslationResources = {
       on: "En",
       off: "Apagado",
     },
+    tools: {
+      title: "Herramientas",
+      open: "Herramientas",
+      openWithValue: "Herramientas ({{value}})",
+      scopeweaverDescription: "Tareas de pruebas de seguridad",
+    },
     mode: {
       title: "Modo",
       searchPlaceholder: "Modos de búsqueda...",

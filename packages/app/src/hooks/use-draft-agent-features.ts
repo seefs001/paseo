@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { AgentProvider, AgentSessionConfig } from "@getpaseo/protocol/agent-types";
+import { PI_DISABLED_TOOLS_FEATURE_ID } from "@getpaseo/protocol/pi-disabled-tools";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { mergeProviderPreferences, useFormPreferences } from "./use-form-preferences";
 import {
@@ -14,6 +15,19 @@ type DraftFeatureConfig = Pick<
   AgentSessionConfig,
   "provider" | "cwd" | "modeId" | "model" | "thinkingOptionId"
 >;
+
+function readDraftDisabledTools(
+  localFeatureValues: Record<string, unknown>,
+  persistedFeatureValues: Record<string, unknown>,
+): unknown {
+  if (Object.prototype.hasOwnProperty.call(localFeatureValues, PI_DISABLED_TOOLS_FEATURE_ID)) {
+    return localFeatureValues[PI_DISABLED_TOOLS_FEATURE_ID];
+  }
+  if (Object.prototype.hasOwnProperty.call(persistedFeatureValues, PI_DISABLED_TOOLS_FEATURE_ID)) {
+    return persistedFeatureValues[PI_DISABLED_TOOLS_FEATURE_ID];
+  }
+  return undefined;
+}
 
 export function useDraftAgentFeatures(input: {
   serverId: string | null | undefined;
@@ -115,7 +129,13 @@ export function useDraftAgentFeatures(input: {
     }
   }, [availableFeatures, availableFeaturesRaw, localFeatureValues]);
 
-  const effectiveFeatureValues = Object.keys(featureValues).length > 0 ? featureValues : undefined;
+  const disabledToolsValue = readDraftDisabledTools(localFeatureValues, persistedFeatureValues);
+  const featureValuesWithTools =
+    disabledToolsValue === undefined
+      ? featureValues
+      : { ...featureValues, [PI_DISABLED_TOOLS_FEATURE_ID]: disabledToolsValue };
+  const effectiveFeatureValues =
+    Object.keys(featureValuesWithTools).length > 0 ? featureValuesWithTools : undefined;
   const setFeatureValue = useCallback(
     (featureId: string, value: unknown) => {
       setLocalFeatureValues((current) => {

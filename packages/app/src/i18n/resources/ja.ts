@@ -225,6 +225,12 @@ export const ja: TranslationResources = {
       on: "オン",
       off: "オフ",
     },
+    tools: {
+      title: "ツール",
+      open: "ツール",
+      openWithValue: "ツール（{{value}}）",
+      scopeweaverDescription: "セキュリティテスト",
+    },
     mode: {
       title: "モード",
       searchPlaceholder: "モードを検索...",

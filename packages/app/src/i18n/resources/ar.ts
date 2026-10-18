@@ -223,6 +223,12 @@ export const ar: TranslationResources = {
       on: "على",
       off: "عن",
     },
+    tools: {
+      title: "الأدوات",
+      open: "الأدوات",
+      openWithValue: "الأدوات ({{value}})",
+      scopeweaverDescription: "مهام اختبار الأمان",
+    },
     mode: {
       title: "وضع",
       searchPlaceholder: "أوضاع البحث...",

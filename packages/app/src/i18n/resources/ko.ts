@@ -223,6 +223,12 @@ export const ko: TranslationResources = {
       on: "켜짐",
       off: "꺼짐",
     },
+    tools: {
+      title: "도구",
+      open: "도구",
+      openWithValue: "도구 ({{value}})",
+      scopeweaverDescription: "보안 테스트 작업",
+    },
     mode: {
       title: "모드",
       searchPlaceholder: "모드 검색...",

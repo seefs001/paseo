@@ -1,4 +1,5 @@
 import type { AgentFeature } from "@getpaseo/protocol/agent-types";
+import { PI_DISABLED_TOOLS_FEATURE_ID } from "@getpaseo/protocol/pi-disabled-tools";
 
 export function pruneFeatureValues(
   featureValues: Record<string, unknown>,
@@ -9,7 +10,7 @@ export function pruneFeatureValues(
   const next: Record<string, unknown> = {};
 
   for (const [featureId, value] of Object.entries(featureValues)) {
-    if (!allowedFeatureIds.has(featureId)) {
+    if (featureId !== PI_DISABLED_TOOLS_FEATURE_ID && !allowedFeatureIds.has(featureId)) {
       changed = true;
       continue;
     }

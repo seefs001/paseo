@@ -329,6 +329,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       agentControls: buildDraftAgentControls({
         formState,
         features: draftFeatures,
+        featureValues: draftFeatureValues,
         onSetFeature: setDraftFeatureValue,
         onApplyAgentProfile: applyDraftAgentProfile,
       }),

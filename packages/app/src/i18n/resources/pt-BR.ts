@@ -224,6 +224,12 @@ export const ptBR: TranslationResources = {
       on: "Ativado",
       off: "Desativado",
     },
+    tools: {
+      title: "Ferramentas",
+      open: "Ferramentas",
+      openWithValue: "Ferramentas ({{value}})",
+      scopeweaverDescription: "Tarefas de teste de segurança",
+    },
     mode: {
       title: "Modo",
       searchPlaceholder: "Buscar modos...",
