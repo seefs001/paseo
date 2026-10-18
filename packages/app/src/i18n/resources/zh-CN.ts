@@ -2,6 +2,16 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  sessionShare: {
+    title: "分享会话",
+    privacy: "将会话和工具输出上传为未公开列出的 GitHub Gist。任何获得链接的人都能查看。",
+    uploading: "正在导出并上传...",
+    failed: "无法分享会话",
+    link: "分享链接",
+    usage: "请直接输入 /share，不要添加参数",
+    copyFailed: "无法复制分享链接",
+    retryHint: "若上传超时或连接中断，请先在主机上检查 gh gist list，再决定是否重试。",
+  },
   paneFind: {
     connectionFailure: "无法搜索此聊天。请检查主机连接后重试。",
     historyChangedFailure: "搜索期间聊天已更改。请重新搜索。",

@@ -2,6 +2,18 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  sessionShare: {
+    title: "Partager la session",
+    privacy:
+      "La session et les sorties des outils sont publiées dans un GitHub Gist non répertorié. Toute personne disposant du lien peut le consulter.",
+    uploading: "Exportation et envoi...",
+    failed: "Impossible de partager la session",
+    link: "Lien de partage",
+    usage: "Utilisez /share sans arguments",
+    copyFailed: "Impossible de copier le lien",
+    retryHint:
+      "En cas de délai dépassé ou de perte de connexion, vérifiez 'gh gist list' sur l’hôte avant de réessayer.",
+  },
   paneFind: {
     connectionFailure:
       "Impossible de rechercher dans cette conversation. Vérifiez la connexion à l’hôte et réessayez.",

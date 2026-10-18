@@ -188,6 +188,7 @@ const PI_CAPABILITIES: AgentCapabilityFlags = {
   supportsReasoningStream: true,
   supportsToolInvocations: true,
   supportsRewindConversation: true,
+  supportsSessionSharing: true,
   supportsRewindFiles: false,
   supportsRewindBoth: false,
 };
@@ -1985,11 +1986,8 @@ export class PiRpcAgentSession implements AgentSession {
       };
     }
     if (commandName === "share") {
-      return {
-        run: async ({ emit }) => {
-          await this.executeShareCommand(parsed.args, emit);
-        },
-      };
+      // Refuse before the manager records a prompt; raw /share must never reach the model.
+      throw new Error("Open /share in the updated Paseo app to use the sharing dialog.");
     }
     return null;
   }
@@ -2208,40 +2206,21 @@ export class PiRpcAgentSession implements AgentSession {
     return rawArgs.length > 0 ? { commandName, args: rawArgs } : { commandName };
   }
 
-  private async executeShareCommand(
-    args: string | undefined,
-    emit: (event: AgentStreamEvent) => void,
-  ): Promise<void> {
-    const reply = (text: string): void => {
-      emit({
-        type: "timeline",
-        provider: this.provider,
-        item: { type: "assistant_message", text },
-      });
-    };
-    if (args) {
-      reply(
-        "[Error] Usage: /share (uploads to a secret GitHub gist; anyone with the link can view)",
-      );
-      return;
-    }
+  async shareSession(): Promise<{ viewerUrl: string; gistUrl: string }> {
+    if (this.closed) throw new Error("Pi session is closed");
     if (this.sharing) {
-      reply("[Error] A Pi session share is already running. Wait for its result before retrying.");
-      return;
+      throw new Error(
+        "A Pi session share is already running. Wait for its result before retrying.",
+      );
     }
     this.sharing = true;
-    reply("Sharing session to a secret GitHub gist. Anyone with the link can view it...");
     try {
-      const { viewerUrl, gistUrl } = await sharePiSession({
+      return await sharePiSession({
         runtimeSession: this.runtimeSession,
         cwd: this.config.cwd,
         signal: this.closeController.signal,
         runGh: this.shareGh,
       });
-      reply(`Share URL: ${viewerUrl}\n\nGist: ${gistUrl}`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      reply(`[Error] Failed to share Pi session: ${message}`);
     } finally {
       this.sharing = false;
     }

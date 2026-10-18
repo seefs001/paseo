@@ -3679,7 +3679,7 @@ describe("PiRpcAgentClient", () => {
     ]);
   });
 
-  test("exports Pi HTML and returns share links without prompting or interrupting the agent", async () => {
+  test("returns Pi share links without prompting, interrupting, or emitting timeline messages", async () => {
     const pi = new FakePi();
     const gh = new FakePiShareGh();
     const session = await createClient(pi, undefined, gh.run).createSession(createConfig(), {
@@ -3688,12 +3688,14 @@ describe("PiRpcAgentClient", () => {
     onTestFinished(() => session.close());
     const fakeSession = pi.latestSession();
     const events: AgentStreamEvent[] = [];
-    const streamEvents: AgentStreamEvent[] = [];
-    session.subscribe((event) => streamEvents.push(event));
+    session.subscribe((event) => events.push(event));
     const activeTurn = await session.startTurn("Keep working");
-    const handler = session.tryHandleOutOfBand?.("/share");
+    const timelineBefore = events.filter((event) => event.type === "timeline");
 
-    await handler?.run({ emit: (event) => events.push(event) });
+    await expect(session.shareSession!()).resolves.toEqual({
+      viewerUrl: "https://pi.dev/session/#abc123",
+      gistUrl: "https://gist.github.com/test-user/abc123",
+    });
 
     expect(fakeSession.htmlExports).toHaveLength(1);
     expect(gh.uploads).toEqual(["<!doctype html><title>Pi session</title>"]);
@@ -3713,34 +3715,17 @@ describe("PiRpcAgentClient", () => {
     expect(existsSync(path.dirname(fakeSession.htmlExports[0]!))).toBe(false);
     expect(fakeSession.prompts).toEqual([{ message: "Keep working", imageCount: 0 }]);
     expect(fakeSession.abortRequested).toBe(false);
-    expect(streamEvents.filter((event) => event.type === "turn_completed")).toEqual([]);
+    expect(events.filter((event) => event.type === "timeline")).toEqual(timelineBefore);
+    expect(events.filter((event) => event.type === "turn_completed")).toEqual([]);
     fakeSession.finishTurn();
-    expect(streamEvents).toContainEqual({
+    expect(events).toContainEqual({
       type: "turn_completed",
       provider: "pi",
       turnId: activeTurn.turnId,
     });
-    expect(events).toEqual([
-      {
-        type: "timeline",
-        provider: "pi",
-        item: {
-          type: "assistant_message",
-          text: "Sharing session to a secret GitHub gist. Anyone with the link can view it...",
-        },
-      },
-      {
-        type: "timeline",
-        provider: "pi",
-        item: {
-          type: "assistant_message",
-          text: "Share URL: https://pi.dev/session/#abc123\n\nGist: https://gist.github.com/test-user/abc123",
-        },
-      },
-    ]);
   });
 
-  test("surfaces export failures and removes temporary share files without uploading", async () => {
+  test("returns export failures without uploading or emitting timeline messages", async () => {
     const pi = new FakePi();
     const gh = new FakePiShareGh();
     const session = await createClient(pi, undefined, gh.run).createSession(createConfig());
@@ -3748,90 +3733,63 @@ describe("PiRpcAgentClient", () => {
     const fakeSession = pi.latestSession();
     fakeSession.exportHtmlError = new Error("Session is not persisted");
     const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
 
-    await session.tryHandleOutOfBand?.("/share")?.run({ emit: (event) => events.push(event) });
+    await expect(session.shareSession!()).rejects.toThrow(
+      "HTML export failed: Session is not persisted",
+    );
 
     expect(gh.requests).toEqual([]);
     expect(fakeSession.prompts).toEqual([]);
     expect(existsSync(path.dirname(fakeSession.htmlExports[0]!))).toBe(false);
-    expect(events.at(-1)).toEqual({
-      type: "timeline",
-      provider: "pi",
-      item: {
-        type: "assistant_message",
-        text: "[Error] Failed to share Pi session: HTML export failed: Session is not persisted",
-      },
-    });
+    expect(events).toEqual([]);
   });
 
-  test("surfaces upload failures and permits retry after cleaning up", async () => {
+  test("returns upload failures and permits retry after cleaning up", async () => {
     const pi = new FakePi();
     const gh = new FakePiShareGh();
     gh.error = new Error("Not logged in");
     const session = await createClient(pi, undefined, gh.run).createSession(createConfig());
     onTestFinished(() => session.close());
     const events: AgentStreamEvent[] = [];
-    const handler = session.tryHandleOutOfBand?.("/share");
-    const emit = (event: AgentStreamEvent) => events.push(event);
+    session.subscribe((event) => events.push(event));
 
-    await handler?.run({ emit });
-
-    expect(events.at(-1)).toEqual({
-      type: "timeline",
-      provider: "pi",
-      item: {
-        type: "assistant_message",
-        text: "[Error] Failed to share Pi session: Gist upload failed: Not logged in. Check 'gh auth status' on the host; if the upload timed out, check 'gh gist list' before retrying.",
-      },
-    });
+    await expect(session.shareSession!()).rejects.toThrow("Gist upload failed: Not logged in");
     expect(existsSync(path.dirname(pi.latestSession().htmlExports[0]!))).toBe(false);
     gh.error = null;
-    await handler?.run({ emit });
-    expect(gh.requests).toHaveLength(2);
-    expect(events.at(-1)).toMatchObject({
-      item: {
-        text: "Share URL: https://pi.dev/session/#abc123\n\nGist: https://gist.github.com/test-user/abc123",
-      },
+    await expect(session.shareSession!()).resolves.toEqual({
+      viewerUrl: "https://pi.dev/session/#abc123",
+      gistUrl: "https://gist.github.com/test-user/abc123",
     });
+    expect(gh.requests).toHaveLength(2);
+    expect(events).toEqual([]);
   });
 
-  test("rejects malformed gist output rather than emitting an invalid share link", async () => {
+  test("rejects malformed gist output rather than returning an invalid share link", async () => {
     const pi = new FakePi();
     const gh = new FakePiShareGh();
     gh.result = "not a gist URL";
     const session = await createClient(pi, undefined, gh.run).createSession(createConfig());
     onTestFinished(() => session.close());
-    const events: AgentStreamEvent[] = [];
 
-    await session.tryHandleOutOfBand?.("/share")?.run({ emit: (event) => events.push(event) });
+    await expect(session.shareSession!()).rejects.toThrow(
+      "GitHub CLI did not return a valid gist URL.",
+    );
 
-    expect(events.at(-1)).toMatchObject({
-      item: {
-        text: "[Error] Failed to share Pi session: GitHub CLI did not return a valid gist URL.",
-      },
-    });
     expect(existsSync(path.dirname(pi.latestSession().htmlExports[0]!))).toBe(false);
   });
 
-  test("rejects share arguments without uploading or sending the command to the model", async () => {
+  test("refuses raw share prompts before they can be recorded or sent to the model", async () => {
     const { pi, session } = await createSession();
     onTestFinished(() => session.close());
     const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
 
-    await session.tryHandleOutOfBand("/share public")?.run({ emit: (event) => events.push(event) });
-
+    expect(() => session.tryHandleOutOfBand("/share")).toThrow("sharing dialog");
+    expect(() => session.tryHandleOutOfBand("/share public")).toThrow("sharing dialog");
     expect(pi.latestSession().htmlExports).toEqual([]);
     expect(pi.latestSession().prompts).toEqual([]);
-    expect(events).toEqual([
-      {
-        type: "timeline",
-        provider: "pi",
-        item: {
-          type: "assistant_message",
-          text: "[Error] Usage: /share (uploads to a secret GitHub gist; anyone with the link can view)",
-        },
-      },
-    ]);
+    expect(events).toEqual([]);
     expect(session.tryHandleOutOfBand("/share-other")).toBeNull();
   });
 
@@ -3844,19 +3802,14 @@ describe("PiRpcAgentClient", () => {
     });
     const session = await createClient(pi, undefined, gh.run).createSession(createConfig());
     onTestFinished(() => session.close());
-    const events: AgentStreamEvent[] = [];
-    const emit = (event: AgentStreamEvent) => events.push(event);
-    const handler = session.tryHandleOutOfBand?.("/share");
-    const firstShare = handler?.run({ emit });
-
-    await session.tryHandleOutOfBand?.("/share")?.run({ emit });
-
-    expect(events.at(-1)).toMatchObject({
-      item: {
-        text: "[Error] A Pi session share is already running. Wait for its result before retrying.",
-      },
-    });
-    finishUpload();
+    const firstShare = session.shareSession!();
+    try {
+      await expect(session.shareSession!()).rejects.toThrow(
+        "A Pi session share is already running",
+      );
+    } finally {
+      finishUpload();
+    }
     await firstShare;
     expect(gh.requests).toHaveLength(1);
     expect(pi.latestSession().htmlExports).toHaveLength(1);
@@ -3867,15 +3820,11 @@ describe("PiRpcAgentClient", () => {
     const gh = new FakePiShareGh();
     const session = await createClient(pi, undefined, gh.run).createSession(createConfig());
     await session.close();
-    const events: AgentStreamEvent[] = [];
 
-    await session.tryHandleOutOfBand?.("/share")?.run({ emit: (event) => events.push(event) });
+    await expect(session.shareSession!()).rejects.toThrow("Pi session is closed");
 
     expect(gh.requests).toEqual([]);
     expect(pi.latestSession().htmlExports).toEqual([]);
-    expect(events.at(-1)).toMatchObject({
-      item: { text: expect.stringContaining("[Error] Failed to share Pi session:") },
-    });
   });
 
   test("executes Pi compact through RPC instead of prompt text", async () => {

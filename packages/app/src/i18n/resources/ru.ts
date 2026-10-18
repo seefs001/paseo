@@ -2,6 +2,18 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  sessionShare: {
+    title: "Поделиться сеансом",
+    privacy:
+      "Сеанс и вывод инструментов загружаются в скрытый GitHub Gist. Просматривать его может любой, у кого есть ссылка.",
+    uploading: "Экспорт и загрузка...",
+    failed: "Не удалось поделиться сеансом",
+    link: "Ссылка для доступа",
+    usage: "Используйте /share без аргументов",
+    copyFailed: "Не удалось скопировать ссылку",
+    retryHint:
+      "При тайм-ауте загрузки или потере соединения проверьте 'gh gist list' на хосте перед повторной попыткой.",
+  },
   paneFind: {
     connectionFailure:
       "Не удалось выполнить поиск в чате. Проверьте подключение к хосту и повторите попытку.",

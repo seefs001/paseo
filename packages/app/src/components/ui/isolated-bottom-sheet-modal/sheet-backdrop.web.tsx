@@ -22,6 +22,7 @@ export function SheetBackdrop({
     // A sheet that may veto its close slides itself down and lets its owner decide. The other
     // sheets ask the provider for the top modal, so a lower backdrop caught mid-transition still
     // dismisses the sheet the user sees.
+    if (pressBehavior === "none") return;
     if (pressBehavior === "close") close();
     else dismiss();
   }, [close, dismiss, pressBehavior]);

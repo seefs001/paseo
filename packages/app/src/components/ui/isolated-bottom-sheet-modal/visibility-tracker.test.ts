@@ -71,6 +71,25 @@ function openSheet(context: ReturnType<typeof setup>) {
 }
 
 describe("bottom sheet visibility tracker", () => {
+  it("claims Back without dismissing during a protected operation, then allows dismissal", () => {
+    const sheet = new FakeBottomSheet();
+    const backPress = new FakeBackPress();
+    let dismissible = false;
+    const tracker = createBottomSheetVisibilityTracker({
+      onClose: () => {},
+      canDismiss: () => dismissible,
+      backPress,
+    });
+    tracker.attachController(sheet);
+    tracker.syncDesired({ visible: true });
+    tracker.handleSheetIndexChange(0);
+    expect(backPress.press()).toBe(true);
+    expect(sheet.events).toEqual([{ type: "present" }]);
+    dismissible = true;
+    expect(backPress.press()).toBe(true);
+    expect(sheet.events).toEqual([{ type: "present" }, { type: "dismiss" }]);
+  });
+
   it("presents once when the sheet becomes visible and dismisses when it goes back to hidden", () => {
     const { sheet, tracker } = setup();
     tracker.attachController(sheet);

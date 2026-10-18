@@ -444,6 +444,77 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
   return new Session(sessionOptions);
 }
 
+test.each([
+  {
+    result: {
+      viewerUrl: "https://pi.dev/session/#abc123",
+      gistUrl: "https://gist.github.com/test/abc123",
+    },
+    error: null,
+  },
+  { result: null, error: "HTML export failed" },
+])(
+  "session sharing returns only a correlated reply without recording chat: %j",
+  async ({ result, error }) => {
+    const messages: SessionOutboundMessage[] = [];
+    const session = createSessionForTest({
+      messages,
+      agentManager: {
+        waitForAgentClose: async () => {},
+        getAgent: () => ({
+          id: "share-agent",
+          session: {
+            async shareSession() {
+              if (error) throw new Error(error);
+              return result;
+            },
+          },
+        }),
+      },
+    });
+
+    await session.handleMessage({
+      type: "agent.session.share.request",
+      agentId: "share-agent",
+      requestId: "share-request",
+    });
+
+    expect(messages).toEqual([
+      {
+        type: "agent.session.share.response",
+        payload: { agentId: "share-agent", requestId: "share-request", result, error },
+      },
+    ]);
+  },
+);
+
+test("session sharing rejects unsupported providers through the same response", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const session = createSessionForTest({
+    messages,
+    agentManager: {
+      waitForAgentClose: async () => {},
+      getAgent: () => ({ id: "share-agent", session: {} }),
+    },
+  });
+  await session.handleMessage({
+    type: "agent.session.share.request",
+    agentId: "share-agent",
+    requestId: "unsupported-share",
+  });
+  expect(messages).toEqual([
+    {
+      type: "agent.session.share.response",
+      payload: {
+        agentId: "share-agent",
+        requestId: "unsupported-share",
+        result: null,
+        error: "This agent does not support session sharing",
+      },
+    },
+  ]);
+});
+
 test("routes host-scoped agent skills requests through the daemon owner", async () => {
   const messages: SessionOutboundMessage[] = [];
   const status = {

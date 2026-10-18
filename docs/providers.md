@@ -104,8 +104,12 @@ Paseo handles Pi `/share` through the live session's `export_html` RPC and the h
 It always creates a secret gist, including when Pi's TUI is configured to use Radius; Radius sharing
 is not supported in Paseo. The host needs `gh` installed and authenticated. Secret gists are unlisted,
 not access-controlled: anyone with the link can read the exported conversation, including tool output.
-Sharing does not interrupt a running turn. Upload failures are shown in the timeline; after a timeout,
-check `gh gist list` before retrying because the remote upload may have completed.
+The app intercepts `/share` and opens a modal sheet. Progress, links, copy feedback, and failures stay
+in that dialog; neither the command nor its result becomes a timeline message. The independent
+`agent.session.share` RPC requires `workspace.write` and leaves the foreground turn untouched. Gate
+it on `server_info.features.agentSessionShare`; old apps are told to update instead of submitting
+`/share` to the model. After a timeout, check `gh gist list` before retrying because the remote upload
+may have completed.
 
 Pi has no service-tier RPC. Paseo's Fast toggle uses the generated integration extension to request
 `service_tier: "priority"` for `openai-responses` and `openai-codex-responses` models. This does not

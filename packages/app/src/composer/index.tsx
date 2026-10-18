@@ -160,6 +160,9 @@ import { getForgePresentation } from "@/git/forge";
 import { ForgeBrandIcon } from "@/git/forge-icon";
 import { useComposerForgeAutoAttach } from "./forge-auto-attach";
 import { readClipboardImage } from "./clipboard-image";
+import { AgentShareDialog } from "@/agent-sharing/dialog";
+import { parseSessionShareCommand, supportsSessionShareCommand } from "@/agent-sharing/command";
+import { openAgentShare, type AgentShareModel } from "@/agent-sharing/model";
 import { normalizeNativePastedImages, type NativePastedFile } from "./native-pasted-image";
 import { PluginResourceAttachmentPill, usePluginAttachmentPicker } from "@/plugins";
 import { resolveClientSlashCommand, type ClientSlashCommand } from "@/client-slash-commands";
@@ -287,6 +290,7 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
       totalCostUsd: usage?.totalCostUsd ?? null,
       outputTokensPerSecond: usage?.outputTokensPerSecond ?? null,
       model: agent?.model ?? null,
+      canShareSession: supportsSessionShareCommand(agent),
     };
   };
 }
@@ -1372,6 +1376,9 @@ function ComposerContentImpl({
   const editingSession = useComposerEditingSession(inputMode, providedEditingSession);
   const isFullscreen = useComposerFullscreen(editingSession);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [shareModel, setShareModel] = useState<AgentShareModel | null>(null);
+  const closeShareDialog = useCallback(() => setShareModel(null), []);
+  const { isPaneFocused } = useComposerKeyboardScope();
   const [isMessageInputFocused, setIsMessageInputFocused] = useState(false);
   const [isGithubPickerOpen, setIsGithubPickerOpen] = useState(false);
   const [githubSearchQuery, setGithubSearchQuery] = useState("");
@@ -1405,6 +1412,49 @@ function ComposerContentImpl({
       onChangeText(text);
     },
     [onChangeText],
+  );
+
+  const openShareDialog = useCallback(
+    (text: string, hasAttachments: boolean): boolean => {
+      const command = parseSessionShareCommand({
+        text,
+        enabled: agentState.canShareSession,
+        hasAttachments,
+      });
+      if (!command) return false;
+      if (blurOnSubmit) messageInputRef.current?.blur();
+      clearDraft("sent");
+      replaceUserInput("");
+      resetSuppression();
+      setSendError(null);
+      if (!shareModel) {
+        setShareModel(
+          openAgentShare({
+            async share() {
+              if (command.args) throw new Error(t("sessionShare.usage"));
+              if (!client) throw new Error(t("common.errors.daemonClientDisconnected"));
+              return client.shareAgentSession(agentId);
+            },
+            async copy(value) {
+              const copied = await Clipboard.setStringAsync(value);
+              if (!copied) throw new Error(t("sessionShare.copyFailed"));
+            },
+          }),
+        );
+      }
+      return true;
+    },
+    [
+      agentId,
+      agentState.canShareSession,
+      blurOnSubmit,
+      clearDraft,
+      client,
+      replaceUserInput,
+      resetSuppression,
+      shareModel,
+      t,
+    ],
   );
 
   const runClientSlashCommand = useCallback(
@@ -1721,6 +1771,7 @@ function ComposerContentImpl({
   const handleSubmit = useCallback(
     (payload: MessagePayload) => {
       const outgoingAttachments = buildOutgoingAttachments(attachments);
+      if (openShareDialog(payload.text, outgoingAttachments.length > 0)) return;
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
         hasAttachments: outgoingAttachments.length > 0,
@@ -1747,6 +1798,7 @@ function ComposerContentImpl({
       runClientSlashCommand,
       pluginClientSlashCommands,
       runPluginClientSlashCommand,
+      openShareDialog,
       sendMessageWithContent,
     ],
   );
@@ -1974,6 +2026,7 @@ function ComposerContentImpl({
   const handleQueue = useCallback(
     (payload: MessagePayload) => {
       const outgoingAttachments = buildOutgoingAttachments(attachments);
+      if (openShareDialog(payload.text, outgoingAttachments.length > 0)) return;
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
         hasAttachments: outgoingAttachments.length > 0,
@@ -1994,6 +2047,7 @@ function ComposerContentImpl({
       buildOutgoingAttachments,
       pluginClientSlashCommands,
       queueMessage,
+      openShareDialog,
       runClientSlashCommand,
       runPluginClientSlashCommand,
     ],
@@ -2422,6 +2476,9 @@ function ComposerContentImpl({
 
   return (
     <>
+      {shareModel ? (
+        <AgentShareDialog model={shareModel} visible={isPaneFocused} onClose={closeShareDialog} />
+      ) : null}
       <ComposerKeyboardRegistration
         handlerId={keyboardHandlerIdRef.current}
         messageInputRef={messageInputRef}

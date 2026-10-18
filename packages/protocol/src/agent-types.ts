@@ -164,6 +164,7 @@ export interface AgentCapabilityFlags {
   supportsReasoningStream: boolean;
   supportsToolInvocations: boolean;
   supportsRewindConversation?: boolean;
+  supportsSessionSharing?: boolean;
   supportsRewindFiles?: boolean;
   supportsRewindBoth?: boolean;
 }

@@ -1,4 +1,16 @@
 export const en = {
+  sessionShare: {
+    title: "Share session",
+    privacy:
+      "Creates a secret GitHub Gist containing this session and tool output. Anyone with the link can view it.",
+    uploading: "Exporting and uploading...",
+    failed: "Unable to share session",
+    link: "Share link",
+    usage: "Use /share without arguments",
+    copyFailed: "Unable to copy the share link",
+    retryHint:
+      "If the upload timed out or the connection was lost, check 'gh gist list' on the host before retrying.",
+  },
   paneFind: {
     connectionFailure: "Could not search this chat. Check the host connection and retry.",
     historyChangedFailure: "The chat changed while searching. Search again.",

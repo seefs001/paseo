@@ -30,6 +30,7 @@ import {
   DaemonUpdateResponseSchema,
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
+  type AgentSessionShareResult,
   type ServerInfoStatusPayload,
 } from "@getpaseo/protocol/messages";
 import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outbound";
@@ -3370,6 +3371,34 @@ export class DaemonClient {
       throw new Error(payload.error);
     }
     return payload;
+  }
+
+  async shareAgentSession(
+    agentId: string,
+    options: { requestId?: string; timeout?: number } = {},
+  ): Promise<AgentSessionShareResult> {
+    if (this.lastServerInfoMessage?.features?.agentSessionShare !== true) {
+      throw new Error("Update the host to share sessions in a dialog.");
+    }
+    const requestId = this.createRequestId(options.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.session.share.request",
+      agentId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: options.timeout ?? 180_000,
+      options: { skipQueue: true },
+      select: (response) =>
+        response.type === "agent.session.share.response" && response.payload.requestId === requestId
+          ? response.payload
+          : null,
+    });
+    if (payload.error) throw new Error(payload.error);
+    if (!payload.result) throw new Error("The host did not return a session share link");
+    return payload.result;
   }
 
   async listProviderSubagents(

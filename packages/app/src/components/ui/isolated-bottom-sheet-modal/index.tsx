@@ -47,6 +47,8 @@ type IsolatedBottomSheetModalProps = Omit<
    * and either snaps it back or unmounts it, which dismisses it from the stack.
    */
   enableDismissOnClose?: boolean;
+  /** Disable gesture and backdrop dismissal without hiding the sheet. */
+  dismissible?: boolean;
   /**
    * Nodes only. Gorhom also accepts a render function, but nothing here uses it and a bridge
    * would have to reach around it.
@@ -92,23 +94,26 @@ export const IsolatedBottomSheetModal = forwardRef<
     contextBridge,
     backdropOpacity,
     enableDismissOnClose = true,
+    dismissible = true,
     ...bottomSheetProps
   } = props;
+  const backdropPress = enableDismissOnClose ? "dismiss" : "close";
   const renderBackdrop = useCallback(
     (backdropProps: BottomSheetBackdropProps) => (
       <SheetBackdrop
         {...backdropProps}
         opacity={backdropOpacity}
-        pressBehavior={enableDismissOnClose ? "dismiss" : "close"}
+        pressBehavior={dismissible ? backdropPress : "none"}
       />
     ),
-    [backdropOpacity, enableDismissOnClose],
+    [backdropOpacity, backdropPress, dismissible],
   );
   const modal = (
     <GorhomBottomSheetModal
       {...bottomSheetProps}
       ref={modalRef}
       enableDismissOnClose={enableDismissOnClose}
+      enablePanDownToClose={dismissible ? bottomSheetProps.enablePanDownToClose : false}
       stackBehavior={presentation}
       backdropComponent={backdropOpacity === undefined ? undefined : renderBackdrop}
     >
@@ -122,19 +127,24 @@ export const IsolatedBottomSheetModal = forwardRef<
 export function useIsolatedBottomSheetVisibility({
   visible,
   isEnabled,
+  dismissible = true,
   onClose,
 }: {
   visible: boolean;
   isEnabled?: boolean;
+  dismissible?: boolean;
   onClose: () => void;
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const dismissibleRef = useRef(dismissible);
+  dismissibleRef.current = dismissible;
 
   const tracker = useMemo(
     () =>
       createBottomSheetVisibilityTracker({
         onClose: () => onCloseRef.current(),
+        canDismiss: () => dismissibleRef.current,
         backPress: systemBackPress,
       }),
     [],

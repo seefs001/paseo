@@ -35,6 +35,7 @@ type BottomSheetPhase = "closed" | "presenting" | "presented" | "dismissing";
 
 export function createBottomSheetVisibilityTracker(opts: {
   onClose: () => void;
+  canDismiss?: () => boolean;
   backPress?: BackPressSource;
 }): BottomSheetVisibilityTracker {
   let controller: BottomSheetController | null = null;
@@ -60,7 +61,7 @@ export function createBottomSheetVisibilityTracker(opts: {
     }
     releaseBackPress =
       opts.backPress?.subscribe(() => {
-        dismiss();
+        if (opts.canDismiss?.() !== false) dismiss();
         return true;
       }) ?? null;
   }

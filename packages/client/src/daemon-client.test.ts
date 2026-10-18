@@ -8,7 +8,7 @@ import {
   type CreateAgentRequestOptions,
   type DaemonTransport,
   type Logger,
-} from "./daemon-client";
+} from "./daemon-client.ts";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import {
@@ -1857,6 +1857,83 @@ test("honors explicit getDaemonPairingOffer timeout below the session RPC defaul
 
   await vi.advanceTimersByTimeAsync(1);
   await expect(responsePromise).rejects.toThrow("Timeout waiting for message (1500ms)");
+});
+
+test("session sharing refuses old hosts without sending a request", async () => {
+  const wire = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "share-test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => wire.transport,
+  });
+  clients.push(client);
+  const connection = client.connect();
+  wire.triggerOpen();
+  await connection;
+  await expect(client.shareAgentSession("agent")).rejects.toThrow("Update the host");
+  expect(wire.sent).toEqual([]);
+});
+
+test("session sharing returns the matching links without submitting a prompt", async () => {
+  const wire = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "share-test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => wire.transport,
+  });
+  clients.push(client);
+  const connection = client.connect();
+  wire.triggerOpen({ features: { agentSessionShare: true } });
+  await connection;
+  const sharing = client.shareAgentSession("agent", { requestId: "share-request" });
+  expect(parseSentFrame(wire.sent[0])).toEqual({
+    type: "agent.session.share.request",
+    agentId: "agent",
+    requestId: "share-request",
+  });
+  const result = {
+    viewerUrl: "https://pi.dev/session/#abc123",
+    gistUrl: "https://gist.github.com/test/abc123",
+  };
+  wire.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.session.share.response",
+      payload: { agentId: "agent", requestId: "share-request", result, error: null },
+    }),
+  );
+  await expect(sharing).resolves.toEqual(result);
+  expect(wire.sent).toHaveLength(1);
+});
+
+test.each([
+  { error: "Export failed", expected: "Export failed" },
+  { error: null, expected: "The host did not return a session share link" },
+])("session sharing rejects failed or empty responses: %j", async ({ error, expected }) => {
+  const wire = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "share-test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => wire.transport,
+  });
+  clients.push(client);
+  const connection = client.connect();
+  wire.triggerOpen({ features: { agentSessionShare: true } });
+  await connection;
+  const sharing = client.shareAgentSession("agent", { requestId: "share-request" });
+  wire.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.session.share.response",
+      payload: { agentId: "agent", requestId: "share-request", result: null, error },
+    }),
+  );
+  await expect(sharing).rejects.toThrow(expected);
+  expect(wire.sent).toHaveLength(1);
 });
 
 test("gates config reload on the daemon capability", async () => {

@@ -2,6 +2,18 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  sessionShare: {
+    title: "세션 공유",
+    privacy:
+      "세션과 도구 출력을 목록에 표시되지 않는 GitHub Gist로 업로드합니다. 링크가 있는 누구나 볼 수 있습니다.",
+    uploading: "내보내기 및 업로드 중...",
+    failed: "세션을 공유할 수 없음",
+    link: "공유 링크",
+    usage: "인수 없이 /share를 입력하세요",
+    copyFailed: "공유 링크를 복사할 수 없음",
+    retryHint:
+      "업로드 시간이 초과되거나 연결이 끊겼다면 다시 시도하기 전에 호스트에서 gh gist list를 확인하세요.",
+  },
   paneFind: {
     connectionFailure: "이 채팅을 검색할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
     historyChangedFailure: "검색 중에 채팅이 변경되었습니다. 다시 검색하세요.",

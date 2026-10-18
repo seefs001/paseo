@@ -76,21 +76,23 @@ await Promise.all([
   ensureZodAotDiscriminatedUnionOutputPatch(),
 ]);
 
-const [
-  { loadSourceFile },
-  { discoverSchemas },
-  { compileSchemas },
-  { generateCompiledFileContent },
-] = await Promise.all([
-  import(pathToFileURL(resolve(zodAotRoot, "dist/loader.js")).href),
-  import(pathToFileURL(resolve(zodAotRoot, "dist/discovery.js")).href),
+const [{ compileSchemas }, { generateCompiledFileContent }] = await Promise.all([
   import(pathToFileURL(resolve(zodAotRoot, "dist/core/pipeline.js")).href),
   import(pathToFileURL(resolve(zodAotRoot, "dist/cli/emitter.js")).href),
 ]);
 
 // One compiled validator per session message plus a tag-only envelope. zod-aot emits one function
 // per compiled schema, so this keeps every generated function small enough for V8 to optimize cheaply.
-const { sessionOutboundMessageOptions } = await loadSourceFile(envelopeSource, { cacheBust: true });
+// Import TypeScript directly so stale in-place JavaScript emits cannot shadow the schemas.
+const { createJiti } = await import("jiti");
+const jiti = createJiti(import.meta.url, {
+  moduleCache: false,
+  alias: {
+    [resolve(packageRoot, "src/messages.js")]: resolve(packageRoot, "src/messages.ts"),
+  },
+});
+const { WSOutboundEnvelopeSchema, sessionOutboundMessageOptions } =
+  await jiti.import(envelopeSource);
 const sessionTags = sessionOutboundMessageOptions.map((option) => option.shape.type.value);
 function sessionExport(index) {
   return `SessionOutboundMessage${index}`;
@@ -134,12 +136,13 @@ await writeFile(
   ].join("\n"),
 );
 
-const schemas = await discoverSchemas(source, { cacheBust: true });
-if (schemas.length !== sessionTags.length + 1) {
-  throw new Error(
-    `Expected ${sessionTags.length + 1} zod-aot compile() exports in ${relative(packageRoot, source)}, found ${schemas.length}`,
-  );
-}
+const schemas = [
+  { exportName: "WSOutboundEnvelope", schema: WSOutboundEnvelopeSchema },
+  ...sessionOutboundMessageOptions.map((schema, index) => ({
+    exportName: sessionExport(index),
+    schema,
+  })),
+];
 
 const compiled = compileSchemas(schemas, { mode: "inline" });
 const runtimeImportPath = relative(dirname(output), runtimeSchemaMetadata)

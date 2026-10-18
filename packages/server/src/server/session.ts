@@ -2682,6 +2682,8 @@ export class Session {
         return this.handleAgentTimelineSearchRequest(msg, source);
       case "agent.timeline.list_prompts.request":
         return this.handleAgentTimelineListPromptsRequest(msg, source);
+      case "agent.session.share.request":
+        return this.handleAgentSessionShareRequest(msg);
       case "agent.provider_subagents.list.request":
         return this.handleProviderSubagentListRequest(msg);
       case "agent.provider_subagents.timeline.get.request":
@@ -8010,6 +8012,36 @@ export class Session {
         },
         source,
       );
+    }
+  }
+
+  private async handleAgentSessionShareRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.session.share.request" }>,
+  ): Promise<void> {
+    try {
+      const agent = await ensureUnarchivedAgentLoaded(msg.agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      if (!agent.session?.shareSession) {
+        throw new Error("This agent does not support session sharing");
+      }
+      const result = await agent.session.shareSession();
+      this.emit({
+        type: "agent.session.share.response",
+        payload: { agentId: msg.agentId, requestId: msg.requestId, result, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.session.share.response",
+        payload: {
+          agentId: msg.agentId,
+          requestId: msg.requestId,
+          result: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   }
 

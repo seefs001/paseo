@@ -6,11 +6,34 @@ import {
   AgentTimelineItemPayloadSchema,
   ServerInfoStatusPayloadSchema,
   SessionOutboundMessageSchema,
+  SessionInboundMessageSchema,
   WSHelloMessageSchema,
   WorkspaceSetupSnapshotSchema,
   WorkspaceSetupProgressMessageSchema,
   AgentTimelineEntryPayloadSchema,
 } from "./messages.js";
+
+test("session sharing adds optional capabilities and correlated request/reply messages", () => {
+  const oldHost = { status: "server_info", serverId: "old-host", version: null, hostname: null };
+  expect(ServerInfoStatusPayloadSchema.parse(oldHost)).toEqual(oldHost);
+  const newHost = { ...oldHost, features: { agentSessionShare: true } };
+  expect(ServerInfoStatusPayloadSchema.parse(newHost)).toEqual(newHost);
+  const request = { type: "agent.session.share.request", agentId: "agent", requestId: "share" };
+  expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  const response = {
+    type: "agent.session.share.response",
+    payload: {
+      agentId: "agent",
+      requestId: "share",
+      result: {
+        viewerUrl: "https://pi.dev/session/#abc123",
+        gistUrl: "https://gist.github.com/test/abc123",
+      },
+      error: null,
+    },
+  };
+  expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+});
 
 test("terminal listings accept older rows and retain new per-terminal directories", () => {
   const response = {

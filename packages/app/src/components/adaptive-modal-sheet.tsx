@@ -467,6 +467,8 @@ export interface AdaptiveModalSheetProps {
   visible: boolean;
   onClose: () => void;
   onDismiss?: () => void;
+  /** Prevent user dismissal while a non-cancellable operation is pending. */
+  dismissible?: boolean;
   children: ReactNode;
   /** Sticky footer rendered below the scrollable content. */
   footer?: ReactNode;
@@ -493,6 +495,7 @@ export function AdaptiveModalSheet({
   visible,
   onClose,
   onDismiss,
+  dismissible = true,
   children,
   footer,
   footerContainerStyle,
@@ -507,6 +510,9 @@ export function AdaptiveModalSheet({
   contextBridge = null,
 }: AdaptiveModalSheetProps) {
   const { t } = useTranslation();
+  const requestClose = useCallback(() => {
+    if (dismissible) onClose();
+  }, [dismissible, onClose]);
   const isMobile = useIsCompactFormFactor();
   const insets = useSafeAreaInsets();
   const isKeyboardVisible = useKeyboardVisibility(visible);
@@ -548,7 +554,8 @@ export function AdaptiveModalSheet({
   const { sheetRef, handleSheetChange, handleSheetDismiss } = useIsolatedBottomSheetVisibility({
     visible,
     isEnabled: isMobile || !isWeb,
-    onClose,
+    dismissible,
+    onClose: requestClose,
   });
   const [shouldRenderWeb, setShouldRenderWeb] = useState(visible);
   const [isWebClosing, setIsWebClosing] = useState(false);
@@ -585,10 +592,10 @@ export function AdaptiveModalSheet({
       if (event.key !== "Escape") return false;
       event.preventDefault();
       event.stopPropagation();
-      onClose();
+      requestClose();
       return true;
     },
-    [onClose],
+    [requestClose],
   );
   const setWebOverlayScope = useWebOverlayRegistration({
     active: isWeb && !isMobile && visible,
@@ -616,7 +623,7 @@ export function AdaptiveModalSheet({
   if (isMobile) {
     const sheetContent = (
       <>
-        <SheetHeaderView header={header} onClose={onClose} testID={testID} />
+        <SheetHeaderView header={header} onClose={requestClose} testID={testID} />
         <View style={[styles.compactStaticContent, bodyStyle]}>
           {scrollable ? (
             <ScrollView
@@ -644,6 +651,7 @@ export function AdaptiveModalSheet({
       <IsolatedBottomSheetModal
         ref={sheetRef}
         contextBridge={contextBridge}
+        dismissible={dismissible}
         snapPoints={resolvedSnapPoints}
         index={0}
         enableDynamicSizing={false}
@@ -667,7 +675,7 @@ export function AdaptiveModalSheet({
     desktopHeight == null ? styles.desktopStaticContent : styles.compactStaticContent;
   const cardInner = (
     <OverlayLayerProvider layer={modalLayer}>
-      <SheetHeaderView header={header} onClose={onClose} />
+      <SheetHeaderView header={header} onClose={requestClose} />
       <View style={[scrollable ? styles.desktopScrollContainer : desktopStaticStyle, bodyStyle]}>
         {scrollable ? (
           <ScrollView
@@ -691,7 +699,7 @@ export function AdaptiveModalSheet({
       <Pressable
         accessibilityLabel={t("common.actions.dismiss")}
         style={ABSOLUTE_FILL_STYLE}
-        onPress={onClose}
+        onPress={requestClose}
       />
       <View
         ref={setWebOverlayScope}
@@ -718,6 +726,7 @@ export function AdaptiveModalSheet({
     <IsolatedBottomSheetModal
       ref={sheetRef}
       contextBridge={contextBridge}
+      dismissible={dismissible}
       snapPoints={NATIVE_DIALOG_SNAP_POINTS}
       index={0}
       enableDynamicSizing={false}

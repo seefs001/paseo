@@ -2,6 +2,18 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  sessionShare: {
+    title: "セッションを共有",
+    privacy:
+      "セッションとツール出力を非公開一覧の GitHub Gist にアップロードします。リンクを知っている人は誰でも閲覧できます。",
+    uploading: "エクスポートしてアップロード中...",
+    failed: "セッションを共有できません",
+    link: "共有リンク",
+    usage: "引数を付けずに /share を入力してください",
+    copyFailed: "共有リンクをコピーできません",
+    retryHint:
+      "タイムアウトや接続切断が発生した場合は、再試行する前にホストで gh gist list を確認してください。",
+  },
   paneFind: {
     connectionFailure:
       "このチャットを検索できませんでした。ホストへの接続を確認して再試行してください。",
