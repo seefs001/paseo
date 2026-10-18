@@ -1,5 +1,6 @@
-import type { AgentFeature } from "@getpaseo/protocol/agent-types";
+import type { AgentFeature, AgentProvider } from "@getpaseo/protocol/agent-types";
 import { PI_DISABLED_TOOLS_FEATURE_ID } from "@getpaseo/protocol/pi-disabled-tools";
+import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 
 export function pruneFeatureValues(
   featureValues: Record<string, unknown>,
@@ -38,6 +39,21 @@ export function applyFeatureValues(
       value: featureValues[feature.id],
     } as AgentFeature;
   });
+}
+
+export function omitSharedPiFastMode(
+  provider: AgentProvider | null | undefined,
+  featureValues: Record<string, unknown>,
+): Record<string, unknown> {
+  if (
+    provider !== "pi" ||
+    !Object.prototype.hasOwnProperty.call(featureValues, FAST_MODE_FEATURE_ID)
+  ) {
+    return featureValues;
+  }
+  const next = { ...featureValues };
+  delete next[FAST_MODE_FEATURE_ID];
+  return next;
 }
 
 export function resolveFeatureValues(args: {

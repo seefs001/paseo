@@ -109,6 +109,7 @@ const PASEO_PI_CAPTURE_EXTENSION_COMMAND = "paseo_capture_entries";
 const PASEO_PI_FAST_MODE_EXTENSION_COMMAND = "paseo_fast_mode";
 const PASEO_PI_DISABLED_TOOLS_EXTENSION_COMMAND = "paseo_disabled_tools";
 const PI_FAST_MODE_APIS: readonly string[] = ["openai-responses", "openai-codex-responses"];
+const PI_FAST_MODE_BY_MODEL = "fast_mode_by_model";
 const PASEO_PI_REWIND_ENTRY_TYPE = "paseo_rewind";
 const PASEO_PI_ENTRY_CAPTURE_MARKER = "PASEO_ENTRY_CAPTURE";
 const PASEO_PI_SUBMITTED_USER_ENTRY_MARKER = "PASEO_SUBMITTED_USER_ENTRY";
@@ -213,6 +214,95 @@ export interface PiRpcAgentClientOptions {
   shareGh?: PiShareGh;
 }
 
+function piFastModelKey(
+  model: { provider?: string; id?: string } | null | undefined,
+): string | null {
+  if (!model?.provider || !model.id) return null;
+  return `${model.provider}/${model.id}`;
+}
+
+function readPiFastModeByModel(
+  values: Record<string, unknown> | undefined,
+): Record<string, boolean> {
+  const raw = values?.[PI_FAST_MODE_BY_MODEL];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const map: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "boolean") map[key] = value;
+  }
+  return map;
+}
+
+function piFastModeEnabled(
+  values: Record<string, unknown> | undefined,
+  model: { provider?: string; id?: string } | null | undefined,
+): boolean {
+  const key = piFastModelKey(model);
+  const map = readPiFastModeByModel(values);
+  if (key && Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+  if (Object.keys(map).length > 0) return false;
+  return values?.fast_mode === true;
+}
+
+// A legacy session stored one boolean. Bind it to the first concrete model so later
+// models do not inherit it.
+function bindPiFastMode(
+  config: AgentSessionConfig,
+  model: { provider?: string; id?: string } | null | undefined,
+): void {
+  const values = config.featureValues;
+  if (!values || values.fast_mode !== true) return;
+  if (Object.keys(readPiFastModeByModel(values)).length > 0) return;
+  const key = piFastModelKey(model);
+  if (!key) return;
+  config.featureValues = {
+    ...values,
+    [PI_FAST_MODE_BY_MODEL]: { [key]: true },
+  };
+}
+
+function syncPiFastModeFlag(
+  config: AgentSessionConfig,
+  model: { provider?: string; id?: string } | null | undefined,
+): void {
+  const values = config.featureValues;
+  if (!values) return;
+  if (Object.keys(readPiFastModeByModel(values)).length === 0) return;
+  const enabled = piFastModeEnabled(values, model);
+  if (values.fast_mode === enabled) return;
+  config.featureValues = { ...values, fast_mode: enabled };
+}
+
+function writePiFastMode(
+  config: AgentSessionConfig,
+  model: { provider: string; id: string },
+  enabled: boolean,
+): void {
+  const key = piFastModelKey(model);
+  if (!key) return;
+  const map = readPiFastModeByModel(config.featureValues);
+  map[key] = enabled;
+  config.featureValues = {
+    ...config.featureValues,
+    fast_mode: enabled,
+    [PI_FAST_MODE_BY_MODEL]: map,
+  };
+}
+
+function piExtensionFastMode(config: AgentSessionConfig): {
+  fastModeByModel: Record<string, boolean>;
+  legacyUnscopedFast: boolean | null;
+} {
+  const map = readPiFastModeByModel(config.featureValues);
+  if (Object.keys(map).length > 0) {
+    return { fastModeByModel: map, legacyUnscopedFast: null };
+  }
+  return {
+    fastModeByModel: {},
+    legacyUnscopedFast: config.featureValues?.fast_mode === true ? true : null,
+  };
+}
+
 function buildPiFeatures(state: PiSessionState, config: AgentSessionConfig): AgentFeature[] {
   if (!PI_FAST_MODE_APIS.includes(state.model?.api ?? "")) return [];
   return [
@@ -224,7 +314,7 @@ function buildPiFeatures(state: PiSessionState, config: AgentSessionConfig): Age
         "Request priority processing. Availability and extra usage depend on the provider.",
       tooltip: "Toggle priority processing",
       icon: "zap",
-      value: config.featureValues?.fast_mode === true,
+      value: piFastModeEnabled(config.featureValues, state.model),
     },
   ];
 }
@@ -320,7 +410,8 @@ type PiMcpInjection =
   | { kind: "adapter"; configFile: PiTempFile };
 
 interface PiPaseoExtensionOptions {
-  fastModeEnabled: boolean;
+  fastModeByModel: Record<string, boolean>;
+  legacyUnscopedFast: boolean | null;
   disabledTools: readonly string[];
   systemPrompt?: string;
   mcpServers?: Record<string, PiMcpServerConfig>;
@@ -667,7 +758,8 @@ function createPiMcpConfigFile(
 }
 
 function createPiPaseoExtensionFile({
-  fastModeEnabled,
+  fastModeByModel,
+  legacyUnscopedFast,
   disabledTools,
   systemPrompt,
   mcpServers = {},
@@ -797,8 +889,51 @@ function createPiPaseoExtensionFile({
 	    pi.registerMcpServer(name, config);
 	  }
 	  const submittedUserMessages = [];
-	  let fastModeEnabled = ${JSON.stringify(fastModeEnabled)};
+	  const fastModeByModel = ${JSON.stringify(fastModeByModel)};
+	  let legacyUnscopedFast = ${JSON.stringify(legacyUnscopedFast)};
 	  const fastModeApis = ${JSON.stringify(PI_FAST_MODE_APIS)};
+	  function fastModeKey(model) {
+	    if (!model || typeof model.provider !== "string" || typeof model.id !== "string") return null;
+	    return model.provider + "/" + model.id;
+	  }
+	  function bindLegacyFastMode(model) {
+	    if (legacyUnscopedFast !== true) return;
+	    if (!fastModeApis.includes(model?.api)) return;
+	    const key = fastModeKey(model);
+	    if (!key || Object.keys(fastModeByModel).length > 0) {
+	      legacyUnscopedFast = null;
+	      return;
+	    }
+	    fastModeByModel[key] = true;
+	    legacyUnscopedFast = null;
+	  }
+	  function fastModeForModel(model) {
+	    if (!fastModeApis.includes(model?.api)) return null;
+	    const key = fastModeKey(model);
+	    if (!key) return false;
+	    if (Object.prototype.hasOwnProperty.call(fastModeByModel, key)) {
+	      return fastModeByModel[key] === true;
+	    }
+	    if (legacyUnscopedFast === true) {
+	      fastModeByModel[key] = true;
+	      legacyUnscopedFast = null;
+	      return true;
+	    }
+	    return false;
+	  }
+	  // samplingParams.service_tier is copied onto the payload after named fields, and that
+	  // model config is shared by every session. Off has to delete it or the toggle is a lie.
+	  function applyFastServiceTier(payload, enabled) {
+	    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+	    if (enabled) {
+	      if (payload.service_tier === "priority") return;
+	      return { ...payload, service_tier: "priority" };
+	    }
+	    if (!Object.prototype.hasOwnProperty.call(payload, "service_tier")) return;
+	    const next = { ...payload };
+	    delete next.service_tier;
+	    return next;
+	  }
 	  let disabledTools = ${JSON.stringify(disabledTools)};
 	  function toolNameMatches(name, pattern) {
 	    const star = pattern.indexOf("*");
@@ -829,10 +964,11 @@ function createPiPaseoExtensionFile({
 	  pi.on("before_agent_start", () => {
 	    applyDisabledTools();
 	  });
-	  // Pi has no service-tier RPC. Keep the override local to this session's requests.
+	  // Pi has no service-tier RPC. The map belongs to this process; each model has its own entry.
 	  pi.on("before_provider_request", (event, ctx) => {
-	    if (!fastModeEnabled || !fastModeApis.includes(ctx.model?.api)) return;
-	    return { ...event.payload, service_tier: "priority" };
+	    const enabled = fastModeForModel(ctx.model);
+	    if (enabled === null) return;
+	    return applyFastServiceTier(event.payload, enabled);
 	  });
 	  ${piExtensionRuntimeBridge}
 
@@ -867,6 +1003,7 @@ function createPiPaseoExtensionFile({
     }
 
 	  pi.on("session_start", async (_event, ctx) => {
+	    bindLegacyFastMode(ctx.model);
 	    emitEntryCapture(ctx, "session_start");
 	  });
 
@@ -913,11 +1050,19 @@ function createPiPaseoExtensionFile({
 	        if (typeof payload.enabled !== "boolean") {
 	          throw new Error("Pi fast mode requires a boolean");
 	        }
+	        if (typeof payload.modelKey !== "string" || payload.modelKey.length === 0) {
+	          throw new Error("Pi fast mode requires a model");
+	        }
 	        if (!fastModeApis.includes(ctx.model?.api)) {
 	          throw new Error("Pi fast mode is unavailable for this model");
 	        }
-	        fastModeEnabled = payload.enabled;
-	        emitCommandResult(ctx, payload.requestId, { ok: true, result: fastModeEnabled });
+	        const key = fastModeKey(ctx.model);
+	        if (key !== payload.modelKey) {
+	          throw new Error("Pi fast mode model changed");
+	        }
+	        fastModeByModel[key] = payload.enabled;
+	        legacyUnscopedFast = null;
+	        emitCommandResult(ctx, payload.requestId, { ok: true, result: payload.enabled });
 	      } catch (error) {
 	        emitCommandResult(ctx, payload.requestId, { ok: false, error: String(error) });
 	      }
@@ -1426,6 +1571,8 @@ export class PiRpcAgentSession implements AgentSession {
     this.config = options.config;
     this.state = options.initialState;
     this.config.thinkingOptionId = this.state.thinkingLevel;
+    bindPiFastMode(this.config, this.state.model);
+    syncPiFastModeFlag(this.config, this.state.model);
     this.capabilities = options.capabilities;
     this.provider = PI_PROVIDER;
     this.currentModeId = options.currentModeId ?? null;
@@ -1856,9 +2003,12 @@ export class PiRpcAgentSession implements AgentSession {
       throw new Error(`Pi model id must include a provider: ${modelId}`);
     }
 
+    bindPiFastMode(this.config, this.state.model);
     const model = await this.runtimeSession.setModel(parsedReference.provider, parsedReference.id);
     await this.refreshState();
     this.config.model = `${model.provider}/${model.id}`;
+    bindPiFastMode(this.config, this.state.model);
+    syncPiFastModeFlag(this.config, this.state.model);
   }
 
   get features(): AgentFeature[] {
@@ -1904,9 +2054,14 @@ export class PiRpcAgentSession implements AgentSession {
     if (!PI_FAST_MODE_APIS.includes(this.state.model?.api ?? "")) {
       throw new PiFeatureError(featureId, "Pi fast mode is unavailable for this model");
     }
+    const model = this.state.model;
+    const modelKey = piFastModelKey(model);
+    if (!modelKey || !model) {
+      throw new PiFeatureError(featureId, "Pi fast mode is unavailable for this model");
+    }
     const requestId = randomUUID();
     const resultPromise = this.waitForExtensionResult(requestId);
-    const payload = Buffer.from(JSON.stringify({ requestId, enabled: value })).toString(
+    const payload = Buffer.from(JSON.stringify({ requestId, enabled: value, modelKey })).toString(
       "base64url",
     );
     try {
@@ -1914,10 +2069,7 @@ export class PiRpcAgentSession implements AgentSession {
         resultPromise,
         this.runtimeSession.prompt(`/${PASEO_PI_FAST_MODE_EXTENSION_COMMAND} ${payload}`),
       ]);
-      this.config.featureValues = {
-        ...this.config.featureValues,
-        fast_mode: z.boolean().parse(enabled),
-      };
+      writePiFastMode(this.config, model, z.boolean().parse(enabled));
     } catch (error) {
       // A rejected prompt never produces an extension result; release its pending request too.
       this.rejectExtensionResult(
@@ -2861,7 +3013,7 @@ export class PiRpcAgentClient implements AgentClient {
     const mcp = await this.prepareMcpInjection(config.cwd, config.mcpServers, mcpEnv, runtime);
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
-      fastModeEnabled: config.featureValues?.fast_mode === true,
+      ...piExtensionFastMode(config),
       disabledTools: resolvePiDisabledTools(config.featureValues),
       systemPrompt: composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
       mcpServers: mcp?.kind === "builtin" ? mcp.servers : undefined,
@@ -2931,7 +3083,7 @@ export class PiRpcAgentClient implements AgentClient {
     );
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
-      fastModeEnabled: resumeConfig.config.featureValues?.fast_mode === true,
+      ...piExtensionFastMode(resumeConfig.config),
       disabledTools: resolvePiDisabledTools(resumeConfig.config.featureValues),
       systemPrompt: composeSystemPromptParts(
         resumeConfig.config.systemPrompt,

@@ -2107,12 +2107,18 @@ describe("PiRpcAgentSession", () => {
     expect(await beforeRequest()).toBeUndefined();
     await session.setFeature!("fast_mode", true);
     expect(session.features?.[0]?.value).toBe(true);
-    expect(config.featureValues).toEqual({ fast_mode: true });
+    expect(config.featureValues).toEqual({
+      fast_mode: true,
+      fast_mode_by_model: { "openai-codex/gpt-5.4": true },
+    });
     expect(await beforeRequest()).toEqual({ ...payload, service_tier: "priority" });
 
     await session.setFeature!("fast_mode", false);
     expect(session.features?.[0]?.value).toBe(false);
-    expect(config.featureValues).toEqual({ fast_mode: false });
+    expect(config.featureValues).toEqual({
+      fast_mode: false,
+      fast_mode_by_model: { "openai-codex/gpt-5.4": false },
+    });
     expect(await beforeRequest()).toBeUndefined();
     expect(pi.latestSession().setThinkingLevelRequests).toEqual([]);
     expect(events).toEqual([]);
@@ -2245,7 +2251,10 @@ describe("PiRpcAgentSession", () => {
         { model: runtime.state.model },
       ),
     ).toBeUndefined();
-    expect(config.featureValues).toEqual({ fast_mode: true });
+    expect(config.featureValues).toEqual({
+      fast_mode: false,
+      fast_mode_by_model: { "openai/gpt-5.4": true },
+    });
 
     runtime.setModelResult = model;
     await session.setModel!("openai/gpt-5.4");
@@ -2256,6 +2265,74 @@ describe("PiRpcAgentSession", () => {
         { model: runtime.state.model },
       ),
     ).toEqual({ service_tier: "priority" });
+  });
+
+  test("keeps Fast per model and strips a shared service tier when that model is off", async () => {
+    const pi = new FakePi();
+    const astra = { provider: "responses", id: "gpt-6-astra", api: "openai-responses" };
+    const sol = { provider: "responses", id: "gpt-6.1-sol", api: "openai-responses" };
+    pi.queueSessionSetup((runtime) => {
+      runtime.state = { ...runtime.state, model: astra };
+    });
+    const config = createConfig({ featureValues: { fast_mode: true } });
+    const session = await createClient(pi).createSession(config);
+    onTestFinished(() => session.close());
+    const listeners = await connectPaseoExtension(pi);
+    await listeners.get("session_start")?.(
+      {},
+      {
+        model: astra,
+        sessionManager: {
+          getEntries: () => [],
+          buildContextEntries: () => [],
+        },
+        ui: { notify: () => undefined },
+      },
+    );
+    const runtime = pi.latestSession();
+
+    const astraPayload = { model: astra.id, service_tier: "priority" };
+    expect(
+      await listeners.get("before_provider_request")?.(
+        { payload: { ...astraPayload } },
+        { model: astra },
+      ),
+    ).toBeUndefined();
+
+    runtime.setModelResult = sol;
+    await session.setModel!("responses/gpt-6.1-sol");
+    expect(session.features?.[0]?.value).toBe(false);
+    expect(
+      await listeners.get("before_provider_request")?.(
+        { payload: { model: sol.id, service_tier: "priority" } },
+        { model: sol },
+      ),
+    ).toEqual({ model: sol.id });
+
+    runtime.setModelResult = astra;
+    await session.setModel!("responses/gpt-6-astra");
+    expect(session.features?.[0]?.value).toBe(true);
+    await session.setFeature!("fast_mode", false);
+    expect(
+      await listeners.get("before_provider_request")?.(
+        { payload: { ...astraPayload } },
+        { model: astra },
+      ),
+    ).toEqual({ model: astra.id });
+
+    runtime.setModelResult = sol;
+    await session.setModel!("responses/gpt-6.1-sol");
+    await session.setFeature!("fast_mode", true);
+    runtime.setModelResult = astra;
+    await session.setModel!("responses/gpt-6-astra");
+    expect(session.features?.[0]?.value).toBe(false);
+    expect(config.featureValues).toEqual({
+      fast_mode: false,
+      fast_mode_by_model: {
+        "responses/gpt-6-astra": false,
+        "responses/gpt-6.1-sol": true,
+      },
+    });
   });
 
   test("restores the saved Fast preference when resuming a Pi session", async () => {
@@ -2271,7 +2348,11 @@ describe("PiRpcAgentSession", () => {
     await connectPaseoExtension(pi);
     await session.setFeature!("fast_mode", true);
     await session.setFeature!("fast_mode", true);
-    expect(config.featureValues).toEqual({ other_feature: "keep", fast_mode: true });
+    expect(config.featureValues).toEqual({
+      other_feature: "keep",
+      fast_mode: true,
+      fast_mode_by_model: { "openai/gpt-5.4": true },
+    });
     const handle = session.describePersistence()!;
     pi.queueSessionSetup((runtime) => {
       runtime.state = { ...runtime.state, model };

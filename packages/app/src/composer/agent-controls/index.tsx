@@ -25,6 +25,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { Settings2 } from "lucide-react-native";
 import { getAgentFeatureIcon, ThinkingIcon } from "@/agent-controls/icons";
+import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
@@ -1733,19 +1734,24 @@ export const AgentControls = memo(function AgentControls({
       if (!client || !agentProvider) {
         return;
       }
-      void updatePreferences((current) =>
-        mergeProviderPreferences({
-          preferences: current,
-          provider: agentProvider,
-          updates: {
-            featureValues: {
-              [featureId]: value,
+      const sharesFeatureAcrossSessions = !(
+        agentProvider === "pi" && featureId === FAST_MODE_FEATURE_ID
+      );
+      if (sharesFeatureAcrossSessions) {
+        void updatePreferences((current) =>
+          mergeProviderPreferences({
+            preferences: current,
+            provider: agentProvider,
+            updates: {
+              featureValues: {
+                [featureId]: value,
+              },
             },
-          },
-        }),
-      ).catch((error) => {
-        console.warn("[AgentControls] persist feature preference failed", error);
-      });
+          }),
+        ).catch((error) => {
+          console.warn("[AgentControls] persist feature preference failed", error);
+        });
+      }
       void client.setAgentFeature(agentId, featureId, value).catch((error) => {
         console.warn("[AgentControls] setAgentFeature failed", error);
         toast.error(toErrorMessage(error));

@@ -3,10 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { AgentProvider, AgentSessionConfig } from "@getpaseo/protocol/agent-types";
 import { PI_DISABLED_TOOLS_FEATURE_ID } from "@getpaseo/protocol/pi-disabled-tools";
+import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { mergeProviderPreferences, useFormPreferences } from "./use-form-preferences";
 import {
   applyFeatureValues,
+  omitSharedPiFastMode,
   pruneFeatureValues,
   resolveFeatureValues,
 } from "./feature-preferences";
@@ -51,9 +53,15 @@ export function useDraftAgentFeatures(input: {
   const normalizedProvider = provider ?? null;
   const previousProviderRef = useRef<AgentProvider | null>(normalizedProvider);
   const persistedFeatureValues = useMemo(
-    () => (provider ? (preferences.providerPreferences?.[provider]?.featureValues ?? {}) : {}),
+    () =>
+      omitSharedPiFastMode(
+        provider,
+        provider ? (preferences.providerPreferences?.[provider]?.featureValues ?? {}) : {},
+      ),
     [preferences.providerPreferences, provider],
   );
+  const fastModeByModelRef = useRef<Record<string, boolean>>({});
+  const modelIdRef = useRef(modelId);
 
   const draftConfig = useMemo<DraftFeatureConfig | null>(() => {
     if (!normalizedProvider || !normalizedCwd) {
@@ -136,8 +144,38 @@ export function useDraftAgentFeatures(input: {
       : { ...featureValues, [PI_DISABLED_TOOLS_FEATURE_ID]: disabledToolsValue };
   const effectiveFeatureValues =
     Object.keys(featureValuesWithTools).length > 0 ? featureValuesWithTools : undefined;
+  useEffect(() => {
+    const previousModelId = modelIdRef.current;
+    if (previousModelId === modelId) return;
+    modelIdRef.current = modelId;
+    if (provider !== "pi" || !previousModelId) return;
+    setLocalFeatureValues((current) => {
+      const previousValue = current[FAST_MODE_FEATURE_ID];
+      if (previousModelId && typeof previousValue === "boolean") {
+        fastModeByModelRef.current[previousModelId] = previousValue;
+      }
+      const remembered = modelId ? fastModeByModelRef.current[modelId] : undefined;
+      if (remembered === undefined) {
+        if (!Object.prototype.hasOwnProperty.call(current, FAST_MODE_FEATURE_ID)) return current;
+        const next = { ...current };
+        delete next[FAST_MODE_FEATURE_ID];
+        return next;
+      }
+      if (current[FAST_MODE_FEATURE_ID] === remembered) return current;
+      return { ...current, [FAST_MODE_FEATURE_ID]: remembered };
+    });
+  }, [modelId, provider]);
+
   const setFeatureValue = useCallback(
     (featureId: string, value: unknown) => {
+      if (
+        provider === "pi" &&
+        featureId === FAST_MODE_FEATURE_ID &&
+        modelId &&
+        typeof value === "boolean"
+      ) {
+        fastModeByModelRef.current[modelId] = value;
+      }
       setLocalFeatureValues((current) => {
         if (Object.is(current[featureId], value)) {
           return current;
@@ -145,7 +183,7 @@ export function useDraftAgentFeatures(input: {
 
         return { ...current, [featureId]: value };
       });
-      if (!provider) {
+      if (!provider || (provider === "pi" && featureId === FAST_MODE_FEATURE_ID)) {
         return;
       }
       void updatePreferences((current) =>
@@ -162,7 +200,7 @@ export function useDraftAgentFeatures(input: {
         console.warn("[useDraftAgentFeatures] persist feature preference failed", error);
       });
     },
-    [provider, updatePreferences],
+    [modelId, provider, updatePreferences],
   );
 
   const applyProfileFeatureValues = useCallback((values: Record<string, unknown>) => {

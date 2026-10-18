@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveFeatureValues } from "./feature-preferences";
+import { omitSharedPiFastMode, resolveFeatureValues } from "./feature-preferences";
 
 describe("feature-preferences", () => {
   const features = [
@@ -31,6 +31,16 @@ describe("feature-preferences", () => {
     ).toEqual({
       fast_mode: true,
     });
+  });
+
+  it("drops Pi fast mode from the shared provider preference", () => {
+    expect(
+      omitSharedPiFastMode("pi", {
+        fast_mode: true,
+        plan_mode: true,
+      }),
+    ).toEqual({ plan_mode: true });
+    expect(omitSharedPiFastMode("codex", { fast_mode: true })).toEqual({ fast_mode: true });
   });
 
   it("prefers local values over persisted values", () => {
