@@ -17,6 +17,7 @@ import { PENDING_MARKDOWN_IMAGE } from "./source";
 import { splitStreamingMarkdown } from "./streaming";
 import { useMarkdownSource, type MarkdownImageContext } from "./images";
 
+import { ensureMarkdownContainment } from "./containment";
 import { MermaidFence, MermaidStreamingContext, splitMermaidFences } from "./fence/mermaid";
 
 const ThemedMarkdown = withUnistyles(EnrichedMarkdownText);
@@ -27,7 +28,12 @@ const markdownStyle = (compact: boolean) => (theme: Theme, rt: { breakpoint?: st
   createMarkdownStyles(theme, { compact, blockGap: resolveDensity(rt, density.blockGap) });
 const regularStyle = markdownStyle(false);
 const compactStyle = markdownStyle(true);
-const WEB_CONTAINER = { userSelect: "text" as const };
+const WEB_CONTAINER = {
+  userSelect: "text" as const,
+  width: "100%" as const,
+  maxWidth: "100%" as const,
+  minWidth: 0,
+};
 
 export interface MarkdownRendererProps extends MarkdownImageContext {
   text: string;
@@ -61,6 +67,7 @@ const MarkdownPart = memo(function MarkdownPart({
   onLinkPress,
   ...imageContext
 }: MarkdownRendererProps) {
+  if (isWeb) ensureMarkdownContainment();
   const environment = useAssistantFileLinkEnvironment();
   const actions = useAssistantFileLinkActions();
   const client =

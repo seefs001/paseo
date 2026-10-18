@@ -3782,6 +3782,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   centerColumn: {
     flex: 1,
+    minWidth: 0,
     minHeight: 0,
   },
   headerTitleContainer: {

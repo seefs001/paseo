@@ -83,6 +83,8 @@ const streamRowStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
 };
 
 function isScrollContainerNearBottom(
@@ -1195,6 +1197,9 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     return {
       display: "flex",
       flexDirection: "column",
+      width: "100%",
+      maxWidth: "100%",
+      minWidth: 0,
       minHeight: "100%",
       paddingTop: CONTENT_PADDING_TOP_PX,
       paddingBottom: 16,
@@ -1241,6 +1246,9 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
       display: "flex",
       flexDirection: "column",
       width: "100%",
+      maxWidth: "100%",
+      minWidth: 0,
+      boxSizing: "border-box",
       transform: `translateY(${start - VIRTUALIZER_SCROLL_MARGIN_PX}px)`,
     }),
     [],

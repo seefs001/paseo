@@ -1704,6 +1704,7 @@ const stylesheet = StyleSheet.create((theme) => ({
   streamItemWrapper: {
     width: "100%",
     maxWidth: theme.contentMaxWidth,
+    minWidth: 0,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
   },
