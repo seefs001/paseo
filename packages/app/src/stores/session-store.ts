@@ -92,7 +92,6 @@ export interface Agent {
   workspaceId?: string;
   model: string | null;
   features?: AgentFeature[];
-  disabledTools?: string[];
   thinkingOptionId?: string | null;
   requiresAttention?: boolean;
   attentionReason?: "finished" | "error" | "permission" | null;

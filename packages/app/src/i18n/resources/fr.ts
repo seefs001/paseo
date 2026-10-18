@@ -238,12 +238,6 @@ export const fr: TranslationResources = {
       on: "Activé",
       off: "Désactivé",
     },
-    tools: {
-      title: "Outils",
-      open: "Outils",
-      openWithValue: "Outils ({{value}})",
-      scopeweaverDescription: "Tâches de test de sécurité",
-    },
     mode: {
       title: "Mode",
       searchPlaceholder: "Rechercher un mode…",

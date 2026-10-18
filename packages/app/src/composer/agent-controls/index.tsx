@@ -79,11 +79,6 @@ import {
   type ComposerControlDensity,
   type ComposerControlPresentation,
 } from "@/composer/agent-controls/layout";
-import { usePiToolGroups } from "@/composer/agent-controls/tool-groups";
-import {
-  PI_DISABLED_TOOLS_FEATURE_ID,
-  resolvePiDisabledTools,
-} from "@getpaseo/protocol/pi-disabled-tools";
 import { ComposerControlLayoutProvider } from "@/composer/agent-controls/layout-context";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
@@ -130,7 +125,6 @@ interface ControlledAgentControlsProps {
   onEditAgentProfile?: (profileId: string) => void;
   features?: AgentFeature[];
   onSetFeature?: (featureId: string, value: unknown) => void;
-  renderToolGroups?: (surface: "toolbar" | "sheet") => ReactElement | null;
   onDropdownClose?: () => void;
   onModelSelectorOpen?: () => void;
   onRetryModelProvider?: (provider: AgentProvider) => void;
@@ -158,7 +152,6 @@ export interface DraftAgentControlsProps {
   onSelectThinkingOption: (thinkingOptionId: string) => void;
   onApplyAgentProfile: DraftAgentProfileControls["applyProfile"];
   features?: AgentFeature[];
-  featureValues?: Record<string, unknown>;
   onSetFeature?: (featureId: string, value: unknown) => void;
   onDropdownClose?: () => void;
   onModelSelectorOpen?: () => void;
@@ -402,16 +395,10 @@ type AgentControlsSlice = {
   runtimeModelId: string | null;
   model: string | null | undefined;
   features: AgentFeature[] | undefined;
-  disabledTools: string[] | undefined;
   runtimeThinkingOptionId: string | null;
   thinkingOptionId: string | null | undefined;
   lastUsage: unknown;
 } | null;
-
-function readAgentDisabledTools(agent: AgentControlsSlice): string[] | undefined {
-  if (!agent || agent.provider !== "pi") return undefined;
-  return agent.disabledTools;
-}
 
 function selectAgentControlsSlice(
   state: ReturnType<typeof useSessionStore.getState>,
@@ -428,7 +415,6 @@ function selectAgentControlsSlice(
     runtimeModelId: currentAgent.runtimeInfo?.model ?? null,
     model: currentAgent.model,
     features: currentAgent.features,
-    disabledTools: currentAgent.disabledTools,
     runtimeThinkingOptionId: currentAgent.runtimeInfo?.thinkingOptionId ?? null,
     thinkingOptionId: currentAgent.thinkingOptionId,
     lastUsage: currentAgent.lastUsage,
@@ -510,7 +496,6 @@ function ControlledAgentControls({
   onEditAgentProfile,
   features,
   onSetFeature,
-  renderToolGroups,
   onDropdownClose,
   onModelSelectorOpen,
   onRetryModelProvider,
@@ -761,7 +746,6 @@ function ControlledAgentControls({
             selectedThinkingOptionId={selectedThinkingOptionId}
             features={features}
             onSetFeature={onSetFeature}
-            renderToolGroups={renderToolGroups}
             onApplyAgentProfile={onApplyAgentProfile}
             onEditAgentProfiles={onEditAgentProfiles}
             onCreateAgentProfile={onCreateAgentProfile}
@@ -811,7 +795,6 @@ function ControlledAgentControls({
             selectedThinkingOptionId={selectedThinkingOptionId}
             features={features}
             onSetFeature={onSetFeature}
-            renderToolGroups={renderToolGroups}
             onApplyAgentProfile={onApplyAgentProfile}
             onEditAgentProfiles={onEditAgentProfiles}
             onCreateAgentProfile={onCreateAgentProfile}
@@ -858,7 +841,6 @@ interface DesktopAgentControlsContentProps {
   selectedThinkingOptionId?: string;
   features?: AgentFeature[];
   onSetFeature?: (featureId: string, value: unknown) => void;
-  renderToolGroups?: (surface: "toolbar" | "sheet") => ReactElement | null;
   onApplyAgentProfile?: (profileId: string) => void;
   onEditAgentProfiles?: () => void;
   onCreateAgentProfile?: (seed: AgentProfileSeed) => void;
@@ -921,7 +903,6 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     selectedThinkingOptionId,
     features,
     onSetFeature,
-    renderToolGroups,
     onApplyAgentProfile,
     onEditAgentProfiles,
     onCreateAgentProfile,
@@ -1077,8 +1058,6 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
 
       {modeControl ? <AgentModeControl {...modeControl} onClose={onDropdownClose} /> : null}
 
-      {renderToolGroups?.("toolbar")}
-
       {presentation.aggregateFeatures && features?.length ? (
         <>
           <Pressable
@@ -1134,7 +1113,6 @@ interface SheetAgentControlsContentProps {
   selectedThinkingOptionId?: string;
   features?: AgentFeature[];
   onSetFeature?: (featureId: string, value: unknown) => void;
-  renderToolGroups?: (surface: "toolbar" | "sheet") => ReactElement | null;
   onApplyAgentProfile?: (profileId: string) => void;
   onEditAgentProfiles?: () => void;
   onCreateAgentProfile?: (seed: AgentProfileSeed) => void;
@@ -1179,7 +1157,6 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     selectedThinkingOptionId,
     features,
     onSetFeature,
-    renderToolGroups,
     onApplyAgentProfile,
     onEditAgentProfiles,
     onCreateAgentProfile,
@@ -1261,8 +1238,6 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       ) : null}
 
       {modeControl ? <AgentModeControl {...modeControl} surface="sheet" /> : null}
-
-      {renderToolGroups?.("sheet")}
 
       {(features ?? []).map((feature) => (
         <SheetFeatureItem
@@ -1586,9 +1561,6 @@ export const AgentControls = memo(function AgentControls({
     useShallow((state) => selectAgentControlsSlice(state, serverId, agentId)),
   );
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
-  const piDisabledTools = useSessionStore(
-    (state) => state.sessions[serverId]?.serverInfo?.features?.piDisabledTools === true,
-  );
   const toast = useToast();
   const modeControl = useLiveAgentModeControl(serverId, agentId);
   const commandCenterModes = toCommandCenterModes(modeControl);
@@ -1760,18 +1732,6 @@ export const AgentControls = memo(function AgentControls({
     [agentId, agentProvider, client, toast, updatePreferences],
   );
 
-  const onDisabledToolsChange = useCallback(
-    (value: string) => handleSetFeature(PI_DISABLED_TOOLS_FEATURE_ID, value),
-    [handleSetFeature],
-  );
-  const renderToolGroups = usePiToolGroups(
-    piDisabledTools,
-    agentProvider,
-    readAgentDisabledTools(agent),
-    !client,
-    onDisabledToolsChange,
-  );
-
   const commandCenterControls = useMemo<AgentControlCommandCenterSource>(
     () => ({
       serverId,
@@ -1855,7 +1815,6 @@ export const AgentControls = memo(function AgentControls({
         onSelectThinkingOption={handleSelectThinkingOption}
         features={agent.features}
         onSetFeature={handleSetFeature}
-        renderToolGroups={renderToolGroups}
         isModelLoading={snapshotIsLoading || selectedProviderIsLoading}
         onModelSelectorOpen={handleModelSelectorOpen}
         onRetryModelProvider={handleRetryModelProvider}
@@ -1888,7 +1847,6 @@ export function DraftAgentControls({
   onSelectThinkingOption,
   onApplyAgentProfile,
   features,
-  featureValues,
   onSetFeature,
   onDropdownClose,
   onModelSelectorOpen,
@@ -1898,24 +1856,6 @@ export function DraftAgentControls({
   modelSelectorServerId = null,
   isCompactLayout,
 }: DraftAgentControlsProps) {
-  const piDisabledTools = useSessionStore(
-    (state) =>
-      state.sessions[modelSelectorServerId ?? ""]?.serverInfo?.features?.piDisabledTools === true,
-  );
-  const disabledToolPatterns = resolvePiDisabledTools(
-    selectedProvider === "pi" ? featureValues : { [PI_DISABLED_TOOLS_FEATURE_ID]: "" },
-  );
-  const onDisabledToolsChange = useCallback(
-    (value: string) => onSetFeature?.(PI_DISABLED_TOOLS_FEATURE_ID, value),
-    [onSetFeature],
-  );
-  const renderToolGroups = usePiToolGroups(
-    piDisabledTools && selectedProvider === "pi" && onSetFeature !== undefined,
-    selectedProvider ?? undefined,
-    disabledToolPatterns,
-    disabled,
-    onDisabledToolsChange,
-  );
   const mappedThinkingOptions = useMemo<AgentControlOption[]>(() => {
     return toThinkingControlOptions(thinkingOptions);
   }, [thinkingOptions]);
@@ -1995,7 +1935,6 @@ export function DraftAgentControls({
         onSelectThinkingOption={onSelectThinkingOption}
         features={features}
         onSetFeature={onSetFeature}
-        renderToolGroups={renderToolGroups}
         onDropdownClose={onDropdownClose}
         onModelSelectorOpen={onModelSelectorOpen}
         onRetryModelProvider={onRetryModelProvider}

@@ -1,5 +1,4 @@
 import type { AgentFeature, AgentProvider } from "@getpaseo/protocol/agent-types";
-import { PI_DISABLED_TOOLS_FEATURE_ID } from "@getpaseo/protocol/pi-disabled-tools";
 import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 
 export function pruneFeatureValues(
@@ -11,7 +10,7 @@ export function pruneFeatureValues(
   const next: Record<string, unknown> = {};
 
   for (const [featureId, value] of Object.entries(featureValues)) {
-    if (featureId !== PI_DISABLED_TOOLS_FEATURE_ID && !allowedFeatureIds.has(featureId)) {
+    if (!allowedFeatureIds.has(featureId)) {
       changed = true;
       continue;
     }

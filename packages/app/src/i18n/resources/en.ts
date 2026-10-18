@@ -231,12 +231,6 @@ export const en = {
       on: "On",
       off: "Off",
     },
-    tools: {
-      title: "Tools",
-      open: "Tools",
-      openWithValue: "Tools ({{value}})",
-      scopeweaverDescription: "Security testing tasks",
-    },
     mode: {
       title: "Mode",
       searchPlaceholder: "Search modes...",

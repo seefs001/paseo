@@ -237,12 +237,6 @@ export const ru: TranslationResources = {
       on: "Включено",
       off: "Выключено",
     },
-    tools: {
-      title: "Инструменты",
-      open: "Инструменты",
-      openWithValue: "Инструменты ({{value}})",
-      scopeweaverDescription: "Задачи тестирования безопасности",
-    },
     mode: {
       title: "Режим",
       searchPlaceholder: "Поиск режимов...",

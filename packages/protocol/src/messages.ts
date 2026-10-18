@@ -831,9 +831,6 @@ export const AgentSnapshotPayloadSchema = z.object({
   workspaceId: z.string().optional(),
   model: z.string().nullable(),
   features: z.array(AgentFeatureSchema).optional(),
-  // Patterns removed from the model tool list. Pi sessions omit this when unset
-  // and the host applies its default, which disables ScopeWeaver.
-  disabledTools: z.array(z.string()).optional(),
   thinkingOptionId: z.string().nullable().optional(),
   effectiveThinkingOptionId: z.string().nullable().optional(),
   createdAt: z.string(),
@@ -3803,8 +3800,6 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
-        // COMPAT(piDisabledTools): added after v0.12.0-beta.3, remove gate after 2027-04-18.
-        piDisabledTools: z.boolean().optional(),
       })
       .optional(),
   })

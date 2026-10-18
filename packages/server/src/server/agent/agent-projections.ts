@@ -17,7 +17,6 @@ import type {
   AgentUsage,
   ImportableProviderSession,
 } from "./agent-sdk-types.js";
-import { resolvePiDisabledTools } from "@getpaseo/protocol/pi-disabled-tools";
 import type { ManagedAgent } from "./agent-manager.js";
 import type { JsonValue } from "../json-utils.js";
 import {
@@ -136,9 +135,6 @@ export function toAgentPayload(
     currentModeId: agent.currentModeId,
     availableModes: cloneAvailableModes(agent.availableModes),
     features: normalizeFeatures(agent.features),
-    ...(agent.provider === "pi"
-      ? { disabledTools: resolvePiDisabledTools(agent.config.featureValues) }
-      : {}),
     pendingPermissions: sanitizePendingPermissions(agent.pendingPermissions),
     persistence: projectPersistenceHandleForWire(agent.persistence),
     title: options?.title ?? null,
@@ -252,22 +248,10 @@ export function buildStoredAgentPayload(
     attentionReason: record.attentionReason ?? null,
     attentionTimestamp: record.attentionTimestamp ?? null,
     archivedAt: record.archivedAt ?? null,
-    labels: normalizeLabels(record.labels),
-    ...storedAgentProjectionExtras(record, providerAvailable),
-  };
-}
-
-function storedAgentProjectionExtras(
-  record: StoredAgentRecord,
-  providerAvailable: boolean,
-): Pick<AgentSnapshotPayload, "internal" | "lastError" | "providerUnavailable" | "disabledTools"> {
-  return {
     ...(record.internal ? { internal: true } : {}),
+    labels: normalizeLabels(record.labels),
     ...(typeof record.lastError === "string" ? { lastError: record.lastError } : {}),
-    ...(providerAvailable ? {} : { providerUnavailable: true as const }),
-    ...(record.provider === "pi"
-      ? { disabledTools: resolvePiDisabledTools(record.config?.featureValues ?? undefined) }
-      : {}),
+    ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }
 

@@ -5,11 +5,6 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
-import {
-  PI_DISABLED_TOOLS_FEATURE_ID,
-  parsePiDisabledToolsValue,
-  resolvePiDisabledTools,
-} from "@getpaseo/protocol/pi-disabled-tools";
 import { z } from "zod";
 
 import {
@@ -107,7 +102,6 @@ const PI_BINARY_COMMAND = process.env.PI_COMMAND ?? process.env.PI_ACP_PI_COMMAN
 const PASEO_PI_TREE_EXTENSION_COMMAND = "paseo_tree";
 const PASEO_PI_CAPTURE_EXTENSION_COMMAND = "paseo_capture_entries";
 const PASEO_PI_FAST_MODE_EXTENSION_COMMAND = "paseo_fast_mode";
-const PASEO_PI_DISABLED_TOOLS_EXTENSION_COMMAND = "paseo_disabled_tools";
 const PI_FAST_MODE_APIS: readonly string[] = ["openai-responses", "openai-codex-responses"];
 const PI_FAST_MODE_BY_MODEL = "fast_mode_by_model";
 const PASEO_PI_REWIND_ENTRY_TYPE = "paseo_rewind";
@@ -162,12 +156,7 @@ function mapPiSlashCommands(
     handledCommands.map((command) => [command.name, { ...command }]),
   );
   for (const command of commands) {
-    if (
-      command.name === PASEO_PI_FAST_MODE_EXTENSION_COMMAND ||
-      command.name === PASEO_PI_DISABLED_TOOLS_EXTENSION_COMMAND
-    ) {
-      continue;
-    }
+    if (command.name === PASEO_PI_FAST_MODE_EXTENSION_COMMAND) continue;
     const knownCommand = mappedCommands.get(command.name);
     mappedCommands.set(command.name, {
       name: command.name,
@@ -413,7 +402,6 @@ type PiMcpInjection =
 interface PiPaseoExtensionOptions {
   fastModeByModel: Record<string, boolean>;
   legacyUnscopedFast: boolean | null;
-  disabledTools: readonly string[];
   systemPrompt?: string;
   mcpServers?: Record<string, PiMcpServerConfig>;
 }
@@ -761,7 +749,6 @@ function createPiMcpConfigFile(
 function createPiPaseoExtensionFile({
   fastModeByModel,
   legacyUnscopedFast,
-  disabledTools,
   systemPrompt,
   mcpServers = {},
 }: PiPaseoExtensionOptions): PiTempFile {
@@ -935,36 +922,6 @@ function createPiPaseoExtensionFile({
 	    delete next.service_tier;
 	    return next;
 	  }
-	  let disabledTools = ${JSON.stringify(disabledTools)};
-	  function toolNameMatches(name, pattern) {
-	    const star = pattern.indexOf("*");
-	    if (star === -1) return name === pattern;
-	    if (pattern.indexOf("*", star + 1) !== -1) return false;
-	    const prefix = pattern.slice(0, star);
-	    const suffix = pattern.slice(star + 1);
-	    return name.startsWith(prefix) && name.endsWith(suffix) && name.length >= prefix.length + suffix.length;
-	  }
-	  function namesMatching(patterns) {
-	    return pi.getAllTools()
-	      .map((tool) => tool.name)
-	      .filter((name) => patterns.some((pattern) => toolNameMatches(name, pattern)));
-	  }
-	  // --exclude-tools would unregister the tools, so a later enable could not bring them back.
-	  // Filter the active set instead. before_agent_start is late enough that direct tools
-	  // have registered, and early enough that this run sees the filtered loadout.
-	  function applyDisabledTools(previous) {
-	    const active = new Set(pi.getActiveTools().map((tool) => tool.name));
-	    for (const name of namesMatching(disabledTools)) active.delete(name);
-	    if (previous) {
-	      for (const name of namesMatching(previous)) {
-	        if (!disabledTools.some((pattern) => toolNameMatches(name, pattern))) active.add(name);
-	      }
-	    }
-	    pi.setActiveTools([...active]);
-	  }
-	  pi.on("before_agent_start", () => {
-	    applyDisabledTools();
-	  });
 	  // Pi has no service-tier RPC. The map belongs to this process; each model has its own entry.
 	  pi.on("before_provider_request", (event, ctx) => {
 	    const enabled = fastModeForModel(ctx.model);
@@ -1023,24 +980,6 @@ function createPiPaseoExtensionFile({
 	  pi.on("turn_end", async (_event, ctx) => {
 	    emitSubmittedUserEntries(ctx);
 	    emitEntryCapture(ctx, "turn_end");
-	  });
-
-	  pi.registerCommand("${PASEO_PI_DISABLED_TOOLS_EXTENSION_COMMAND}", {
-	    description: "Internal Paseo tool group control",
-	    handler: async (args, ctx) => {
-	      const payload = decodePayload(args.trim());
-	      try {
-	        if (!Array.isArray(payload.patterns) || payload.patterns.some((pattern) => typeof pattern !== "string")) {
-	          throw new Error("Pi disabled tools require a list of patterns");
-	        }
-	        const previous = disabledTools;
-	        disabledTools = payload.patterns;
-	        applyDisabledTools(previous);
-	        emitCommandResult(ctx, payload.requestId, { ok: true, result: disabledTools });
-	      } catch (error) {
-	        emitCommandResult(ctx, payload.requestId, { ok: false, error: String(error) });
-	      }
-	    },
 	  });
 
 	  pi.registerCommand("${PASEO_PI_FAST_MODE_EXTENSION_COMMAND}", {
@@ -2014,32 +1953,6 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {
-    if (featureId === PI_DISABLED_TOOLS_FEATURE_ID) {
-      if (this.closed) {
-        throw new PiFeatureError(featureId, "Pi session is closed");
-      }
-      const patterns = parsePiDisabledToolsValue(value);
-      const requestId = randomUUID();
-      const resultPromise = this.waitForExtensionResult(requestId);
-      const payload = Buffer.from(JSON.stringify({ requestId, patterns })).toString("base64url");
-      try {
-        await Promise.all([
-          resultPromise,
-          this.runtimeSession.prompt(`/${PASEO_PI_DISABLED_TOOLS_EXTENSION_COMMAND} ${payload}`),
-        ]);
-        this.config.featureValues = {
-          ...this.config.featureValues,
-          [PI_DISABLED_TOOLS_FEATURE_ID]: value,
-        };
-      } catch (error) {
-        this.rejectExtensionResult(
-          requestId,
-          new PiFeatureError(featureId, toDiagnosticErrorMessage(error)),
-        );
-        throw error;
-      }
-      return;
-    }
     if (featureId !== "fast_mode") {
       throw new PiFeatureError(featureId, `Unknown Pi feature: ${featureId}`);
     }
@@ -2993,7 +2906,6 @@ export class PiRpcAgentClient implements AgentClient {
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
       ...piExtensionFastMode(config),
-      disabledTools: resolvePiDisabledTools(config.featureValues),
       systemPrompt: composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
       mcpServers: mcp?.kind === "builtin" ? mcp.servers : undefined,
     });
@@ -3063,7 +2975,6 @@ export class PiRpcAgentClient implements AgentClient {
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
       ...piExtensionFastMode(resumeConfig.config),
-      disabledTools: resolvePiDisabledTools(resumeConfig.config.featureValues),
       systemPrompt: composeSystemPromptParts(
         resumeConfig.config.systemPrompt,
         resumeConfig.config.daemonAppendSystemPrompt,

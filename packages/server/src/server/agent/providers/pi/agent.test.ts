@@ -193,9 +193,6 @@ async function loadPaseoExtensionListeners(
       events: { on: () => void };
       registerCommand: (name: string, command: PaseoExtensionCommand) => void;
       registerMcpServer: (name: string, config: unknown) => void;
-      getAllTools: () => Array<{ name: string }>;
-      getActiveTools: () => Array<{ name: string }>;
-      setActiveTools: (names: string[]) => void;
     }) => void;
   };
   extension.default({
@@ -203,9 +200,6 @@ async function loadPaseoExtensionListeners(
     events: { on: () => undefined },
     registerCommand,
     registerMcpServer,
-    getAllTools: () => [],
-    getActiveTools: () => [],
-    setActiveTools: () => undefined,
   });
   return listeners;
 }
@@ -2122,85 +2116,6 @@ describe("PiRpcAgentSession", () => {
     expect(await beforeRequest()).toBeUndefined();
     expect(pi.latestSession().setThinkingLevelRequests).toEqual([]);
     expect(events).toEqual([]);
-  });
-
-  test("removes ScopeWeaver before the first Pi turn and restores it when enabled", async () => {
-    const pi = new FakePi();
-    const session = await createClient(pi).createSession(createConfig());
-    onTestFinished(() => session.close());
-    const extensionPath = pi.recordedLaunches[0]!.extensionPaths![0]!;
-    const active = [
-      "read",
-      "bash",
-      "edit",
-      "write",
-      "scopeweaver_create_task",
-      "scopeweaver_list_tasks",
-    ];
-    const all = active.map((name) => ({ name }));
-    const listeners = new Map<string, PaseoExtensionListener[]>();
-    const commands = new Map<string, PaseoExtensionCommand>();
-    const extension = (await import(pathToFileURL(extensionPath).href)) as {
-      default: (piApi: {
-        on: (event: string, listener: PaseoExtensionListener) => void;
-        events: { on: () => void };
-        registerCommand: (name: string, command: PaseoExtensionCommand) => void;
-        registerMcpServer: () => void;
-        getAllTools: () => Array<{ name: string }>;
-        getActiveTools: () => Array<{ name: string }>;
-        setActiveTools: (names: string[]) => void;
-      }) => void;
-    };
-    extension.default({
-      on: (event, listener) => {
-        const existing = listeners.get(event) ?? [];
-        existing.push(listener);
-        listeners.set(event, existing);
-      },
-      events: { on: () => undefined },
-      registerCommand: (name, command) => commands.set(name, command),
-      registerMcpServer: () => undefined,
-      getAllTools: () => all,
-      getActiveTools: () => active.map((name) => ({ name })),
-      setActiveTools: (names) => {
-        active.splice(0, active.length, ...names);
-      },
-    });
-
-    await listeners.get("before_agent_start")?.[0]?.({});
-    expect(active).toEqual(["read", "bash", "edit", "write"]);
-
-    const notes: string[] = [];
-    const payload = Buffer.from(JSON.stringify({ requestId: "tools-1", patterns: [] })).toString(
-      "base64url",
-    );
-    await commands.get("paseo_disabled_tools")?.handler(payload, {
-      ui: { notify: (message: string) => notes.push(message) },
-    });
-    expect(active).toEqual([
-      "read",
-      "bash",
-      "edit",
-      "write",
-      "scopeweaver_create_task",
-      "scopeweaver_list_tasks",
-    ]);
-    expect(notes[0]).toContain("PASEO_COMMAND_RESULT");
-  });
-
-  test("persists a Pi tool-group change through the extension command", async () => {
-    const pi = new FakePi();
-    const config = createConfig();
-    const session = await createClient(pi).createSession(config);
-    onTestFinished(() => session.close());
-    await connectPaseoExtension(pi);
-
-    await session.setFeature!("disabled_tools", "");
-    expect(config.featureValues).toEqual({ disabled_tools: "" });
-    await session.setFeature!("disabled_tools", "scopeweaver_*");
-    expect(config.featureValues).toEqual({ disabled_tools: "scopeweaver_*" });
-    await expect(session.setFeature!("disabled_tools", "../settings")).rejects.toThrow(/Invalid/);
-    expect(config.featureValues).toEqual({ disabled_tools: "scopeweaver_*" });
   });
 
   test.each([undefined, "anthropic-messages", "openai-completions"])(

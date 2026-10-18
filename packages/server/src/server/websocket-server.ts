@@ -1952,8 +1952,6 @@ export class VoiceAssistantWebSocketServer {
         agentProfiles: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: true,
-        // COMPAT(piDisabledTools): added after v0.12.0-beta.3, remove gate after 2027-04-18.
-        piDisabledTools: true,
       },
     };
   }
