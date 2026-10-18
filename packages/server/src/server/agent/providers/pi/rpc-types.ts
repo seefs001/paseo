@@ -70,6 +70,16 @@ export type PiAgentMessage =
       exitCode?: number | null;
       cancelled?: boolean;
       timestamp: number;
+    }
+  | {
+      role: "compactionSummary";
+      summary?: string;
+      tokensBefore?: number;
+    }
+  | {
+      role: "branchSummary";
+      summary?: string;
+      fromId?: string | null;
     };
 
 export interface PiModel {

@@ -21,6 +21,27 @@ async function collectHistory(
 }
 
 describe("Pi history mapper", () => {
+  test("replays compaction and branch summaries and skips unknown roles", async () => {
+    const events = await collectHistory([
+      { role: "user", content: "before" },
+      { role: "compactionSummary", summary: "compacted", tokensBefore: 1200 },
+      { role: "branchSummary", summary: "tried another approach", fromId: null },
+      { role: "assistant", content: [{ type: "text", text: "after" }] },
+      { role: "hookMessage" } as PiAgentMessage,
+    ]);
+
+    expect(events.map((event) => event.item)).toEqual([
+      { type: "user_message", text: "before" },
+      { type: "compaction", status: "completed", preTokens: 1200 },
+      { type: "notification", level: "info", message: "tried another approach" },
+      {
+        type: "assistant_message",
+        text: "after",
+        messageId: "pi-history-assistant-1",
+      },
+    ]);
+  });
+
   test("inserts web search and fetch cards where the branch recorded them", async () => {
     const events = await collectHistory(
       [

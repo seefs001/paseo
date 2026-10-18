@@ -159,6 +159,12 @@ export class PiHistoryMapper {
         return this.mapToolResultMessage(message);
       case "bashExecution":
         return [this.mapBashExecutionMessage(message)];
+      case "compactionSummary":
+        return [this.mapCompactionSummary(message)];
+      case "branchSummary":
+        return this.mapBranchSummary(message);
+      default:
+        return [];
     }
   }
 
@@ -309,6 +315,38 @@ export class PiHistoryMapper {
     if (!mapping) return [];
     this.hydrations.push(mapping.hydration);
     return mapping.events;
+  }
+
+  private mapCompactionSummary(
+    message: Extract<PiAgentMessage, { role: "compactionSummary" }>,
+  ): AgentStreamEvent {
+    return {
+      type: "timeline",
+      provider: this.provider,
+      item: {
+        type: "compaction",
+        status: "completed",
+        ...(typeof message.tokensBefore === "number" ? { preTokens: message.tokensBefore } : {}),
+      },
+    };
+  }
+
+  private mapBranchSummary(
+    message: Extract<PiAgentMessage, { role: "branchSummary" }>,
+  ): AgentStreamEvent[] {
+    const summary = message.summary?.trim();
+    if (!summary) return [];
+    return [
+      {
+        type: "timeline",
+        provider: this.provider,
+        item: {
+          type: "notification",
+          level: "info",
+          message: summary,
+        },
+      },
+    ];
   }
 
   private mapBashExecutionMessage(
