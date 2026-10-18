@@ -1,5 +1,8 @@
-import { buildAgentMessageDisplay } from "./agent-message-display.js";
 import type { ToolCallDetail, ToolCallTimelineItem } from "./agent-types.js";
+import {
+  buildAgentMessageDisplay,
+  buildPaseoToolDisplay,
+} from "./paseo-tool-presentation/index.js";
 import { getPaseoToolLeafName, isPaseoToolName } from "./tool-name-normalization.js";
 import { stripCwdPrefix } from "./path-utils.js";
 
@@ -8,6 +11,8 @@ export type ToolCallDisplayInput = Pick<
   "name" | "status" | "error" | "metadata" | "detail" | "agentMessage"
 > & {
   cwd?: string;
+  /** Title of the agent a Paseo call targets, when the caller knows it. */
+  targetAgentTitle?: string;
 };
 
 export interface ToolCallDisplayModel {
@@ -214,8 +219,20 @@ function metadataString(
 }
 
 export function buildToolCallDisplayModel(input: ToolCallDisplayInput): ToolCallDisplayModel {
-  if (input.agentMessage) {
-    return { displayName: buildAgentMessageDisplay(input.agentMessage).displayName };
+  const errorText = input.status === "failed" ? formatErrorText(input.error) : undefined;
+  const paseoDisplay = input.agentMessage
+    ? buildAgentMessageDisplay(input.agentMessage)
+    : buildPaseoToolDisplay({
+        toolName: input.name,
+        detail: input.detail,
+        targetAgentTitle: input.targetAgentTitle,
+      });
+  if (paseoDisplay) {
+    return {
+      displayName: paseoDisplay.displayName,
+      ...(paseoDisplay.summary ? { summary: paseoDisplay.summary } : {}),
+      ...(errorText ? { errorText } : {}),
+    };
   }
   const canonicalDisplay = buildCanonicalDetailDisplay(input);
   const unknownDetailOverride = buildUnknownDetailOverride(input);
@@ -224,7 +241,6 @@ export function buildToolCallDisplayModel(input: ToolCallDisplayInput): ToolCall
     canonicalDisplay.displayName ??
     humanizeToolName(input.name);
   const summary = unknownDetailOverride.summary ?? canonicalDisplay.summary;
-  const errorText = input.status === "failed" ? formatErrorText(input.error) : undefined;
 
   return {
     displayName,

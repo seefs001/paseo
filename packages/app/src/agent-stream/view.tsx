@@ -817,6 +817,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               status={data.status}
               detail={data.detail}
               cwd={context.cwd}
+              serverId={resolvedServerId}
               metadata={data.metadata}
               agentMessage={data.agentMessage}
               isLastInSequence={isLastInSequence}
@@ -843,6 +844,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       },
       [
         context.cwd,
+        resolvedServerId,
         setInlineDetailsExpanded,
         handleToolCallOpenFile,
         expandedToolCallGroupIds,
