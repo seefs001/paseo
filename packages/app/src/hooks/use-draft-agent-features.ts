@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { AgentProvider, AgentSessionConfig } from "@getpaseo/protocol/agent-types";
 import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
+import type { MaterializedAgentProfile } from "@/agent-profiles";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { mergeProviderPreferences, useFormPreferences } from "./use-form-preferences";
 import {
@@ -183,9 +184,28 @@ export function useDraftAgentFeatures(input: {
     [modelId, provider, updatePreferences],
   );
 
-  const applyProfileFeatureValues = useCallback((values: Record<string, unknown>) => {
-    setLocalFeatureValues(values);
-  }, []);
+  const applyProfileFeatureValues = useCallback(
+    (profile: MaterializedAgentProfile) => {
+      const previousProvider = previousProviderRef.current;
+      const previousModelId = modelIdRef.current;
+      const previousFastMode = localFeatureValues[FAST_MODE_FEATURE_ID];
+      if (previousProvider === "pi" && previousModelId && typeof previousFastMode === "boolean") {
+        fastModeByModelRef.current[previousModelId] = previousFastMode;
+      }
+      const sameProvider = profile.provider === previousProvider;
+      const targetModelId = profile.modelId || (sameProvider ? previousModelId : null);
+      const fastMode = profile.featureValues[FAST_MODE_FEATURE_ID];
+      if (profile.provider === "pi" && targetModelId && typeof fastMode === "boolean") {
+        fastModeByModelRef.current[targetModelId] = fastMode;
+      }
+      // The profile changes selection and features together. Selection cleanup must
+      // not treat its values as choices made on the previous provider or model.
+      previousProviderRef.current = profile.provider;
+      modelIdRef.current = targetModelId;
+      setLocalFeatureValues(profile.featureValues);
+    },
+    [localFeatureValues],
+  );
 
   return {
     features,

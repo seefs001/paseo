@@ -1,11 +1,13 @@
 /** @vitest-environment jsdom */
-import React, { act } from "react";
+import React, { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDraftStore } from "@/stores/draft-store";
 import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
+import { useDraftAgentFeatures } from "@/hooks/use-draft-agent-features";
+import { materializeAgentProfile } from "@/agent-profiles/internal/materialize-profile";
 
 const { asyncStorage } = vi.hoisted(() => ({
   asyncStorage: new Map<string, string>(),
@@ -248,6 +250,127 @@ describe("useAgentInputDraft live contract", () => {
     expect(getLatest().textSource.getSnapshot()).toBe("hello world");
     expect(getLatest().attachments).toEqual([{ kind: "image", metadata: image }]);
   });
+
+  it.each([
+    { initialProvider: "pi", fastMode: true },
+    { initialProvider: "claude", fastMode: true },
+    { initialProvider: "pi", fastMode: false },
+  ])(
+    "applies saved Pi Fast=$fastMode from $initialProvider without losing model isolation",
+    async ({ initialProvider, fastMode }) => {
+      const queryClient = new QueryClient();
+      const features = [{ id: "fast_mode", type: "toggle", label: "Fast", value: false }];
+      for (const provider of ["pi", initialProvider]) {
+        queryClient.setQueryData(
+          ["providerFeatures", "host-1", provider, "/repo", null, "openai/model-a", null],
+          features,
+        );
+      }
+      const targetQueryKey = [
+        "providerFeatures",
+        "host-1",
+        "pi",
+        "/repo",
+        null,
+        "openai/model-b",
+        null,
+      ];
+      const profile = materializeAgentProfile({
+        id: "pi-fast-profile",
+        name: "Fast model B",
+        provider: "pi",
+        model: "openai/model-b",
+        featureValues: { fast_mode: fastMode },
+      });
+      let latest: ReturnType<typeof useDraftAgentFeatures> | null = null;
+      let select: ((provider: string, modelId: string) => void) | null = null;
+      function controls() {
+        if (!latest) throw new Error("Expected draft feature controls");
+        return latest;
+      }
+      function selectModel(provider: string, modelId: string) {
+        if (!select) throw new Error("Expected model selector");
+        select(provider, modelId);
+      }
+      function Probe() {
+        const [selection, setSelection] = useState({
+          provider: initialProvider,
+          modelId: "openai/model-a",
+        });
+        select = (provider, modelId) => setSelection({ provider, modelId });
+        latest = useDraftAgentFeatures({
+          serverId: "host-1",
+          ...selection,
+          cwd: "/repo",
+          modeId: null,
+          thinkingOptionId: null,
+        });
+        return null;
+      }
+      const container = document.getElementById("root");
+      if (!container) throw new Error("Missing root container");
+      const root = createTestRoot(container);
+      const render = () =>
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <Probe />
+          </QueryClientProvider>,
+        );
+      await act(async () => {
+        render();
+      });
+      await act(async () => {
+        controls().setFeatureValue("fast_mode", !fastMode);
+      });
+      await act(async () => {
+        selectModel(profile.provider, profile.modelId);
+        controls().applyProfileFeatureValues(profile);
+      });
+      // The target model's capabilities arrive after the profile selection.
+      await act(async () => {
+        queryClient.setQueryData(targetQueryKey, features);
+        await new Promise<void>((resolve) => notifyManager.schedule(resolve));
+      });
+
+      expect(controls().featureValues).toEqual({ fast_mode: fastMode });
+      expect(controls().features).toMatchObject([{ id: "fast_mode", value: fastMode }]);
+
+      await act(async () => {
+        controls().setFeatureValue("fast_mode", !fastMode);
+      });
+      await act(async () => {
+        controls().applyProfileFeatureValues(profile);
+      });
+      expect(controls().featureValues).toEqual({ fast_mode: fastMode });
+
+      await act(async () => {
+        selectModel("pi", "openai/model-a");
+      });
+      const originalFast = initialProvider === "pi" ? !fastMode : false;
+      expect(controls().features).toMatchObject([{ id: "fast_mode", value: originalFast }]);
+      await act(async () => {
+        selectModel("pi", "openai/model-b");
+      });
+      expect(controls().featureValues).toEqual({ fast_mode: fastMode });
+
+      await act(async () => {
+        root.unmount();
+      });
+      const nextRoot = createTestRoot(container);
+      await act(async () => {
+        nextRoot.render(
+          <QueryClientProvider client={queryClient}>
+            <Probe />
+          </QueryClientProvider>,
+        );
+      });
+      await act(async () => {
+        selectModel("pi", "openai/model-b");
+      });
+      expect(controls().featureValues).toBeUndefined();
+      expect(controls().features).toMatchObject([{ id: "fast_mode", value: false }]);
+    },
+  );
 
   it("migrates legacy image drafts to image attachments on hydration", async () => {
     let latest: ReturnType<typeof useAgentInputDraft> | null = null;
