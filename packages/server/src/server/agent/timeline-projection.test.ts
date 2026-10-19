@@ -8,6 +8,34 @@ import {
 } from "./timeline-projection.js";
 
 describe("projectTimelineRows", () => {
+  test("preserves the turn-start snapshot when assistant chunks are projected", () => {
+    const turnInfo = {
+      provider: "pi",
+      startedAt: "2026-10-19T12:00:00.000Z",
+      model: "openai/gpt-6",
+      fastModeRequested: false,
+    };
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        turnId: "turn-1",
+        timestamp: turnInfo.startedAt,
+        item: { type: "assistant_message", text: "Hello", turnInfo },
+      },
+      {
+        seq: 2,
+        turnId: "turn-1",
+        timestamp: turnInfo.startedAt,
+        item: { type: "assistant_message", text: " world" },
+      },
+    ];
+    expect(projectTimelineRows({ rows, mode: "projected" })[0]?.item).toEqual({
+      type: "assistant_message",
+      text: "Hello world",
+      turnInfo,
+    });
+  });
+
   test("merges adjacent assistant chunks in projected mode", () => {
     const rows: AgentTimelineRow[] = [
       {

@@ -337,6 +337,23 @@ export const ru: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "Информация о ходе",
+      provider: "Провайдер",
+      model: "Модель в начале хода",
+      thinking: "Уровень рассуждений",
+      fast: "Fast / Priority",
+      requested: "Запрошено",
+      notRequested: "Не запрошено",
+      notRecorded: "Не записано",
+      default: "По умолчанию",
+      startedAt: "Начало",
+      completedAt: "Последняя активность",
+      duration: "Длительность",
+      note: "Настройки записаны в начале хода. Fast означает запрос, а не подтверждение провайдера. Суммарные токены сеанса не отображаются.",
+      copy: "Копировать информацию",
+      copyFailed: "Не удалось скопировать информацию.",
+    },
     diagram: {
       diagram: "Диаграмма",
       zoomIn: "Увеличить масштаб",

@@ -338,6 +338,23 @@ export const fr: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "Informations du tour",
+      provider: "Fournisseur",
+      model: "Modèle au début du tour",
+      thinking: "Niveau de réflexion",
+      fast: "Fast / Priority",
+      requested: "Demandé",
+      notRequested: "Non demandé",
+      notRecorded: "Non enregistré",
+      default: "Par défaut",
+      startedAt: "Début",
+      completedAt: "Dernière activité",
+      duration: "Durée",
+      note: "Paramètres enregistrés au début du tour. Fast indique une demande, pas une confirmation du fournisseur. Les totaux de jetons de la session ne sont pas affichés.",
+      copy: "Copier les informations",
+      copyFailed: "Impossible de copier les informations.",
+    },
     diagram: {
       diagram: "Diagramme",
       zoomIn: "Zoomer",

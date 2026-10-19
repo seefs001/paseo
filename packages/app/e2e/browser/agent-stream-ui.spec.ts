@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import {
   awaitAssistantMessage,
@@ -25,9 +26,137 @@ import {
   seedRunningMockAgentWorkspace,
 } from "../support/helpers/mock-agent";
 
+import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
+
 const SCROLL_AWAY_MIN_SCROLLABLE_DISTANCE = 360;
 
+async function omitRecordedTurnInfo(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const raw = typeof message === "string" ? message : message.toString("utf8");
+      const envelope: unknown = JSON.parse(raw);
+      socket.send(JSON.stringify(envelope, omitTurnInfo));
+    });
+  });
+}
+
+function omitTurnInfo(key: string, value: unknown): unknown {
+  return key === "turnInfo" ? undefined : value;
+}
+
 test.describe("Agent stream UI", () => {
+  for (const compact of [false, true]) {
+    test(`shows recorded turn information beside copy (${compact ? "compact" : "desktop"})`, async ({
+      page,
+      context,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize(
+        compact ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+      );
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      const agent = await seedMockAgentWorkspace({
+        repoPrefix: "stream-turn-info-",
+        title: "Recorded turn information",
+        model: "ten-second-stream",
+        featureValues: { fast_mode: !compact },
+        initialPrompt: "emit 1 coalesced agent stream updates for turn information.",
+      });
+      try {
+        await agent.client.waitForFinish(agent.agentId, 30_000);
+        await openAgentRoute(page, agent);
+        await awaitAssistantMessage(page);
+        await scrollAgentChatToBottom(page);
+        const trigger = page.getByTestId("assistant-turn-info-trigger").last();
+        await expect(trigger).toBeVisible();
+        const footer = trigger.locator("..");
+        await expect(footer.getByRole("button", { name: "Copy turn", exact: true })).toBeVisible();
+        await trigger.click();
+        const panel = page.getByTestId(
+          compact ? "assistant-turn-info-content-content" : "assistant-turn-info-content",
+        );
+        await expect(panel).toBeVisible();
+        await expect(panel).toContainText("ten-second-stream");
+        await expect(
+          panel.getByText("Fast / Priority", { exact: true }).locator(".."),
+        ).toContainText(compact ? "Not requested" : "Requested");
+        await expect(panel).toContainText("not provider confirmation");
+        await expect(
+          panel.getByRole("menuitem", { name: "Copy information", exact: true }),
+        ).toBeInViewport();
+        await page.screenshot({ path: testInfo.outputPath("turn-info.png") });
+        await panel.getByRole("menuitem", { name: "Copy information", exact: true }).click();
+        await expect(panel.getByText("Copied", { exact: true })).toBeVisible();
+        const copied = await page.evaluate(() => navigator.clipboard.readText());
+        expect(copied).toContain("Model at turn start: ten-second-stream");
+        expect(copied).toContain(`Fast / Priority: ${compact ? "Not requested" : "Requested"}`);
+        await page
+          .getByRole("button", {
+            name: compact ? "Bottom sheet backdrop" : "Menu backdrop",
+            exact: true,
+          })
+          .click({ position: { x: 10, y: 10 } });
+        await expect(panel).toHaveCount(0);
+        await trigger.click();
+        await expect(panel).toBeVisible();
+        if (!compact) {
+          await page.evaluate(() => {
+            Object.defineProperty(navigator.clipboard, "writeText", {
+              configurable: true,
+              value: async () => {
+                throw new Error("Denied");
+              },
+            });
+            Object.defineProperty(document, "execCommand", {
+              configurable: true,
+              value: () => {
+                throw new Error("Denied");
+              },
+            });
+          });
+          await panel.getByRole("menuitem", { name: "Copy information", exact: true }).click();
+          await expect(panel.getByRole("alert")).toContainText("Could not copy information");
+          await expect(panel.getByText("Copied", { exact: true })).toHaveCount(0);
+        }
+      } finally {
+        await agent.cleanup();
+      }
+    });
+  }
+
+  test("shows unrecorded turn information from an older host without using current settings", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "stream-turn-info-legacy-",
+      title: "Unrecorded turn information",
+      model: "ten-second-stream",
+      initialPrompt: "emit 1 coalesced agent stream updates for legacy turn information.",
+    });
+    try {
+      await agent.client.waitForFinish(agent.agentId, 30_000);
+      await omitRecordedTurnInfo(page);
+      await openAgentRoute(page, agent);
+      await awaitAssistantMessage(page);
+      await scrollAgentChatToBottom(page);
+      await page.getByTestId("assistant-turn-info-trigger").last().click();
+      const panel = page.getByTestId("assistant-turn-info-content");
+      await expect(panel).toBeVisible();
+      await expect(
+        panel.getByText("Model at turn start", { exact: true }).locator(".."),
+      ).toContainText("Not recorded");
+      await expect(panel.getByText("Fast / Priority", { exact: true }).locator("..")).toContainText(
+        "Not recorded",
+      );
+      await expect(panel).not.toContainText("ten-second-stream");
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("keeps running agent chrome after page refresh", async ({ page }) => {
     const title = "Running agent refresh";
     const agent = await seedRunningMockAgentWorkspace({

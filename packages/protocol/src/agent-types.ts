@@ -375,9 +375,18 @@ export interface AgentTaskItem {
   activeForm?: string;
 }
 
+/** Configuration observed at turn start, not confirmation of the provider's service tier. */
+export interface AgentTurnInfo {
+  provider: AgentProvider;
+  startedAt: string;
+  model?: string;
+  thinkingOptionId?: string | null;
+  fastModeRequested?: boolean;
+}
+
 export type AgentTimelineItem =
   | { type: "user_message"; text: string; messageId?: string; clientMessageId?: string }
-  | { type: "assistant_message"; text: string; messageId?: string }
+  | { type: "assistant_message"; text: string; messageId?: string; turnInfo?: AgentTurnInfo }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem
   | { type: "todo"; items: AgentTaskItem[] }

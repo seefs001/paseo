@@ -1,5 +1,7 @@
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
+import { AssistantTurnInfo } from "@/components/assistant-turn-info";
+import type { AgentTurnInfo } from "@getpaseo/protocol/agent-types";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
 import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attachment-lightbox";
 import {
@@ -582,6 +584,7 @@ export const UserMessage = memo(function UserMessage({
 });
 
 interface AssistantTurnFooterProps {
+  turnInfo?: AgentTurnInfo;
   getContent: () => string;
   completedAt?: Date;
   durationMs?: number | null;
@@ -626,6 +629,7 @@ const TIMESTAMP_REVEAL_MS = 3000;
  * A turn without a visible start shows its end timestamp directly.
  */
 export const AssistantTurnFooter = memo(function AssistantTurnFooter({
+  turnInfo,
   getContent,
   completedAt,
   durationMs,
@@ -686,6 +690,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         getContent={getContent}
         containerStyle={assistantTurnFooterStylesheet.copyButton}
       />
+      <AssistantTurnInfo info={turnInfo} completedAt={completedAt} durationMs={durationMs} />
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
       {primaryLabel ? (
         <Pressable

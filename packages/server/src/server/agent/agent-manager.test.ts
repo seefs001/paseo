@@ -6326,6 +6326,133 @@ test("createAgent populates runtimeInfo after session creation", async () => {
   expect(snapshot.runtimeInfo?.sessionId).toBe(snapshot.persistence?.sessionId);
 });
 
+test.each([true, false])(
+  "turn information preserves the start configuration and replay history (Fast=%s)",
+  async (fastMode) => {
+    const workdir = mkdtempSync(join(tmpdir(), "agent-manager-turn-info-"));
+    class TurnInfoSession extends TestAgentSession {
+      private nextTurn = 0;
+      private model = "gpt-5.4";
+      private thinking: string | null = "high";
+      features: AgentFeature[] = [
+        createFeature({ id: "fast_mode", label: "Fast", value: fastMode }),
+      ];
+      history: AgentTimelineItem[] = [];
+
+      override async startTurn() {
+        return { turnId: `turn-${++this.nextTurn}` };
+      }
+      async setModel(model: string | null) {
+        this.model = model ?? "gpt-5.4";
+      }
+      async setThinkingOption(value: string | null) {
+        this.thinking = value;
+      }
+      async setFeature(_featureId: string, value: unknown) {
+        if (typeof value !== "boolean") throw new Error("Expected boolean");
+        this.features = [createFeature({ id: "fast_mode", label: "Fast", value })];
+      }
+      override async getRuntimeInfo() {
+        return {
+          ...(await super.getRuntimeInfo()),
+          model: this.model,
+          thinkingOptionId: this.thinking,
+        };
+      }
+      override async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
+        for (const item of this.history) yield { type: "timeline", provider: this.provider, item };
+      }
+    }
+    const session = new TurnInfoSession({ provider: "codex", cwd: workdir });
+    const client = new (class extends TestAgentClient {
+      override async createSession() {
+        return session;
+      }
+    })();
+    const manager = new AgentManager({ clients: { codex: client }, logger });
+    const agent = await manager.createAgent(
+      {
+        provider: "codex",
+        cwd: workdir,
+        model: "gpt-5.4",
+        thinkingOptionId: "high",
+        featureValues: { fast_mode: fastMode },
+      },
+      undefined,
+      { workspaceId: undefined },
+    );
+    try {
+      const first = manager.streamAgent(agent.id, "first");
+      await first.next();
+      await manager.setAgentModel(agent.id, "gpt-5.4-mini");
+      const nextThinking = fastMode ? "low" : null;
+      await manager.setAgentThinkingOption(agent.id, nextThinking);
+      await manager.setAgentFeature(agent.id, "fast_mode", !fastMode);
+      const firstItem: AgentTimelineItem = {
+        type: "assistant_message",
+        text: "Hello",
+        messageId: "answer-1",
+      };
+      session.pushEvent({ type: "timeline", provider: "codex", turnId: "turn-1", item: firstItem });
+      session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "turn-1" });
+      await drainAsyncGenerator(first);
+      const firstSnapshot = manager
+        .getTimeline(agent.id)
+        .find((item) => item.type === "assistant_message");
+      expect(firstSnapshot).toMatchObject({
+        turnInfo: {
+          provider: "codex",
+          model: "gpt-5.4",
+          thinkingOptionId: "high",
+          fastModeRequested: fastMode,
+          startedAt: expect.any(String),
+        },
+      });
+
+      const second = manager.streamAgent(agent.id, "second");
+      await second.next();
+      const secondItem: AgentTimelineItem = {
+        type: "assistant_message",
+        text: "Second",
+        messageId: "answer-2",
+      };
+      session.pushEvent({
+        type: "timeline",
+        provider: "codex",
+        turnId: "turn-2",
+        item: secondItem,
+      });
+      session.pushEvent({ type: "turn_completed", provider: "codex", turnId: "turn-2" });
+      await drainAsyncGenerator(second);
+      expect(manager.getTimeline(agent.id)).toContainEqual(
+        expect.objectContaining({
+          messageId: "answer-2",
+          turnInfo: expect.objectContaining({
+            model: "gpt-5.4-mini",
+            thinkingOptionId: nextThinking,
+            fastModeRequested: !fastMode,
+          }),
+        }),
+      );
+      expect(firstSnapshot).toMatchObject({
+        turnInfo: { model: "gpt-5.4", fastModeRequested: fastMode },
+      });
+
+      session.history = [
+        { type: "assistant_message", text: "Hello", messageId: "old-unrecorded" },
+        firstItem,
+        secondItem,
+      ];
+      await manager.hydrateTimelineFromProvider(agent.id, { force: true });
+      expect(manager.getTimeline(agent.id)).toContainEqual(firstSnapshot);
+      expect(manager.getTimeline(agent.id)[0]).toEqual(session.history[0]);
+    } finally {
+      await manager.closeAgent(agent.id);
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
+
 test("runAgent refreshes runtimeInfo after completion", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");

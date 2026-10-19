@@ -338,6 +338,23 @@ export const ja: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "ターン情報",
+      provider: "プロバイダー",
+      model: "開始時のモデル",
+      thinking: "思考レベル",
+      fast: "Fast / Priority",
+      requested: "リクエスト済み",
+      notRequested: "未リクエスト",
+      notRecorded: "記録なし",
+      default: "デフォルト",
+      startedAt: "開始",
+      completedAt: "最終アクティビティ",
+      duration: "所要時間",
+      note: "開始時の設定です。Fast はリクエストを示し、プロバイダーによる確認ではありません。セッション全体のトークン数は表示しません。",
+      copy: "情報をコピー",
+      copyFailed: "情報をコピーできませんでした。",
+    },
     diagram: {
       diagram: "図",
       zoomIn: "拡大",

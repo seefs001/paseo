@@ -281,6 +281,9 @@ function mergeAssistantChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
         type: "assistant_message",
         text: `${previousAssistant.text}${entryAssistant.text}`,
         ...(previousAssistant.messageId ? { messageId: previousAssistant.messageId } : {}),
+        ...(previousAssistant.turnInfo || entryAssistant.turnInfo
+          ? { turnInfo: previousAssistant.turnInfo ?? entryAssistant.turnInfo }
+          : {}),
       },
       timestamp: entry.timestamp,
       seqEnd: entry.seqEnd,

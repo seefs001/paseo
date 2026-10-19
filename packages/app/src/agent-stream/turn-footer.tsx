@@ -198,6 +198,9 @@ function CompletedTurnFooter({
     <View style={stylesheet.turnFooterSlot}>
       <AssistantTurnFooter
         getContent={getContent}
+        turnInfo={
+          items[startIndex]?.kind === "assistant_message" ? items[startIndex].turnInfo : undefined
+        }
         completedAt={timing?.completedAt}
         durationMs={timing?.durationMs}
         onFork={boundary && onForkAssistantTurn ? handleFork : undefined}

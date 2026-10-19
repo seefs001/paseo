@@ -330,6 +330,23 @@ export const en = {
     },
   },
   message: {
+    turnInfo: {
+      title: "Turn information",
+      provider: "Provider",
+      model: "Model at turn start",
+      thinking: "Thinking level",
+      fast: "Fast / Priority",
+      requested: "Requested",
+      notRequested: "Not requested",
+      notRecorded: "Not recorded",
+      default: "Default",
+      startedAt: "Started",
+      completedAt: "Last activity",
+      duration: "Duration",
+      note: "Settings were recorded at turn start. Fast is a request, not provider confirmation. Session-wide token totals are not shown.",
+      copy: "Copy information",
+      copyFailed: "Could not copy information.",
+    },
     diagram: {
       diagram: "Diagram",
       zoomIn: "Zoom in",

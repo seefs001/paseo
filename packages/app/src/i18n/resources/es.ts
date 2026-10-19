@@ -338,6 +338,23 @@ export const es: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "Información del turno",
+      provider: "Proveedor",
+      model: "Modelo al iniciar el turno",
+      thinking: "Nivel de razonamiento",
+      fast: "Fast / Priority",
+      requested: "Solicitado",
+      notRequested: "No solicitado",
+      notRecorded: "Sin registrar",
+      default: "Predeterminado",
+      startedAt: "Inicio",
+      completedAt: "Última actividad",
+      duration: "Duración",
+      note: "Configuración registrada al iniciar el turno. Fast indica una solicitud, no la confirmación del proveedor. No se muestran los tokens acumulados de la sesión.",
+      copy: "Copiar información",
+      copyFailed: "No se pudo copiar la información.",
+    },
     diagram: {
       diagram: "Diagrama",
       zoomIn: "Acercar",

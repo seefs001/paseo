@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentTimelineListPromptsResponseMessageSchema,
   AgentStreamMessageSchema,
+  AgentTimelineItemPayloadSchema,
   FetchAgentTimelineResponseMessageSchema,
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
@@ -10,6 +11,29 @@ import {
 } from "./messages.js";
 
 describe("shared messages stream parsing", () => {
+  it("preserves optional recorded turn information without requiring it on old messages", () => {
+    const turnInfo = {
+      provider: "pi",
+      startedAt: "2026-10-19T12:00:00.000Z",
+      model: "openai/gpt-6",
+      thinkingOptionId: null,
+      fastModeRequested: false,
+    };
+    expect(
+      AgentTimelineItemPayloadSchema.parse({
+        type: "assistant_message",
+        text: "Hello",
+        turnInfo,
+      }),
+    ).toEqual({ type: "assistant_message", text: "Hello", turnInfo });
+    expect(
+      AgentTimelineItemPayloadSchema.parse({
+        type: "assistant_message",
+        text: "Old answer",
+      }),
+    ).toEqual({ type: "assistant_message", text: "Old answer" });
+  });
+
   it("parses a full timeline prompt index response", () => {
     const parsed = AgentTimelineListPromptsResponseMessageSchema.parse({
       type: "agent.timeline.list_prompts.response",

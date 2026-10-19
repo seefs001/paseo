@@ -337,6 +337,23 @@ export const ptBR: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "Informações do turno",
+      provider: "Provedor",
+      model: "Modelo no início do turno",
+      thinking: "Nível de raciocínio",
+      fast: "Fast / Priority",
+      requested: "Solicitado",
+      notRequested: "Não solicitado",
+      notRecorded: "Não registrado",
+      default: "Padrão",
+      startedAt: "Início",
+      completedAt: "Última atividade",
+      duration: "Duração",
+      note: "Configuração registrada no início do turno. Fast indica uma solicitação, não a confirmação do provedor. Os totais de tokens da sessão não são exibidos.",
+      copy: "Copiar informações",
+      copyFailed: "Não foi possível copiar as informações.",
+    },
     diagram: {
       diagram: "Diagrama",
       zoomIn: "Aproximar",

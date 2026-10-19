@@ -333,6 +333,23 @@ export const ar: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "معلومات الجولة",
+      provider: "المزوّد",
+      model: "النموذج عند بدء الجولة",
+      thinking: "مستوى التفكير",
+      fast: "Fast / Priority",
+      requested: "تم الطلب",
+      notRequested: "لم يُطلب",
+      notRecorded: "غير مسجّل",
+      default: "افتراضي",
+      startedAt: "البداية",
+      completedAt: "آخر نشاط",
+      duration: "المدة",
+      note: "سُجّلت الإعدادات عند بدء الجولة. يشير Fast إلى طلب وليس تأكيدًا من المزوّد. لا تُعرض مجاميع رموز الجلسة.",
+      copy: "نسخ المعلومات",
+      copyFailed: "تعذّر نسخ المعلومات.",
+    },
     diagram: {
       diagram: "مخطط",
       zoomIn: "تكبير",

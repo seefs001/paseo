@@ -58,6 +58,40 @@ const reasoningChunk = (text: string): AgentStreamEventPayload => ({
 });
 
 describe("applyStreamEvent", () => {
+  it("keeps recorded turn information through text deltas and turn completion", () => {
+    const turnInfo = {
+      provider: "pi",
+      startedAt: "2026-10-19T12:00:00.000Z",
+      model: "openai/gpt-6",
+      fastModeRequested: false,
+    };
+    const first: AgentStreamEventPayload = {
+      type: "timeline",
+      provider: "pi",
+      turnId: "turn-1",
+      item: { type: "assistant_message", text: "Hello", messageId: "answer", turnInfo },
+    };
+    let result = applyStreamEvent({ tail: [], head: [], event: first, timestamp: baseTimestamp });
+    result = applyStreamEvent({
+      ...result,
+      event: assistantChunk(" world", "answer"),
+      timestamp: baseTimestamp,
+    });
+    result = applyStreamEvent({ ...result, event: completionEvent(), timestamp: baseTimestamp });
+    expect(result.head).toEqual([]);
+    expect(result.tail).toEqual([expect.objectContaining({ text: "Hello world", turnInfo })]);
+  });
+
+  it("does not manufacture turn information for historical responses", () => {
+    const result = applyStreamEvent({
+      tail: [],
+      head: [],
+      event: assistantChunk("Old answer"),
+      timestamp: baseTimestamp,
+    });
+    expect(result.head[0]).not.toHaveProperty("turnInfo");
+  });
+
   it("buffers reasoning chunks in head", () => {
     const result = applyStreamEvent({
       tail: [],

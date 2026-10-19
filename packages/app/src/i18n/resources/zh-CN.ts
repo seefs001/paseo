@@ -331,6 +331,23 @@ export const zhCN: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "本轮信息",
+      provider: "提供商",
+      model: "轮次开始时的模型",
+      thinking: "思考级别",
+      fast: "Fast / Priority",
+      requested: "已请求",
+      notRequested: "未请求",
+      notRecorded: "未记录",
+      default: "默认",
+      startedAt: "开始时间",
+      completedAt: "最后活动",
+      duration: "耗时",
+      note: "配置记录于轮次开始时。Fast 表示已请求，不代表提供商已确认加速；不展示会话累计 token 数。",
+      copy: "复制信息",
+      copyFailed: "复制信息失败。",
+    },
     diagram: {
       diagram: "图表",
       zoomIn: "放大",

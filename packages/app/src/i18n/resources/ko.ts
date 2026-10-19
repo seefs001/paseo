@@ -334,6 +334,23 @@ export const ko: TranslationResources = {
     },
   },
   message: {
+    turnInfo: {
+      title: "턴 정보",
+      provider: "제공업체",
+      model: "시작 시 모델",
+      thinking: "사고 수준",
+      fast: "Fast / Priority",
+      requested: "요청됨",
+      notRequested: "요청하지 않음",
+      notRecorded: "기록 없음",
+      default: "기본값",
+      startedAt: "시작",
+      completedAt: "마지막 활동",
+      duration: "소요 시간",
+      note: "턴 시작 시 기록된 설정입니다. Fast는 요청이며 제공업체의 확인이 아닙니다. 세션 전체 토큰 수는 표시하지 않습니다.",
+      copy: "정보 복사",
+      copyFailed: "정보를 복사하지 못했습니다.",
+    },
     diagram: {
       diagram: "다이어그램",
       zoomIn: "확대",

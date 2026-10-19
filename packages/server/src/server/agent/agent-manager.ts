@@ -426,6 +426,7 @@ interface ManagedAgentBase {
   lastUserMessageAt: Date | null;
   activeTurnId: string | null;
   activeTurnStartedAt: Date | null;
+  activeTurnInfo?: Extract<AgentTimelineItem, { type: "assistant_message" }>["turnInfo"];
   lastUsage?: AgentUsage;
   lastError?: string;
   attention: AttentionState;
@@ -2849,6 +2850,20 @@ export class AgentManager {
   private openActiveTurn(agent: ActiveManagedAgent, turnId: string, startedAt: Date): void {
     agent.activeTurnId = turnId;
     agent.activeTurnStartedAt = startedAt;
+    const fastMode = agent.features?.find((feature) => feature.id === "fast_mode");
+    const fastModeRequested =
+      agent.config.featureValues?.fast_mode ??
+      (fastMode?.type === "toggle" ? fastMode.value : undefined);
+    agent.activeTurnInfo = {
+      provider: agent.provider,
+      startedAt: startedAt.toISOString(),
+      model: agent.runtimeInfo?.model ?? agent.config.model ?? undefined,
+      thinkingOptionId:
+        agent.runtimeInfo?.thinkingOptionId !== undefined
+          ? agent.runtimeInfo.thinkingOptionId
+          : agent.config.thinkingOptionId,
+      ...(typeof fastModeRequested === "boolean" ? { fastModeRequested } : {}),
+    };
   }
 
   private applyActiveTurnTerminal(
@@ -2861,6 +2876,7 @@ export class AgentManager {
     if (turnId && agent.activeTurnId !== turnId) return "stale";
     agent.activeTurnId = null;
     agent.activeTurnStartedAt = null;
+    agent.activeTurnInfo = undefined;
     return "closed_current";
   }
 
@@ -4228,6 +4244,7 @@ export class AgentManager {
     }
 
     this.agentStreamCoalescer.flushAndDiscard(agent.id);
+    this.preserveRecordedTurnInfo(agent, historyEvents);
     await this.deleteCommittedTimeline(agent.id);
     this.timelineStore.delete(agent.id);
     this.timelineStore.initialize(agent.id, { timestamp: new Date().toISOString() });
@@ -4260,6 +4277,26 @@ export class AgentManager {
     }
     this.touchUpdatedAt(agent);
     this.emitState(agent);
+  }
+
+  private preserveRecordedTurnInfo(
+    agent: ActiveManagedAgent,
+    history: Extract<AgentStreamEvent, { type: "timeline" }>[],
+  ): void {
+    // Only stable message identity can carry a recorded snapshot across a provider replay.
+    // Matching text or today's config would invent metadata for historical turns.
+    const recorded = new Map<string, NonNullable<typeof agent.activeTurnInfo>>();
+    for (const row of this.timelineStore.getRows(agent.id)) {
+      if (row.item.type === "assistant_message" && row.item.messageId && row.item.turnInfo) {
+        recorded.set(row.item.messageId, row.item.turnInfo);
+      }
+    }
+    for (const event of history) {
+      const item = event.item;
+      if (item.type !== "assistant_message" || !item.messageId || item.turnInfo) continue;
+      const turnInfo = recorded.get(item.messageId);
+      if (turnInfo) event.item = { ...item, turnInfo };
+    }
   }
 
   private async primeTimelineFromLegacyProviderHistory(
@@ -4295,6 +4332,7 @@ export class AgentManager {
       throw error;
     }
 
+    this.preserveRecordedTurnInfo(agent, historyEvents);
     // The replay is the timeline, so drop the rows a previous hydration committed.
     // Keeping them would leave getTimelineRows reading one copy per hydration.
     await this.deleteCommittedTimeline(agent.id);
@@ -4866,6 +4904,15 @@ export class AgentManager {
     turnId?: string,
     options?: { providerMessageId?: string },
   ): AgentStreamEvent {
+    const active = this.agents.get(agentId);
+    if (
+      item.type === "assistant_message" &&
+      !item.turnInfo &&
+      active?.activeTurnInfo &&
+      turnId === active.activeTurnId
+    ) {
+      item = { ...item, turnInfo: active.activeTurnInfo };
+    }
     const row = this.recordTimeline(agentId, item, { ...options, turnId });
     const event: AgentStreamEvent = {
       type: "timeline",
