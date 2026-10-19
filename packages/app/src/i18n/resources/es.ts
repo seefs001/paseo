@@ -1279,6 +1279,10 @@ export const es: TranslationResources = {
     },
     pinned: {
       title: "Anclados",
+      actions: "Acciones de anclados",
+      unpinAll: "Desanclar todos",
+      unpinningAll: "Desanclando...",
+      unpinAllFailed: "No se pudieron desanclar todos los espacios de trabajo. Inténtalo de nuevo.",
     },
     host: {
       noHost: "Sin anfitrión",

@@ -1251,6 +1251,10 @@ export const en = {
     },
     pinned: {
       title: "Pinned",
+      actions: "Pinned actions",
+      unpinAll: "Unpin all",
+      unpinningAll: "Unpinning...",
+      unpinAllFailed: "Unable to unpin all workspaces. Try again.",
     },
     host: {
       noHost: "No host",

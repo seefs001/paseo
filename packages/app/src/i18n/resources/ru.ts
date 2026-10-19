@@ -1261,6 +1261,10 @@ export const ru: TranslationResources = {
     },
     pinned: {
       title: "Закреплённые",
+      actions: "Действия с закреплёнными",
+      unpinAll: "Открепить все",
+      unpinningAll: "Открепление...",
+      unpinAllFailed: "Не удалось открепить все рабочие пространства. Повторите попытку.",
     },
     host: {
       noHost: "Нет хоста",

@@ -1233,6 +1233,10 @@ export const zhCN: TranslationResources = {
     },
     pinned: {
       title: "已置顶",
+      actions: "置顶操作",
+      unpinAll: "取消全部置顶",
+      unpinningAll: "正在取消置顶...",
+      unpinAllFailed: "未能取消全部置顶，请重试。",
     },
     host: {
       noHost: "没有 Host",

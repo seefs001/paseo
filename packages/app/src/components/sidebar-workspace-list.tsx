@@ -97,7 +97,7 @@ import {
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
-import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
+import { SidebarPinnedSectionHeader } from "@/components/sidebar/sidebar-pinned-section-header";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
 import {
@@ -2123,7 +2123,6 @@ function ProjectModeList({
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   onPinnedWorkspaceReorder: (workspaces: SidebarWorkspacePlacement[]) => void;
 }) {
-  const { t } = useTranslation();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const [creatingWorkspaceIds, setCreatingWorkspaceIds] = useState<Set<string>>(() => new Set());
   const creatingWorkspaceTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -2423,11 +2422,11 @@ function ProjectModeList({
     <>
       {pinnedChats.length > 0 ? (
         <View style={styles.pinnedSection} testID="sidebar-pinned-section">
-          <SidebarSectionHeader
-            title={t("sidebar.pinned.title")}
+          <SidebarPinnedSectionHeader
+            workspaces={pinnedChats}
+            supportsPinningByServerId={supportsPinningByServerId}
             collapsed={pinnedCollapsed}
             onToggle={togglePinnedCollapsed}
-            testID="sidebar-pinned-section-header"
           />
           {pinnedCollapsed ? null : (
             <>

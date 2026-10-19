@@ -73,7 +73,7 @@ import {
   SidebarWorkspaceContextMenu,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
-import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
+import { SidebarPinnedSectionHeader } from "@/components/sidebar/sidebar-pinned-section-header";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
 import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pin";
@@ -146,7 +146,6 @@ export function SidebarStatusWorkspaceList({
   parentGestureRef,
   dragGestureHostActive,
 }: StatusWorkspaceListProps) {
-  const { t } = useTranslation();
   const collapsedWorkspaceGroupKeys = useSidebarCollapsedSectionsStore(
     (state) => state.collapsedWorkspaceGroupKeys,
   );
@@ -203,11 +202,11 @@ export function SidebarStatusWorkspaceList({
     <>
       {pinnedWorkspaces.length > 0 ? (
         <View style={styles.pinnedSection} testID="sidebar-pinned-section">
-          <SidebarSectionHeader
-            title={t("sidebar.pinned.title")}
+          <SidebarPinnedSectionHeader
+            workspaces={pinnedWorkspaces}
+            supportsPinningByServerId={supportsPinningByServerId}
             collapsed={pinnedCollapsed}
             onToggle={togglePinnedCollapsed}
-            testID="sidebar-pinned-section-header"
           />
           {pinnedCollapsed ? null : (
             <>

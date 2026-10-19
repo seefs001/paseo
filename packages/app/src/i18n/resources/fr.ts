@@ -1273,6 +1273,10 @@ export const fr: TranslationResources = {
     },
     pinned: {
       title: "Épinglés",
+      actions: "Actions des éléments épinglés",
+      unpinAll: "Tout désépingler",
+      unpinningAll: "Désépinglage...",
+      unpinAllFailed: "Impossible de désépingler tous les espaces de travail. Réessayez.",
     },
     host: {
       noHost: "Aucun hôte",

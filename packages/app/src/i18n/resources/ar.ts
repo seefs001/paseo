@@ -1243,6 +1243,10 @@ export const ar: TranslationResources = {
     },
     pinned: {
       title: "المثبتة",
+      actions: "إجراءات العناصر المثبتة",
+      unpinAll: "إلغاء تثبيت الكل",
+      unpinningAll: "جارٍ إلغاء التثبيت...",
+      unpinAllFailed: "تعذر إلغاء تثبيت جميع مساحات العمل. حاول مرة أخرى.",
     },
     host: {
       noHost: "لا مضيف",

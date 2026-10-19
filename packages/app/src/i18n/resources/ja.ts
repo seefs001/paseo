@@ -1257,6 +1257,10 @@ export const ja: TranslationResources = {
     },
     pinned: {
       title: "固定済み",
+      actions: "固定済みの操作",
+      unpinAll: "すべての固定を解除",
+      unpinningAll: "固定を解除中...",
+      unpinAllFailed: "すべてのワークスペースの固定を解除できませんでした。再試行してください。",
     },
     host: {
       noHost: "ホストなし",

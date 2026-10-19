@@ -1250,6 +1250,10 @@ export const ko: TranslationResources = {
     },
     pinned: {
       title: "고정됨",
+      actions: "고정 항목 작업",
+      unpinAll: "모두 고정 해제",
+      unpinningAll: "고정 해제 중...",
+      unpinAllFailed: "모든 워크스페이스의 고정을 해제하지 못했습니다. 다시 시도하세요.",
     },
     host: {
       noHost: "호스트 없음",

@@ -84,6 +84,7 @@ const PIN_REJECTION_MESSAGE = "Pin rejected by test.";
 interface PinRpcGate {
   /** Pin requests the client has sent so far. */
   sentCount(): number;
+  connectionCount(): number;
 }
 
 // Proxies everything so the app boots against the real daemon, counting pin RPCs and optionally
@@ -92,10 +93,12 @@ interface PinRpcGate {
 // where it started.
 async function installPinRpcGate(
   page: Page,
-  options: { rejectFirst?: number } = {},
+  options: { rejectFirst?: number; disconnectFirst?: number } = {},
 ): Promise<PinRpcGate> {
   const rejectFirst = options.rejectFirst ?? 0;
+  const disconnectFirst = options.disconnectFirst ?? 0;
   let sent = 0;
+  let connections = 0;
 
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
     const server = ws.connectToServer();
@@ -107,6 +110,10 @@ async function installPinRpcGate(
         typeof sessionMessage.requestId === "string"
       ) {
         sent += 1;
+        if (sent <= disconnectFirst) {
+          ws.close({ code: 1011, reason: "Connection interrupted by test" });
+          return;
+        }
         if (sent <= rejectFirst) {
           ws.send(
             JSON.stringify({
@@ -134,6 +141,9 @@ async function installPinRpcGate(
     });
 
     server.onMessage((message) => {
+      if (readSessionMessage(message)?.type === "status") {
+        connections += 1;
+      }
       try {
         ws.send(message);
       } catch {
@@ -142,8 +152,101 @@ async function installPinRpcGate(
     });
   });
 
-  return { sentCount: () => sent };
+  return { sentCount: () => sent, connectionCount: () => connections };
 }
+
+async function addPinnedWorkspaces(seeded: SeededWorkspace, count: number): Promise<string[]> {
+  const ids: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const created = await seeded.client.createWorkspace({
+      source: { kind: "directory", path: seeded.repoPath, projectId: seeded.projectId },
+      title: `Pinned workspace ${index + 1}`,
+    });
+    if (!created.workspace) {
+      throw new Error(created.error ?? "Failed to create pinned workspace");
+    }
+    await seeded.client.setWorkspacePinned(created.workspace.id, true);
+    ids.push(created.workspace.id);
+  }
+  return ids;
+}
+
+async function unpinAll(page: Page): Promise<void> {
+  await page.getByTestId("sidebar-pinned-actions").click();
+  await page.getByTestId("sidebar-unpin-all").click();
+}
+
+test.describe("Unpin all workspaces", () => {
+  test("unpins collapsed and overflow items without archiving workspaces", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "unpin-all-overflow-" });
+    try {
+      const ids = await addPinnedWorkspaces(workspace, 21);
+      await gotoAppShell(page);
+      await expect(page.getByTestId("sidebar-pinned-show-more")).toBeVisible();
+      await expect(
+        pinnedSection(page).locator('[data-testid^="sidebar-workspace-row-"]'),
+      ).toHaveCount(20);
+
+      await page.getByTestId("sidebar-pinned-section-header").click();
+      await expect(page.getByTestId("sidebar-pinned-list")).toHaveCount(0);
+      await unpinAll(page);
+
+      await expect(pinnedSection(page)).toHaveCount(0);
+      const remaining = await workspace.client.fetchWorkspaces();
+      expect(remaining.entries.map((entry) => entry.id).sort()).toEqual(
+        [workspace.workspaceId, ...ids].sort(),
+      );
+      expect(remaining.entries).toEqual(
+        expect.arrayContaining(ids.map((id) => expect.objectContaining({ id, pinnedAt: null }))),
+      );
+      await page.reload();
+      await expect(workspaceRow(page, ids[20])).toBeVisible();
+      await expect(pinnedSection(page)).toHaveCount(0);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("unpins every workspace in status grouping", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "unpin-all-status-" });
+    try {
+      const ids = await addPinnedWorkspaces(workspace, 2);
+      await gotoAppShell(page);
+      await switchToStatusGrouping(page);
+      await unpinAll(page);
+
+      await expect(pinnedSection(page)).toHaveCount(0);
+      await expect(workspaceRow(page, workspace.workspaceId)).toBeVisible();
+      for (const id of ids) {
+        await expect(workspaceRow(page, id)).toBeVisible();
+      }
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("shows a persistent error after a disconnect and allows retry", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "unpin-all-disconnect-" });
+    try {
+      await addPinnedWorkspaces(workspace, 2);
+      const gate = await installPinRpcGate(page, { disconnectFirst: 1 });
+      await gotoAppShell(page);
+      await unpinAll(page);
+
+      await expect(page.getByTestId("sidebar-unpin-all-error")).toBeVisible();
+      await expect(page.getByTestId("sidebar-unpin-all-error")).toContainText(
+        "Unable to unpin all workspaces. Try again.",
+      );
+      await expect.poll(() => gate.connectionCount()).toBeGreaterThan(1);
+      await expect(page.getByTestId("sidebar-unpin-all")).toBeEnabled();
+      await page.getByTestId("sidebar-unpin-all").click();
+      await expect(pinnedSection(page)).toHaveCount(0);
+      await expect(page.getByTestId("sidebar-unpin-all-error")).toHaveCount(0);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+});
 
 test.describe("Pin workspace shortcut", () => {
   test("dispatches pin once and keeps project creation reachable", async ({ page }) => {

@@ -1269,6 +1269,10 @@ export const ptBR: TranslationResources = {
     },
     pinned: {
       title: "Fixados",
+      actions: "Ações dos fixados",
+      unpinAll: "Desafixar todos",
+      unpinningAll: "Desafixando...",
+      unpinAllFailed: "Não foi possível desafixar todos os espaços de trabalho. Tente novamente.",
     },
     host: {
       noHost: "Nenhum host",
