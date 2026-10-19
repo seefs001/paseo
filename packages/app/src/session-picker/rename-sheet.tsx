@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { CheckSquare, Square } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { extraMutedIconColorMapping } from "@/components/ui/icon-button-chrome";
 import { useTranslation } from "react-i18next";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -30,7 +31,7 @@ function TitleRow({ row, model, busy }: { row: RenameRow; model: RenameForm; bus
   );
   return (
     <View style={styles.row} testID={`session-rename-row-${row.agentId}`}>
-      <Pressable
+      <PressHighlight
         accessibilityRole="checkbox"
         accessibilityLabel={row.previousTitle || t("sessionPicker.untitled")}
         accessibilityState={accessibilityState}
@@ -46,7 +47,7 @@ function TitleRow({ row, model, busy }: { row: RenameRow; model: RenameForm; bus
         <Text style={styles.previousTitle} numberOfLines={2}>
           {row.previousTitle || t("sessionPicker.untitled")}
         </Text>
-      </Pressable>
+      </PressHighlight>
       <FormTextInput
         initialValue={row.title}
         onChangeText={edit}

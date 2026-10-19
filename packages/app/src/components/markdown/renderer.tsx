@@ -28,12 +28,6 @@ const markdownStyle = (compact: boolean) => (theme: Theme, rt: { breakpoint?: st
   createMarkdownStyles(theme, { compact, blockGap: resolveDensity(rt, density.blockGap) });
 const regularStyle = markdownStyle(false);
 const compactStyle = markdownStyle(true);
-const WEB_CONTAINER = {
-  userSelect: "text" as const,
-  width: "100%" as const,
-  maxWidth: "100%" as const,
-  minWidth: 0,
-};
 
 export interface MarkdownRendererProps extends MarkdownImageContext {
   text: string;
@@ -106,7 +100,6 @@ const MarkdownPart = memo(function MarkdownPart({
             <ThemedMarkdown
               key={`${segment.kind}:${segment.id}`}
               markdown={segment.source}
-              containerStyle={isWeb ? WEB_CONTAINER : undefined}
               uniProps={compact ? compactStyle : regularStyle}
               flavor="github"
               selectable

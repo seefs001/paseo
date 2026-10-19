@@ -563,6 +563,7 @@ export const ru: TranslationResources = {
       },
     },
     setup: {
+      updateHost: "Обновите хост, чтобы просмотреть сведения о настройке рабочего пространства",
       descriptor: {
         label: "Настройка",
         completed: "Настройка завершена",
@@ -2434,6 +2435,7 @@ export const ru: TranslationResources = {
       searchPlaceholder: "Поиск сочетаний клавиш",
       unavailableOnMobile: "Сочетания клавиш доступны только на рабочем столе.",
       capturePrompt: "Нажмите сочетание клавиш...",
+      captureIndexPrompt: "Завершите цифрой от 1 до 9.",
       unassigned: "Не задано",
       actions: {
         menu: "Действия для {{name}}",
