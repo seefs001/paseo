@@ -1239,6 +1239,163 @@ describe("resolveAgentForm", () => {
   });
 });
 
+describe("remembered profile initialization", () => {
+  const inputs = {
+    type: "INPUTS_CHANGED" as const,
+    serverId: "host",
+    isVisible: true,
+    isCreateFlow: true,
+    isPreferencesLoading: false,
+    hasSnapshot: true,
+    initialValues: undefined,
+    preferences: {
+      provider: "codex",
+      providerPreferences: {
+        codex: {
+          model: "old-model",
+          mode: "full-access",
+          thinkingByModel: { "gpt-5.3-codex": "low" },
+        },
+      },
+    },
+    allowedProviderMap: codexProviderMap,
+    providerModelsByProvider: makeProviderModelsByProvider([["codex", CODEX_MODELS]]),
+  };
+  const profile = {
+    provider: "codex",
+    modelId: "gpt-5.3-codex",
+    modeId: "auto",
+    thinkingOptionId: "xhigh",
+    featureValues: { fast_mode: true, plan_mode: false, service_tier: "priority" },
+  };
+
+  it("waits for the latest complete profile before resolving the draft", () => {
+    const pending = resolveAgentForm(makeState(), {
+      ...inputs,
+      profileInitialization: { status: "pending" },
+    });
+    expect(pending.resolution.status).toBe("pending");
+    const ready = resolveAgentForm(pending, {
+      ...inputs,
+      profileInitialization: { status: "resolved", profile },
+    });
+    expect(ready.form).toEqual({
+      provider: "codex",
+      model: "gpt-5.3-codex",
+      modeId: "auto",
+      thinkingOptionId: "xhigh",
+    });
+    expect(ready.initialFeatureValues).toEqual(profile.featureValues);
+    expect(ready.resolution.status).toBe("completed");
+  });
+
+  it("keeps submission pending after a profile read fails and resolves on retry", () => {
+    const failed = resolveAgentForm(makeState(), {
+      ...inputs,
+      profileInitialization: { status: "error", message: "Host disconnected" },
+    });
+    expect(failed.resolution.status).toBe("pending");
+    expect(failed.initialFeatureValues).toBeUndefined();
+    const retried = resolveAgentForm(failed, {
+      ...inputs,
+      profileInitialization: { status: "resolved", profile },
+    });
+    expect(retried.resolution.status).toBe("completed");
+    expect(retried.initialFeatureValues).toEqual(profile.featureValues);
+  });
+
+  it("waits for the profile's provider models before choosing a default model", () => {
+    const initialization = { status: "resolved" as const, profile: { ...profile, modelId: "" } };
+    const pending = resolveAgentForm(makeState(), {
+      ...inputs,
+      providerModelsByProvider: makeProviderModelsByProvider([["codex", null]]),
+      profileInitialization: initialization,
+    });
+    expect(pending.resolution.status).toBe("pending");
+    const ready = resolveAgentForm(pending, { ...inputs, profileInitialization: initialization });
+    expect(ready.form.model).toBe("gpt-5.3-codex");
+    expect(ready.initialFeatureValues).toEqual(profile.featureValues);
+  });
+
+  it("does not replace an open draft when its profile is edited", () => {
+    const ready = resolveAgentForm(makeState(), {
+      ...inputs,
+      profileInitialization: { status: "resolved", profile },
+    });
+    const edited = { ...profile, thinkingOptionId: "low", featureValues: { fast_mode: false } };
+    const next = {
+      ...inputs,
+      profileInitialization: { status: "resolved" as const, profile: edited },
+    };
+    expect(resolveAgentForm(ready, next)).toBe(ready);
+    const newDraft = resolveAgentForm(makeState(), next);
+    expect(newDraft.form.thinkingOptionId).toBe("low");
+    expect(newDraft.initialFeatureValues).toEqual({ fast_mode: false });
+  });
+
+  it("does not apply a late profile after the user chooses a model", () => {
+    const pending = resolveAgentForm(makeState(), {
+      ...inputs,
+      profileInitialization: { status: "pending" },
+    });
+    const manual = resolveAgentForm(pending, {
+      type: "SET_PROVIDER_AND_MODEL_FROM_USER",
+      provider: "codex",
+      modelId: "gpt-5.3-codex",
+      providerDef: TEST_CODEX_DEFINITION,
+      providerModels: CODEX_MODELS,
+    });
+    const ready = resolveAgentForm(manual, {
+      ...inputs,
+      profileInitialization: { status: "resolved", profile },
+    });
+    expect(ready.form.model).toBe("gpt-5.3-codex");
+    expect(ready.initialFeatureValues).toBeUndefined();
+  });
+
+  it("does not restore a remembered profile over an explicit fork setup", () => {
+    const ready = resolveAgentForm(makeState(), {
+      ...inputs,
+      initialValues: {
+        provider: "codex",
+        model: "gpt-5.3-codex",
+        modeId: "full-access",
+        thinkingOptionId: "low",
+      },
+      profileInitialization: { status: "resolved", profile },
+    });
+    expect(ready.form).toEqual({
+      provider: "codex",
+      model: "gpt-5.3-codex",
+      modeId: "full-access",
+      thinkingOptionId: "low",
+    });
+    expect(ready.initialFeatureValues).toBeUndefined();
+  });
+
+  it("uses provider defaults for fields removed from the saved profile", () => {
+    const ready = resolveAgentForm(makeState(), {
+      ...inputs,
+      profileInitialization: {
+        status: "resolved",
+        profile: { ...profile, modeId: "", thinkingOptionId: "", featureValues: {} },
+      },
+    });
+    expect(ready.form.modeId).toBe("auto");
+    expect(ready.form.thinkingOptionId).toBe("xhigh");
+    expect(ready.initialFeatureValues).toEqual({});
+  });
+
+  it("uses ordinary preferences when the remembered profile has been deleted", () => {
+    const ready = resolveAgentForm(makeState(), {
+      ...inputs,
+      profileInitialization: { status: "resolved", profile: null },
+    });
+    expect(ready.form.model).toBe("old-model");
+    expect(ready.initialFeatureValues).toBeUndefined();
+  });
+});
+
 it("owns input readiness, reopening and user edits in the reducer", () => {
   const inputs = {
     type: "INPUTS_CHANGED" as const,

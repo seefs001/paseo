@@ -118,8 +118,9 @@ Turning it off deletes `service_tier` on that model's requests, including a tier
 `samplingParams`, which would otherwise apply to every session using that model. Switching models
 shows that model's own value, and reloading the session keeps the map. Unsupported APIs neither
 show the toggle nor receive the override. The composer does not copy this toggle into the shared Pi
-provider preference, so a new session does not inherit another session's choice. Availability and
-extra usage depend on the endpoint and account; requesting priority is not a latency guarantee.
+provider preference. New drafts can load it with the rest of an [Agent profile](glossary.md), rather
+than inheriting a provider-wide Fast flag. Availability and extra usage depend on the endpoint and
+account; requesting priority is not a latency guarantee.
 Keep this separate from OMP's native Fast RPC.
 
 Pi extension adapters live under `packages/server/src/server/agent/providers/pi/extensions/<extension>/`. Each adapter turns Pi RPC facts into Paseo tool, timeline, subagent, or question mappings through the [extension contract](../packages/server/src/server/agent/providers/pi/extensions/contract.ts). To add one, create its directory, add one entry to `extensions/registry.ts`, and test it with fixtures captured from the real extension in Pi that record package, version, source commit, Pi version, and capture date. `agent.ts`, `history-mapper.ts`, and `tool-call-mapper.ts` never name an extension.

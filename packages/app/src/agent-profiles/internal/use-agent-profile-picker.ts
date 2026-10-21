@@ -1,6 +1,9 @@
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { mergeCreateAgentSelectionPreferences } from "@/create-agent-preferences/preferences";
+import {
+  mergeCreateAgentSelectionPreferences,
+  rememberAgentProfile,
+} from "@/create-agent-preferences/preferences";
 import { useFormPreferences } from "@/hooks/use-form-preferences";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useSessionStore } from "@/stores/session-store";
@@ -18,7 +21,7 @@ import { useAgentProfiles } from "./use-agent-profiles";
 
 /** The draft composer owns profile application as one state transition. */
 export interface DraftAgentProfileControls {
-  applyProfile: (profile: MaterializedAgentProfile) => void;
+  applyProfile: (profile: MaterializedAgentProfile, profileId?: string) => void;
 }
 
 export type AgentProfileApplyTarget =
@@ -109,10 +112,11 @@ export function useAgentProfilePicker(
   );
 
   const persistSelection = useCallback(
-    (resolved: MaterializedAgentProfile) => {
-      void updatePreferences((current) =>
+    (resolved: MaterializedAgentProfile, profileId: string) => {
+      if (!serverId) return;
+      return updatePreferences((current) =>
         mergeCreateAgentSelectionPreferences({
-          preferences: current,
+          preferences: rememberAgentProfile({ preferences: current, serverId, profileId }),
           provider: resolved.provider,
           modelId: resolved.modelId,
           modeId: resolved.modeId,
@@ -121,11 +125,9 @@ export function useAgentProfilePicker(
             ? { featureValues: resolved.featureValues }
             : {}),
         }),
-      ).catch((error) => {
-        console.warn("[useAgentProfilePicker] persist profile selection failed", error);
-      });
+      );
     },
-    [updatePreferences],
+    [serverId, updatePreferences],
   );
 
   const applyProfile = useCallback(
@@ -137,7 +139,7 @@ export function useAgentProfilePicker(
       const resolved = materializeAgentProfile(profile);
 
       if (target.kind === "draft") {
-        target.controls.applyProfile(resolved);
+        target.controls.applyProfile(resolved, profileId);
         return;
       }
 
@@ -145,13 +147,15 @@ export function useAgentProfilePicker(
       if (!reconciled) {
         return;
       }
-      persistSelection(reconciled);
       if (!client) {
         return;
       }
       void client
         .applyAgentConfig(target.agentId, toAgentConfigApply(reconciled))
-        .then((notice) => showProviderNoticeToast(toast, notice))
+        .then((notice) => {
+          showProviderNoticeToast(toast, notice);
+          return persistSelection(reconciled, profileId);
+        })
         .catch((error) => {
           console.warn("[useAgentProfilePicker] applyAgentConfig failed", error);
           toast.error(toErrorMessage(error));

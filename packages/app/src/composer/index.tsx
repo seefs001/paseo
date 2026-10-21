@@ -2444,7 +2444,9 @@ function ComposerContentImpl({
   const isSubmitLoadingVisible =
     isProcessing || isSubmitLoading || isUploadingFile || pendingNativeImagePastes > 0;
   const isSubmitDisabled =
-    isSubmitLoadingVisible || (waitForForgeAutoAttachOnSubmit && isForgeResolving);
+    isSubmitLoadingVisible ||
+    Boolean(agentControls?.isModelLoading) ||
+    (waitForForgeAutoAttachOnSubmit && isForgeResolving);
 
   // Disable drops while submitting/uploading: the submit path clears and restores attachments,
   // so a drop in that window would be lost or land on a locked draft. `disabled` hides the

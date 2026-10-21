@@ -22,6 +22,7 @@ import {
 } from "./use-form-preferences";
 import {
   resolveAgentForm,
+  canInitializeFromAgentProfile,
   resolveEffectiveModel,
   normalizeSelectedModelId,
   resolveDefaultModelId,
@@ -37,7 +38,7 @@ import {
   type ProviderModelsByProvider,
 } from "@/provider-selection/resolve-agent-form";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
-import type { MaterializedAgentProfile } from "@/agent-profiles";
+import { useInitialAgentProfile, type MaterializedAgentProfile } from "@/agent-profiles";
 
 export type { FormInitialValues } from "@/provider-selection/resolve-agent-form";
 
@@ -47,6 +48,7 @@ export interface UseAgentFormStateOptions {
   initialValues?: FormInitialValues;
   isVisible?: boolean;
   isCreateFlow?: boolean;
+  draftKey?: string;
 }
 
 export interface UseAgentFormStateResult {
@@ -75,7 +77,10 @@ export interface UseAgentFormStateResult {
   refreshProviderModels: (provider?: AgentProvider) => void;
   refetchProviderModelsIfStale: () => void;
   setProviderAndModelFromUser: (provider: AgentProvider, modelId: string) => void;
-  applyProfileFromUser: (profile: MaterializedAgentProfile) => void;
+  applyProfileFromUser: (profile: MaterializedAgentProfile, profileId?: string) => void;
+  initialFeatureValues?: Record<string, unknown>;
+  profileInitializationError?: string | null;
+  retryProfileInitialization?: () => void;
   clearProviderSelectionFromUser: () => void;
   workingDirIsEmpty: boolean;
   persistFormPreferences: () => Promise<void>;
@@ -172,11 +177,30 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     [updatePreferences],
   );
 
-  const [{ form: formState, userModified, resolution }, dispatch] = useReducer(resolveAgentForm, {
-    form: { provider: null, modeId: "", model: "", thinkingOptionId: "" },
-    userModified: INITIAL_USER_MODIFIED,
-    resolution: INITIAL_AGENT_FORM_RESOLUTION,
-  });
+  const [{ form: formState, userModified, resolution, initialFeatureValues }, dispatch] =
+    useReducer(resolveAgentForm, {
+      form: { provider: null, modeId: "", model: "", thinkingOptionId: "" },
+      userModified: INITIAL_USER_MODIFIED,
+      resolution: INITIAL_AGENT_FORM_RESOLUTION,
+    });
+
+  const shouldRestoreProfile =
+    isVisible &&
+    isCreateFlow &&
+    !isPreferencesLoading &&
+    canInitializeFromAgentProfile({ resolution, userModified }, initialValues);
+  const { initialization: profileInitialization, retry: retryInitialProfile } =
+    useInitialAgentProfile({
+      serverId,
+      draftKey: options.draftKey ?? "",
+      profileId: serverId ? preferences.lastAgentProfileByHost?.[serverId] : undefined,
+      enabled: shouldRestoreProfile,
+    });
+  const profileInitializationError =
+    profileInitialization.status === "error" ? profileInitialization.message : null;
+  const retryProfileInitialization = useCallback(() => {
+    void retryInitialProfile();
+  }, [retryInitialProfile]);
 
   const {
     entries: snapshotEntries,
@@ -264,6 +288,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       hasSnapshot: snapshotEntries !== undefined,
       initialValues,
       preferences,
+      profileInitialization,
       providerModelsByProvider: snapshotProviderModelsByProvider,
       allowedProviderMap: snapshotResolvableProviderDefinitionMap,
     });
@@ -275,6 +300,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     snapshotEntries,
     initialValues,
     preferences,
+    profileInitialization,
     snapshotProviderModelsByProvider,
     snapshotResolvableProviderDefinitionMap,
   ]);
@@ -316,7 +342,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
   }, []);
 
   const applyProfileFromUser = useCallback(
-    (profile: MaterializedAgentProfile) => {
+    (profile: MaterializedAgentProfile, profileId?: string) => {
       const provider = profile.provider as AgentProvider;
       if (!selectableProviderDefinitionMap.has(provider)) {
         return;
@@ -353,6 +379,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
           modeId,
           thinkingOptionId,
           featureValues: profile.featureValues,
+          ...(serverId && profileId ? { rememberedProfile: { serverId, profileId } } : {}),
         });
       }).catch((error) => {
         console.warn("[useAgentFormState] persist profile preference failed", error);
@@ -363,6 +390,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       formState,
       providerDefinitionMap,
       resolution,
+      serverId,
       selectableProviderDefinitionMap,
       updateCurrentPreferences,
       userModified,
@@ -503,6 +531,9 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
       applyProfileFromUser,
+      initialFeatureValues,
+      profileInitializationError,
+      retryProfileInitialization,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,
       persistFormPreferences,
@@ -534,6 +565,9 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
       applyProfileFromUser,
+      initialFeatureValues,
+      profileInitializationError,
+      retryProfileInitialization,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,
       persistFormPreferences,

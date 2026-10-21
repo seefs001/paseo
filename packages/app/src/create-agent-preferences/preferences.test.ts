@@ -5,6 +5,7 @@ import {
   mergeCreateAgentSelectionPreferences,
   mergeProviderPreferences,
   parseFormPreferences,
+  rememberAgentProfile,
 } from "./preferences";
 import { FakeCreateAgentPreferenceStorage } from "./test-utils/fake-preference-storage";
 
@@ -176,6 +177,51 @@ describe("create agent preferences", () => {
         mock: { model: "one-minute-stream", mode: "approval-test", featureValues: {} },
       },
     });
+  });
+
+  it("persists the last selected profile by host without storing a stale profile copy", async () => {
+    const storage = new FakeCreateAgentPreferenceStorage();
+    const preferences = new CreateAgentPreferencesService(storage);
+    const save = preferences.update((current) =>
+      applyAgentProfilePreferences({
+        preferences: rememberAgentProfile({
+          preferences: current,
+          serverId: "other-host",
+          profileId: "other-profile",
+        }),
+        previousProvider: null,
+        previousProviderModeIds: [],
+        provider: "pi",
+        modelId: "openai/model-a",
+        modeId: "",
+        thinkingOptionId: "high",
+        featureValues: { fast_mode: true },
+        rememberedProfile: { serverId: "host", profileId: "profile-a" },
+      }),
+    );
+    await storage.nextWrite();
+    storage.finishOldestWrite();
+    await save;
+    const reloaded = await new CreateAgentPreferencesService(storage).load();
+    expect(reloaded.lastAgentProfileByHost).toEqual({
+      host: "profile-a",
+      "other-host": "other-profile",
+    });
+    expect(reloaded.providerPreferences?.pi).toEqual({
+      model: "openai/model-a",
+      thinkingByModel: { "openai/model-a": "high" },
+      featureValues: { fast_mode: true },
+    });
+    const updated = rememberAgentProfile({
+      preferences: reloaded,
+      serverId: "host",
+      profileId: "profile-b",
+    });
+    expect(updated.lastAgentProfileByHost).toEqual({
+      host: "profile-b",
+      "other-host": "other-profile",
+    });
+    expect(reloaded.lastAgentProfileByHost?.host).toBe("profile-a");
   });
 
   it("loads invalid stored preferences as empty preferences", () => {

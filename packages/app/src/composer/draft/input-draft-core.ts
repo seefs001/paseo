@@ -50,6 +50,8 @@ export function buildDraftAgentControls(input: {
     onRetryModelProvider: formState.refreshProviderModels,
     isRetryingModelProvider: formState.isProviderModelsRefreshing,
     modelSelectorServerId: formState.selectedServerId,
+    profileInitializationError: formState.profileInitializationError,
+    onRetryProfileInitialization: formState.retryProfileInitialization,
   };
 }
 

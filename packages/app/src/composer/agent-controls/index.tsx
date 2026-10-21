@@ -28,6 +28,8 @@ import { getAgentFeatureIcon, ThinkingIcon } from "@/agent-controls/icons";
 import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import {
   buildProviderSelectorProviders,
@@ -151,6 +153,8 @@ export interface DraftAgentControlsProps {
   selectedThinkingOptionId: string;
   onSelectThinkingOption: (thinkingOptionId: string) => void;
   onApplyAgentProfile: DraftAgentProfileControls["applyProfile"];
+  profileInitializationError?: string | null;
+  onRetryProfileInitialization?: () => void;
   features?: AgentFeature[];
   onSetFeature?: (featureId: string, value: unknown) => void;
   onDropdownClose?: () => void;
@@ -1846,6 +1850,8 @@ export function DraftAgentControls({
   selectedThinkingOptionId,
   onSelectThinkingOption,
   onApplyAgentProfile,
+  profileInitializationError,
+  onRetryProfileInitialization,
   features,
   onSetFeature,
   onDropdownClose,
@@ -1856,6 +1862,7 @@ export function DraftAgentControls({
   modelSelectorServerId = null,
   isCompactLayout,
 }: DraftAgentControlsProps) {
+  const { t } = useTranslation();
   const mappedThinkingOptions = useMemo<AgentControlOption[]>(() => {
     return toThinkingControlOptions(thinkingOptions);
   }, [thinkingOptions]);
@@ -1917,6 +1924,18 @@ export function DraftAgentControls({
   return (
     <>
       {profileEditor.element}
+      {profileInitializationError ? (
+        <Alert
+          variant="error"
+          size="xs"
+          description={profileInitializationError}
+          testID="draft-profile-error"
+        >
+          <Button size="xs" variant="outline" onPress={onRetryProfileInitialization}>
+            {t("common.actions.retry")}
+          </Button>
+        </Alert>
+      ) : null}
       <ControlledAgentControls
         provider={selectedProvider ?? ""}
         modelSelectorProviders={modelSelectorProviders}

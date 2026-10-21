@@ -77,6 +77,10 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     initialValues: composerOptions?.initialValues,
     isVisible: composerOptions?.isVisible ?? false,
     isCreateFlow: true,
+    draftKey: resolveDraftKey({
+      draftKey: input.draftKey,
+      selectedServerId: composerOptions?.initialServerId ?? null,
+    }),
   });
   const draftKey = useMemo(
     () =>
@@ -285,12 +289,12 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     modeId: formState.selectedMode,
     modelId: effectiveModelId,
     thinkingOptionId: effectiveThinkingOptionId,
-    initialFeatureValues: composerOptions?.initialFeatureValues,
+    initialFeatureValues: composerOptions?.initialFeatureValues ?? formState.initialFeatureValues,
   });
 
   const applyDraftAgentProfile = useCallback(
-    (profile: Parameters<typeof formState.applyProfileFromUser>[0]) => {
-      formState.applyProfileFromUser(profile);
+    (profile: Parameters<typeof formState.applyProfileFromUser>[0], profileId?: string) => {
+      formState.applyProfileFromUser(profile, profileId);
       applyProfileFeatureValues(profile);
     },
     [applyProfileFeatureValues, formState],

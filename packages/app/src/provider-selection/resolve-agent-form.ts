@@ -10,6 +10,7 @@ import {
   type ProviderPreferences,
 } from "@/hooks/use-form-preferences";
 import { findModelByReference } from "./model-catalog";
+import type { AgentProfileInitialization } from "@/agent-profiles";
 
 export interface FormInitialValues {
   provider?: AgentProvider;
@@ -40,6 +41,7 @@ export interface AgentFormReducerState {
   form: FormState;
   userModified: UserModifiedFields;
   resolution: AgentFormResolutionState;
+  initialFeatureValues?: Record<string, unknown>;
   inputs?: {
     serverId: string | null;
     initialValues: FormInitialValues | undefined;
@@ -76,6 +78,7 @@ interface AgentFormInputs {
   preferences: FormPreferences | null;
   providerModelsByProvider: ProviderModelsByProvider;
   allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
+  profileInitialization?: AgentProfileInitialization;
 }
 
 export type AgentFormAction =
@@ -87,6 +90,7 @@ export type AgentFormAction =
       preferences: FormPreferences | null;
       providerModelsByProvider: ProviderModelsByProvider;
       allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
+      profileInitialization?: AgentProfileInitialization;
     }
   | {
       type: "SET_PROVIDER_AND_MODEL_FROM_USER";
@@ -517,6 +521,17 @@ function pickNextThinkingOptionForTarget(input: {
   });
 }
 
+export function canInitializeFromAgentProfile(
+  state: Pick<AgentFormReducerState, "resolution" | "userModified">,
+  initialValues: FormInitialValues | undefined,
+): boolean {
+  return (
+    state.resolution.status === "pending" &&
+    !initialValues &&
+    !Object.values(state.userModified).some(Boolean)
+  );
+}
+
 function completeResolution(
   state: AgentFormReducerState,
   action: CompleteResolutionAction,
@@ -524,15 +539,37 @@ function completeResolution(
   if (state.resolution.status === "completed") {
     return state;
   }
+  const canRestoreProfile = canInitializeFromAgentProfile(state, action.initialValues);
+  const initialization = action.profileInitialization;
+  if (canRestoreProfile && initialization && initialization.status !== "resolved") {
+    return state;
+  }
+  const profile =
+    canRestoreProfile && initialization?.status === "resolved" ? initialization.profile : null;
+  let initialValues = action.initialValues;
+  if (profile) {
+    const models = action.providerModelsByProvider.get(profile.provider) ?? null;
+    if (action.allowedProviderMap.has(profile.provider) && models === null) return state;
+    initialValues = {
+      provider: profile.provider,
+      model: profile.modelId || resolveDefaultModelId(models),
+      modeId: profile.modeId,
+      thinkingOptionId: profile.thinkingOptionId,
+    };
+  }
   const resolved = resolveFormStateFromProviderModels(
-    action.initialValues,
-    action.preferences,
+    initialValues,
+    profile ? null : action.preferences,
     action.providerModelsByProvider,
     state.userModified,
     state.form,
     action.allowedProviderMap,
   );
-  const nextState = { ...state, resolution: { status: "completed" } as const };
+  const nextState = {
+    ...state,
+    resolution: { status: "completed" } as const,
+    initialFeatureValues: profile?.featureValues,
+  };
   if (!hasFormStateChanged(state.form, resolved)) return nextState;
   return { ...nextState, form: resolved };
 }
@@ -620,6 +657,7 @@ export function resolveAgentForm(
         ...state,
         userModified: INITIAL_USER_MODIFIED,
         resolution: PENDING_AGENT_FORM_RESOLUTION,
+        initialFeatureValues: undefined,
       };
 
     case "COMPLETE_RESOLUTION":

@@ -2,8 +2,8 @@
  * Agent profiles: named bundles of composer settings (provider, model, mode,
  * thinking option, feature values, notes) stored host-wide in daemon config.
  *
- * Four capabilities leave this module — managing the list in settings, reading
- * it, pinning it to the model picker, and drawing a profile's glyph. Everything
+ * The public surface manages profiles, restores a draft's last-used profile,
+ * supplies the model picker, and draws profile glyphs. Everything
  * else (the form model, the catalog and feature probes, the materialization
  * rules, the icon registry, the row and modal chrome) is internal; import from
  * `@/agent-profiles`, never a path inside it.
@@ -18,6 +18,10 @@ export type { MaterializedAgentProfile } from "./internal/materialize-profile";
 export type { AgentProfileSeed } from "./internal/profile-form-model";
 export { useAgentProfileEditor, type AgentProfileEditorControls } from "./agent-profile-editor";
 export { useAgentProfiles } from "./internal/use-agent-profiles";
+export {
+  useInitialAgentProfile,
+  type AgentProfileInitialization,
+} from "./internal/use-initial-agent-profile";
 export {
   useAgentProfilePicker,
   type AgentProfileApplyTarget,

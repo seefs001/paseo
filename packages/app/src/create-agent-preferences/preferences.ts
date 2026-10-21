@@ -15,6 +15,7 @@ export type LaunchTarget = { kind: "chat" } | { kind: "terminal"; profileId: str
 export interface FormPreferences {
   provider?: string;
   providerPreferences?: Record<string, ProviderPreferences>;
+  lastAgentProfileByHost?: Record<string, string>;
   favoriteModels?: Array<{ provider: string; modelId: string }>;
   isolation?: "local" | "worktree";
   launchTarget?: LaunchTarget;
@@ -35,6 +36,7 @@ const launchTargetSchema: z.ZodType<LaunchTarget> = z.discriminatedUnion("kind",
 export const FormPreferencesSchema = z.strictObject({
   provider: z.string().optional(),
   providerPreferences: z.record(z.string(), providerPreferencesSchema).optional(),
+  lastAgentProfileByHost: z.record(z.string(), z.string()).optional(),
   // COMPAT(agentProfileFavoriteMigration): favourites were removed in v0.3.2.
   // Keep the legacy payload alive until every capable host has had a chance to
   // import it; ordinary preference writes must not erase it first.
@@ -184,6 +186,20 @@ export function mergeCreateAgentSelectionPreferences(args: {
   });
 }
 
+export function rememberAgentProfile(input: {
+  preferences: FormPreferences;
+  serverId: string;
+  profileId: string;
+}): FormPreferences {
+  return {
+    ...input.preferences,
+    lastAgentProfileByHost: {
+      ...input.preferences.lastAgentProfileByHost,
+      [input.serverId]: input.profileId,
+    },
+  };
+}
+
 export function applyAgentProfilePreferences(args: {
   preferences: FormPreferences;
   previousProvider: AgentProvider | null;
@@ -193,8 +209,12 @@ export function applyAgentProfilePreferences(args: {
   modeId: string;
   thinkingOptionId: string;
   featureValues: Record<string, unknown>;
+  rememberedProfile?: { serverId: string; profileId: string };
 }): FormPreferences {
   let next = args.preferences;
+  if (args.rememberedProfile) {
+    next = rememberAgentProfile({ preferences: next, ...args.rememberedProfile });
+  }
   if (args.previousProvider) {
     const previousMode = next.providerPreferences?.[args.previousProvider]?.mode;
     if (previousMode && !args.previousProviderModeIds.includes(previousMode)) {

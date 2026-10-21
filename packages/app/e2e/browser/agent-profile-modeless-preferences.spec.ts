@@ -7,10 +7,18 @@ import {
   openModelPicker,
   seedAgentProfiles,
   seedModelProvider,
+  expectComposerModel,
+  expectComposerMode,
 } from "../support/helpers/agent-profiles";
+import { gotoWorkspace } from "../support/helpers/launcher";
+import { createAgentTabFromMenu } from "../support/helpers/workspace-tabs";
+import { getServerId } from "../support/helpers/server-id";
+import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
+import { fillComposerDraft } from "../support/helpers/composer";
 import { gotoAppShell } from "../support/helpers/app";
 import { captureWorkspaceAgentRequest } from "../support/helpers/creation";
 import {
+  connectNewWorkspaceDaemonClient,
   openGlobalNewWorkspaceComposer,
   selectNewWorkspaceProject,
   submitNewWorkspacePrompt,
@@ -42,6 +50,13 @@ async function seedPoisonedModelessPreference(page: Page): Promise<void> {
       model: MODELESS_MODEL,
     },
   );
+}
+
+async function readLastAgentProfile(page: Page): Promise<unknown> {
+  return page.evaluate((host) => {
+    const raw = localStorage.getItem("@paseo:create-agent-preferences");
+    return raw ? JSON.parse(raw).lastAgentProfileByHost?.[host] : null;
+  }, getServerId());
 }
 
 async function readProviderModePreference(page: Page, provider: string): Promise<unknown> {
@@ -130,6 +145,135 @@ test.describe("Agent profiles repair modeless provider preferences", () => {
     } finally {
       await workspace.cleanup();
       await provider.restore();
+      await profiles.restore();
+    }
+  });
+
+  test("new drafts reload the complete last-used profile without changing open drafts", async ({
+    page,
+  }, testInfo) => {
+    const workspace = await seedWorkspace({ repoPrefix: "profile-initialization-" });
+    const providerId = "profile-initialization-e2e";
+    const original = {
+      id: "remembered-profile",
+      name: "Remembered work",
+      provider: providerId,
+      model: "claude-opus-5",
+      modeId: "bypassPermissions",
+      thinkingOptionId: "low",
+      featureValues: { fast_mode: false, auto_accept_mcp: true },
+    };
+    const profiles = await seedAgentProfiles([original]);
+    const provider = await seedModelProvider({
+      id: providerId,
+      label: "Profile initialization",
+      models: ["claude-opus-5", "claude-opus-4-6"].map((id) => ({
+        id,
+        label: id,
+        description: id,
+        thinkingOptions: [
+          { id: "low", label: "Low" },
+          { id: "high", label: "High" },
+        ],
+      })),
+    });
+    const client = await connectNewWorkspaceDaemonClient();
+    try {
+      await gotoWorkspace(page, workspace.workspaceId);
+      await createAgentTabFromMenu(page);
+      await openModelPicker(page);
+      await applyProfileFromPicker(page, original.name);
+      await expectComposerModel(page, original.model);
+      await expect.poll(() => readLastAgentProfile(page)).toBe(original.id);
+      const latest = {
+        ...original,
+        model: "claude-opus-4-6",
+        modeId: "plan",
+        thinkingOptionId: "high",
+        featureValues: { fast_mode: true, auto_accept_mcp: false },
+      };
+      await client.patchDaemonConfig({ agentProfiles: [latest] });
+      await expectComposerModel(page, original.model);
+      const fast = page
+        .getByTestId("agent-feature-fast_mode")
+        .filter({ visible: true })
+        .locator("svg")
+        .first();
+      await expect(fast).toHaveCSS("stroke", "rgb(113, 113, 122)");
+
+      await createAgentTabFromMenu(page);
+      await expectComposerModel(page, latest.model);
+      await expectComposerMode(page, "Plan mode");
+      await expect(
+        page
+          .getByRole("button", { name: "Select thinking option (High)", exact: true })
+          .filter({ visible: true }),
+      ).toBeVisible();
+      await expect(fast).toHaveCSS("stroke", "rgb(251, 191, 36)");
+      await expect(
+        page
+          .getByTestId("agent-feature-auto_accept_mcp")
+          .filter({ visible: true })
+          .locator("svg")
+          .first(),
+      ).toHaveCSS("stroke", "rgb(113, 113, 122)");
+      await page.screenshot({ path: testInfo.outputPath("restored-profile.png") });
+
+      await page.getByTestId("agent-feature-fast_mode").filter({ visible: true }).click();
+      await client.patchDaemonConfig({ agentProfiles: [{ ...latest, modeId: "default" }] });
+      await expect(fast).toHaveCSS("stroke", "rgb(113, 113, 122)");
+      await expectComposerMode(page, "Plan mode");
+      await createAgentTabFromMenu(page);
+      await expectComposerMode(page, "Always ask");
+      await expect(fast).toHaveCSS("stroke", "rgb(251, 191, 36)");
+    } finally {
+      await client.close();
+      await workspace.cleanup();
+      await provider.restore();
+      await profiles.restore();
+    }
+  });
+
+  test("a failed profile initialization stays visible until retry succeeds", async ({ page }) => {
+    test.setTimeout(150_000);
+    const workspace = await seedWorkspace({ repoPrefix: "profile-initialization-retry-" });
+    const profile = {
+      id: "profile-retry",
+      name: "Retry work",
+      provider: "mock",
+      model: "one-minute-stream",
+      modeId: "approval-test",
+    };
+    const profiles = await seedAgentProfiles([profile]);
+    const gate = await installDaemonWebSocketGate(page);
+    try {
+      await gotoWorkspace(page, workspace.workspaceId);
+      await createAgentTabFromMenu(page);
+      await openModelPicker(page);
+      await applyProfileFromPicker(page, profile.name);
+      await expect.poll(() => readLastAgentProfile(page)).toBe(profile.id);
+
+      gate.holdNextServerMessage("get_daemon_config_response");
+      await createAgentTabFromMenu(page);
+      await gate.waitForHeldServerMessage("get_daemon_config_response");
+      await fillComposerDraft(page, "Keep this draft while the profile loads.");
+      await expect(
+        page.getByRole("button", { name: "Send message", exact: true }).filter({ visible: true }),
+      ).toBeDisabled();
+      const error = page.getByTestId("draft-profile-error").filter({ visible: true });
+      await expect(error).toContainText("Timeout waiting for message", { timeout: 70_000 });
+      // An expired response must not silently unblock submission or hide the failure.
+      gate.releaseHeldServerMessage("get_daemon_config_response");
+      await expect(error).toBeVisible();
+      await error.getByRole("button", { name: "Retry", exact: true }).click();
+      await expect(error).toHaveCount(0);
+      await expectComposerModel(page, "One minute stream");
+      await expectComposerMode(page, "Approval test");
+      await expect(
+        page.getByRole("button", { name: "Send message", exact: true }).filter({ visible: true }),
+      ).toBeEnabled();
+    } finally {
+      await workspace.cleanup();
       await profiles.restore();
     }
   });

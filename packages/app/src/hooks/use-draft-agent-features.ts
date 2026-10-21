@@ -13,6 +13,8 @@ import {
   resolveFeatureValues,
 } from "./feature-preferences";
 
+const EMPTY_FEATURE_VALUES: Record<string, unknown> = {};
+
 type DraftFeatureConfig = Pick<
   AgentSessionConfig,
   "provider" | "cwd" | "modeId" | "model" | "thinkingOptionId"
@@ -30,8 +32,21 @@ export function useDraftAgentFeatures(input: {
   const { t } = useTranslation();
   const { serverId, provider, cwd, modeId, modelId, thinkingOptionId, initialFeatureValues } =
     input;
-  const [localFeatureValues, setLocalFeatureValues] = useState<Record<string, unknown>>(
-    () => initialFeatureValues ?? {},
+  const [featureOverrides, setFeatureOverrides] = useState<Record<string, unknown> | null>(null);
+  const localFeatureValues = featureOverrides ?? initialFeatureValues ?? EMPTY_FEATURE_VALUES;
+  const setLocalFeatureValues = useCallback(
+    (
+      update:
+        | Record<string, unknown>
+        | ((current: Record<string, unknown>) => Record<string, unknown>),
+    ) => {
+      setFeatureOverrides((current) =>
+        typeof update === "function"
+          ? update(current ?? initialFeatureValues ?? EMPTY_FEATURE_VALUES)
+          : update,
+      );
+    },
+    [initialFeatureValues],
   );
   const client = useHostRuntimeClient(serverId ?? "");
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
@@ -41,11 +56,13 @@ export function useDraftAgentFeatures(input: {
   const previousProviderRef = useRef<AgentProvider | null>(normalizedProvider);
   const persistedFeatureValues = useMemo(
     () =>
-      omitSharedPiFastMode(
-        provider,
-        provider ? (preferences.providerPreferences?.[provider]?.featureValues ?? {}) : {},
-      ),
-    [preferences.providerPreferences, provider],
+      initialFeatureValues !== undefined
+        ? EMPTY_FEATURE_VALUES
+        : omitSharedPiFastMode(
+            provider,
+            provider ? (preferences.providerPreferences?.[provider]?.featureValues ?? {}) : {},
+          ),
+    [initialFeatureValues, preferences.providerPreferences, provider],
   );
   const fastModeByModelRef = useRef<Record<string, boolean>>({});
   const modelIdRef = useRef(modelId);
@@ -112,7 +129,7 @@ export function useDraftAgentFeatures(input: {
     if (previousProvider !== normalizedProvider) {
       setLocalFeatureValues({});
     }
-  }, [normalizedProvider]);
+  }, [normalizedProvider, setLocalFeatureValues]);
 
   useEffect(() => {
     if (availableFeaturesRaw === undefined) {
@@ -122,7 +139,7 @@ export function useDraftAgentFeatures(input: {
     if (next !== localFeatureValues) {
       setLocalFeatureValues(next);
     }
-  }, [availableFeatures, availableFeaturesRaw, localFeatureValues]);
+  }, [availableFeatures, availableFeaturesRaw, localFeatureValues, setLocalFeatureValues]);
 
   const effectiveFeatureValues = Object.keys(featureValues).length > 0 ? featureValues : undefined;
   useEffect(() => {
@@ -145,7 +162,7 @@ export function useDraftAgentFeatures(input: {
       if (current[FAST_MODE_FEATURE_ID] === remembered) return current;
       return { ...current, [FAST_MODE_FEATURE_ID]: remembered };
     });
-  }, [modelId, provider]);
+  }, [modelId, provider, setLocalFeatureValues]);
 
   const setFeatureValue = useCallback(
     (featureId: string, value: unknown) => {
@@ -181,7 +198,7 @@ export function useDraftAgentFeatures(input: {
         console.warn("[useDraftAgentFeatures] persist feature preference failed", error);
       });
     },
-    [modelId, provider, updatePreferences],
+    [modelId, provider, setLocalFeatureValues, updatePreferences],
   );
 
   const applyProfileFeatureValues = useCallback(
@@ -204,7 +221,7 @@ export function useDraftAgentFeatures(input: {
       modelIdRef.current = targetModelId;
       setLocalFeatureValues(profile.featureValues);
     },
-    [localFeatureValues],
+    [localFeatureValues, setLocalFeatureValues],
   );
 
   return {
