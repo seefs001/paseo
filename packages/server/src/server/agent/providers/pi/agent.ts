@@ -6,6 +6,7 @@ import { join, resolve as resolvePath } from "node:path";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
 import { z } from "zod";
+import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation";
 
 import {
   type AgentCapabilityFlags,
@@ -2814,7 +2815,10 @@ export class PiRpcAgentSession implements AgentSession {
       callId: toolCallId,
       name: mapping?.name ?? toolCall.toolName,
       detail,
-      ...(parentToolCallId ? { metadata: { parentToolCallId } } : {}),
+      metadata: {
+        ...buildPiToolCallMetadata(toolCall.toolName, toolCall.args),
+        ...(parentToolCallId ? { parentToolCallId } : {}),
+      },
     };
     const item =
       status === "failed" ? { ...baseItem, status, error } : { ...baseItem, status, error: null };

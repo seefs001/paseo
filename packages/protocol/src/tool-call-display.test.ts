@@ -1,8 +1,104 @@
 import { describe, expect, it } from "vitest";
 
 import { buildToolCallDisplayModel } from "./tool-call-display.js";
+import { buildPiToolCallMetadata } from "./pi-tool-presentation.js";
 
 describe("shared tool-call display mapping", () => {
+  it.each([
+    ["read", { path: "/repo/src/a.ts", offset: 10, limit: 20 }, "src/a.ts · lines 10–29"],
+    ["read", { path: "/repo/src/a.ts", offset: null, limit: 1 }, "src/a.ts · line 1"],
+    ["read", { path: "/repo/src/a.ts", offset: 10 }, "src/a.ts · from line 10"],
+    ["bash", { command: "git status", timeout: 30 }, "git status · timeout 30s"],
+    ["bash", { command: "pwd", timeout: null }, "pwd"],
+    [
+      "edit",
+      {
+        path: "/repo/a.ts",
+        edits: [
+          { oldText: "a", newText: "b" },
+          { oldText: "c", newText: "d" },
+        ],
+      },
+      "a.ts · 2 edits",
+    ],
+    ["write", { path: "/repo/a.ts", content: "a\nb\n" }, "a.ts · 2 lines"],
+    ["write", { path: "/repo/a.ts", content: "\n" }, "a.ts · 1 line"],
+    ["write", { path: "/repo/a.ts", content: "" }, "a.ts · 0 lines"],
+    [
+      "grep",
+      { pattern: "TODO", path: "/repo/src", glob: "*.ts", ignoreCase: true },
+      "TODO · src · *.ts · ignore case",
+    ],
+    ["find", { pattern: "*.ts", path: "/repo/src" }, "*.ts · src"],
+    ["ls", { path: "/repo", limit: 20 }, ". · limit 20"],
+    ["tool_search", { query: "paseo agents", limit: 3 }, "paseo agents · limit 3"],
+    ["web_search", { queries: ["Pi RPC", "Pi tools"] }, "Pi RPC · Pi tools"],
+    ["web_search", { query: "Pi RPC", numResults: 5 }, "Pi RPC · 5 results"],
+    [
+      "fetch_content",
+      { urls: ["https://pi.dev", "https://paseo.sh"] },
+      "https://pi.dev · https://paseo.sh",
+    ],
+    [
+      "get_search_content",
+      { responseId: "search-1", url: "https://pi.dev", offset: 0, limit: 100 },
+      "https://pi.dev · chars 0–99",
+    ],
+    ["source_check", { claim: "Pi supports RPC" }, "Pi supports RPC"],
+  ])("promotes fixed Pi %s arguments into the collapsed summary", (name, args, summary) => {
+    const detail = { type: "unknown", input: args, output: null } as const;
+    const display = buildToolCallDisplayModel({
+      name,
+      status: "running",
+      error: null,
+      detail,
+      metadata: buildPiToolCallMetadata(name, args),
+      cwd: "/repo",
+    });
+    expect(display.summary).toBe(summary);
+    expect(detail.input).toEqual(args);
+  });
+
+  it("bounds header text without putting full commands into metadata", () => {
+    const command = "x".repeat(1000);
+    expect(buildPiToolCallMetadata("bash", { command })).toEqual({
+      piToolSummary: [{ kind: "text", value: `${"x".repeat(239)}…` }],
+    });
+  });
+
+  it("ignores malformed Pi presentation metadata", () => {
+    expect(
+      buildToolCallDisplayModel({
+        name: "read",
+        status: "completed",
+        error: null,
+        detail: { type: "read", filePath: "a.ts" },
+        metadata: { piToolSummary: [{ kind: "secret", value: "hidden" }] },
+      }),
+    ).toEqual({ displayName: "Read", summary: "a.ts" });
+  });
+
+  it("does not promote arbitrary extension arguments or script source", () => {
+    expect(buildPiToolCallMetadata("custom_tool", { query: "secret", token: "secret" })).toEqual(
+      {},
+    );
+    expect(buildPiToolCallMetadata("codemode", { code: "secret" })).toEqual({});
+    expect(buildPiToolCallMetadata("read", { path: 42, limit: -1 })).toEqual({});
+  });
+
+  it("keeps Pi metadata on typed cards without changing their name or error", () => {
+    expect(
+      buildToolCallDisplayModel({
+        name: "read",
+        status: "failed",
+        error: "File not found",
+        detail: { type: "read", filePath: "/repo/a.ts", offset: 10, limit: 20 },
+        metadata: buildPiToolCallMetadata("read", { path: "/repo/a.ts", offset: 10, limit: 20 }),
+        cwd: "/repo",
+      }),
+    ).toEqual({ displayName: "Read", summary: "a.ts · lines 10–29", errorText: "File not found" });
+  });
+
   it("builds summary from canonical detail", () => {
     const display = buildToolCallDisplayModel({
       name: "read_file",

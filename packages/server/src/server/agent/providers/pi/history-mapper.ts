@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation";
 import { mapCustomMessageToToolCall } from "../custom-message.js";
 import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
 import {
@@ -269,6 +270,7 @@ export class PiHistoryMapper {
             status: "running",
             detail,
             error: null,
+            metadata: buildPiToolCallMetadata(tracked.toolName, tracked.args),
           },
         });
         events.push(...this.extensionEvents(mapping));
@@ -305,6 +307,7 @@ export class PiHistoryMapper {
           isError: Boolean(message.isError),
           detail,
           errorText: extractTextFromToolResult(result) ?? "Tool call failed",
+          metadata: buildPiToolCallMetadata(tracked.toolName, tracked.args),
         }),
       },
       ...this.extensionEvents(mapping),
@@ -463,6 +466,7 @@ function toToolResultTimelineItem(input: {
   isError: boolean;
   detail: ToolCallDetail;
   errorText: string;
+  metadata: Record<string, unknown>;
 }): AgentTimelineItem {
   if (input.isError) {
     return {
@@ -472,6 +476,7 @@ function toToolResultTimelineItem(input: {
       status: "failed",
       detail: input.detail,
       error: input.errorText,
+      metadata: input.metadata,
     };
   }
   return {
@@ -481,5 +486,6 @@ function toToolResultTimelineItem(input: {
     status: "completed",
     detail: input.detail,
     error: null,
+    metadata: input.metadata,
   };
 }

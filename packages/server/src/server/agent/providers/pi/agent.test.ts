@@ -492,7 +492,7 @@ describe("PiRpcAgentSession", () => {
       toolCallId: "code/1",
       parentToolCallId: "code",
       toolName: "bash",
-      args: { command: "pwd" },
+      args: { command: "pwd", timeout: 30 },
     });
     fakeSession.emit({
       type: "tool_execution_update",
@@ -529,6 +529,15 @@ describe("PiRpcAgentSession", () => {
       { callId: "code/1", status: "completed", parent: "code" },
       { callId: "direct", status: "running", parent: undefined },
     ]);
+    expect(tools.filter((item) => item.callId === "code/1").map((item) => item.metadata)).toEqual(
+      Array.from({ length: 3 }, () => ({
+        parentToolCallId: "code",
+        piToolSummary: [
+          { kind: "text", value: "pwd" },
+          { kind: "text", value: "timeout 30s" },
+        ],
+      })),
+    );
     await session.close();
   });
 
@@ -960,6 +969,7 @@ describe("PiRpcAgentSession", () => {
         status: "running",
         detail: { type: "shell", command: "echo hi" },
         error: null,
+        metadata: { piToolSummary: [{ kind: "text", value: "echo hi" }] },
       },
       {
         type: "tool_call",
@@ -968,6 +978,7 @@ describe("PiRpcAgentSession", () => {
         status: "completed",
         detail: { type: "shell", command: "echo hi", output: "hi\n", exitCode: 0 },
         error: null,
+        metadata: { piToolSummary: [{ kind: "text", value: "echo hi" }] },
       },
     ]);
   });

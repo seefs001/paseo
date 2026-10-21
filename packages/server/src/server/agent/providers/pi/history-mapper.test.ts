@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { buildToolCallDisplayModel } from "@getpaseo/protocol/tool-call-display";
 
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
 import {
@@ -21,6 +22,37 @@ async function collectHistory(
 }
 
 describe("Pi history mapper", () => {
+  test("keeps top-level tool parameters through history completion and failure", async () => {
+    const events = await collectHistory([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "read-range",
+            name: "read",
+            arguments: { path: "/repo/a.ts", offset: 10, limit: 20 },
+          },
+        ],
+      },
+      {
+        role: "toolResult",
+        toolCallId: "read-range",
+        toolName: "read",
+        content: [{ type: "text", text: "not found" }],
+        isError: true,
+      },
+    ]);
+    const displays = events.map((event) => {
+      if (event.type !== "timeline" || event.item.type !== "tool_call")
+        throw new Error("Expected tool call");
+      return buildToolCallDisplayModel({ ...event.item, cwd: "/repo" });
+    });
+    expect(displays).toEqual([
+      { displayName: "Read", summary: "a.ts · lines 10–29" },
+      { displayName: "Read", summary: "a.ts · lines 10–29", errorText: "not found" },
+    ]);
+  });
   test("replays compaction and branch summaries and skips unknown roles", async () => {
     const events = await collectHistory([
       { role: "user", content: "before" },
@@ -189,6 +221,7 @@ describe("Pi history mapper", () => {
           callId: "tool-1",
           name: "read",
           status: "running",
+          metadata: { piToolSummary: [{ kind: "path", value: "note.txt" }] },
           detail: {
             type: "read",
             filePath: "note.txt",
@@ -212,6 +245,7 @@ describe("Pi history mapper", () => {
           callId: "tool-1",
           name: "read",
           status: "completed",
+          metadata: { piToolSummary: [{ kind: "path", value: "note.txt" }] },
           detail: {
             type: "read",
             filePath: "note.txt",

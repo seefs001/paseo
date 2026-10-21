@@ -1,4 +1,5 @@
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
+import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation";
 import { z } from "zod";
 import {
   isAgentToolCallItem,
@@ -61,6 +62,7 @@ function recordedCalls(parent: AgentToolCallItem): AgentToolCallItem[] {
             detail: restored.detail,
             metadata: {
               parentToolCallId: data.callId,
+              ...restored.metadata,
               ...(restored.summary ? { summary: restored.summary } : {}),
             },
           },
@@ -76,16 +78,19 @@ function recordedCalls(parent: AgentToolCallItem): AgentToolCallItem[] {
 
 interface RestoredCallDetail {
   detail: ToolCallDetail;
+  metadata: Record<string, unknown>;
   summary?: string;
 }
 
 function detailForRecordedCall(name: string, args: string): RestoredCallDetail {
   const values = recordedValues(args);
   const typed = typedRecordedDetail(name, values);
-  if (typed) return { detail: typed };
+  const metadata = buildPiToolCallMetadata(name, values);
+  if (typed) return { detail: typed, metadata };
   const summary = recordedSummary(values);
   return {
     detail: { type: "unknown", input: values ?? args, output: null },
+    metadata,
     ...(summary ? { summary } : {}),
   };
 }

@@ -1,4 +1,5 @@
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
+import { buildToolCallDisplayModel } from "@getpaseo/protocol/tool-call-display";
 import { runPluginClientBundle, type PluginClientRuntime } from "@/plugins/evaluate";
 import { transformTimelineItem, type TimelineItemTransform } from "@/plugins/timeline/model";
 import type { InstalledPlugin } from "@/plugins/types";
@@ -336,7 +337,13 @@ describe("Pi codemode presentation", () => {
         status: "completed",
         error: null,
         detail: { type: "read", filePath: "src/a.ts", offset: 10, limit: 20 },
-        metadata: { parentToolCallId: "code" },
+        metadata: {
+          parentToolCallId: "code",
+          piToolSummary: [
+            { kind: "path", value: "src/a.ts" },
+            { kind: "text", value: "lines 10–29" },
+          ],
+        },
       },
       {
         provider: "pi",
@@ -345,7 +352,10 @@ describe("Pi codemode presentation", () => {
         status: "completed",
         error: null,
         detail: { type: "shell", command: "git status --short && echo done", exitCode: null },
-        metadata: { parentToolCallId: "code" },
+        metadata: {
+          parentToolCallId: "code",
+          piToolSummary: [{ kind: "text", value: "git status --short && echo done" }],
+        },
       },
       {
         provider: "pi",
@@ -365,6 +375,17 @@ describe("Pi codemode presentation", () => {
         detail: { type: "read", filePath: "/tmp/codemode-full.txt" },
         metadata: { parentToolCallId: "code" },
       },
+    ]);
+    expect(
+      host.nestedCalls?.map((call) => {
+        if (call.payload.source !== "agent") throw new Error("Expected agent tool");
+        return buildToolCallDisplayModel(call.payload.data).summary;
+      }),
+    ).toEqual([
+      "src/a.ts · lines 10–29",
+      "git status --short && echo done",
+      "42",
+      "/tmp/codemode-full.txt",
     ]);
     const overview = createStreamPresentation()({
       level: "overview",

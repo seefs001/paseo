@@ -268,12 +268,20 @@ export function parseToolArgs(toolName: string, rawArgs: unknown): PiTrackedTool
   }
   const schema = SIMPLE_TOOL_SCHEMAS[toolName as SimpleToolKind];
   if (schema) {
-    const parsed = schema.safeParse(rawArgs);
+    const parsed = schema.safeParse(normalizeOptionalArgs(rawArgs));
     if (parsed.success) {
       return { kind: toolName as SimpleToolKind, toolName, args: parsed.data } as PiTrackedToolCall;
     }
   }
   return { kind: "unknown", toolName, args: rawArgs ?? null };
+}
+
+function normalizeOptionalArgs(rawArgs: unknown): unknown {
+  if (typeof rawArgs !== "object" || rawArgs === null || Array.isArray(rawArgs)) return rawArgs;
+  // Pi providers can serialize omitted optional parameters as null.
+  // Required fields still fail their schema when absent.
+  const entries = Object.entries(rawArgs).filter(([, value]) => value !== null);
+  return Object.fromEntries(entries);
 }
 
 export function mapToolDetail(toolCall: PiTrackedToolCall, result?: PiToolResult): ToolCallDetail {
@@ -397,7 +405,7 @@ function mapFindToolDetail(args: FindToolInput, result: PiToolResult): ToolCallD
     type: "search",
     query: args.pattern,
     toolName: "search",
-    content: typeof result === "string" ? result : undefined,
+    content: extractTextFromToolResult(result),
   };
 }
 
@@ -406,7 +414,7 @@ function mapGrepToolDetail(args: GrepToolInput, result: PiToolResult): ToolCallD
     type: "search",
     query: args.pattern,
     toolName: "grep",
-    content: typeof result === "string" ? result : undefined,
+    content: extractTextFromToolResult(result),
   };
 }
 
@@ -414,6 +422,6 @@ function mapLsToolDetail(args: LsToolInput, result: PiToolResult): ToolCallDetai
   return {
     type: "search",
     query: args.path ?? "ls",
-    content: typeof result === "string" ? result : undefined,
+    content: extractTextFromToolResult(result),
   };
 }

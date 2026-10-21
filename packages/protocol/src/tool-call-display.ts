@@ -5,6 +5,7 @@ import {
 } from "./paseo-tool-presentation/index.js";
 import { getPaseoToolLeafName, isPaseoToolName } from "./tool-name-normalization.js";
 import { stripCwdPrefix } from "./path-utils.js";
+import { getPiToolCallSummary } from "./pi-tool-presentation.js";
 
 export type ToolCallDisplayInput = Pick<
   ToolCallTimelineItem,
@@ -240,7 +241,10 @@ export function buildToolCallDisplayModel(input: ToolCallDisplayInput): ToolCall
     unknownDetailOverride.displayName ??
     canonicalDisplay.displayName ??
     humanizeToolName(input.name);
-  const summary = unknownDetailOverride.summary ?? canonicalDisplay.summary;
+  const summary =
+    getPiToolCallSummary(input.metadata, input.cwd) ??
+    unknownDetailOverride.summary ??
+    canonicalDisplay.summary;
 
   return {
     displayName,

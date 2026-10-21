@@ -15,6 +15,38 @@ describe("Pi tool call mapper", () => {
     });
   });
 
+  test("keeps nullable Pi optional arguments on typed read and shell cards", () => {
+    expect(mapToolDetail(parseToolArgs("read", { path: "a.ts", offset: null, limit: 20 }))).toEqual(
+      {
+        type: "read",
+        filePath: "a.ts",
+        offset: undefined,
+        limit: 20,
+        content: undefined,
+      },
+    );
+    expect(mapToolDetail(parseToolArgs("bash", { command: "pwd", timeout: null }))).toEqual({
+      type: "shell",
+      command: "pwd",
+      output: undefined,
+      exitCode: undefined,
+    });
+    expect(parseToolArgs("read", { path: null, limit: 20 })).toEqual({
+      kind: "unknown",
+      toolName: "read",
+      args: { path: null, limit: 20 },
+    });
+  });
+
+  test.each(["grep", "find", "ls"])("keeps %s RPC text content in the search detail", (name) => {
+    const args = { pattern: "TODO", path: "src" };
+    const result = parseToolResult({ content: [{ type: "text", text: "src/a.ts" }] });
+    expect(mapToolDetail(parseToolArgs(name, args), result)).toMatchObject({
+      type: "search",
+      content: "src/a.ts",
+    });
+  });
+
   test("maps legacy edit args to edit detail with diff", () => {
     const toolCall = parseToolArgs("edit", {
       path: "app.ts",
