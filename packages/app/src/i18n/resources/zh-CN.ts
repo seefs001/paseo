@@ -1968,6 +1968,10 @@ export const zhCN: TranslationResources = {
     archiveTooltip: "归档 subagent",
     archiveFinishedAction: "归档已完成的 subagent",
     archiveFinishedRetry: "重试 ({{failed}}/{{total}})",
+    stopAction: "暂停 {{label}}",
+    stopTooltip: "暂停",
+    stopAllAction: "停止全部 subagent",
+    stopAllRetry: "重试 ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

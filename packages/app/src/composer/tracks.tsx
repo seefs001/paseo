@@ -164,7 +164,7 @@ function ComposerTrackPillTrigger({
 }
 
 /**
- * Actions that apply to the whole panel rather than one row — bulk archive today. Still rows:
+ * Actions that apply to the whole panel rather than one row — bulk stop and archive. Still rows:
  * they live on a menu surface, and a bordered button inside a list of menu items reads as a
  * foreign object. The divider is what separates them from the list, not their chrome.
  *

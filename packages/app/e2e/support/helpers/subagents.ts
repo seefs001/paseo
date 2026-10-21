@@ -65,6 +65,27 @@ export async function seedParentWithSubagent(
   };
 }
 
+/** Seeds a Paseo subagent whose mock turn stays open until it is stopped. */
+export async function seedRunningSubagent(
+  workspace: Pick<SeededWorkspace, "client" | "repoPath" | "workspaceId">,
+  input: { parentId: string; title: string },
+): Promise<{ id: string; title: string }> {
+  const child = await workspace.client.createAgent({
+    provider: "mock",
+    cwd: workspace.repoPath,
+    workspaceId: workspace.workspaceId,
+    title: input.title,
+    modeId: "load-test",
+    model: "five-minute-stream",
+    initialPrompt: "stay running",
+    labels: {
+      [PARENT_AGENT_ID_LABEL]: input.parentId,
+    },
+  });
+  await workspace.client.waitForAgentUpsert(child.id, (snapshot) => snapshot.status === "running");
+  return { id: child.id, title: input.title };
+}
+
 /** Seeds an idle Paseo subagent of an existing agent in the same workspace. */
 export async function seedSubagent(
   workspace: Pick<SeededWorkspace, "client" | "repoPath" | "workspaceId">,
@@ -191,6 +212,41 @@ export async function archiveFinishedSubagents(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Archive finished subagents" }).click();
 }
 
+export async function stopAllSubagents(page: Page): Promise<void> {
+  await page.getByTestId("subagents-track-stop-all").click();
+}
+
+export async function stopSubagentFromTrack(page: Page, childId: string): Promise<void> {
+  const row = page.getByTestId(`subagents-track-row-${childId}`);
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.hover();
+  const stopButton = page.getByTestId(`subagents-track-stop-${childId}`);
+  await expect(stopButton).toBeVisible({ timeout: 30_000 });
+  await stopButton.click();
+}
+
+export async function expectStopAllInProgress(
+  page: Page,
+  completed: number,
+  total: number,
+): Promise<void> {
+  await expect(page.getByTestId("subagents-track-stop-all")).toBeDisabled();
+  await expect(page.getByTestId("subagents-track-stop-progress")).toHaveText(
+    `${completed}/${total}`,
+  );
+}
+
+export async function expectStopAllRetry(page: Page, failed: number, total: number): Promise<void> {
+  await expect(page.getByTestId("subagents-track-stop-failed")).toHaveText(
+    `Retry (${failed}/${total})`,
+  );
+  await expect(page.getByTestId("subagents-track-stop-all")).toBeEnabled();
+}
+
+export async function expectStopAllGone(page: Page): Promise<void> {
+  await expect(page.getByTestId("subagents-track-stop-all")).toHaveCount(0);
+}
+
 export async function expectArchiveFinishedInProgress(
   page: Page,
   completed: number,
@@ -283,6 +339,105 @@ export async function rejectNextManagedSubagentArchiveRequest(
   });
 
   return { waitForRejection: () => rejection };
+}
+
+export async function holdSubagentStopRequest(
+  page: Page,
+  subagentId: string,
+): Promise<ManagedSubagentArchiveGate> {
+  let released = false;
+  let resolveRequest: (() => void) | undefined;
+  const delayedForwards: Array<() => void> = [];
+  const request = new Promise<void>((resolve) => {
+    resolveRequest = resolve;
+  });
+
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      if (isCancelRequestForSubagent(message, subagentId) && !released) {
+        delayedForwards.push(() => server.send(message));
+        resolveRequest?.();
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+
+  return {
+    release() {
+      released = true;
+      for (const forward of delayedForwards.splice(0)) forward();
+    },
+    waitForRequest: () => request,
+  };
+}
+
+export async function rejectNextSubagentStopRequest(
+  page: Page,
+  subagentId: string,
+): Promise<ManagedSubagentArchiveRejection> {
+  let resolveRejection: (() => void) | undefined;
+  const rejection = new Promise<void>((resolve) => {
+    resolveRejection = resolve;
+  });
+  let rejected = false;
+
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const requestId = cancelRequestId(message, subagentId);
+      if (requestId && !rejected) {
+        rejected = true;
+        ws.send(
+          JSON.stringify({
+            type: "session",
+            message: {
+              type: "rpc_error",
+              payload: {
+                requestId,
+                requestType: "cancel_agent_request",
+                error: "Stop rejected for test",
+                code: "stop_rejected",
+              },
+            },
+          }),
+        );
+        resolveRejection?.();
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+
+  return { waitForRejection: () => rejection };
+}
+
+function isCancelRequestForSubagent(message: WebSocketMessage, subagentId: string): boolean {
+  return cancelRequestId(message, subagentId) !== null;
+}
+
+function cancelRequestId(message: WebSocketMessage, subagentId: string): string | null {
+  const rawMessage = typeof message === "string" ? message : message.toString("utf8");
+  try {
+    const envelope = JSON.parse(rawMessage) as {
+      type?: unknown;
+      message?: { type?: unknown; agentId?: unknown; requestId?: unknown };
+    };
+    if (
+      envelope.type === "session" &&
+      envelope.message?.type === "cancel_agent_request" &&
+      envelope.message.agentId === subagentId &&
+      typeof envelope.message.requestId === "string"
+    ) {
+      return envelope.message.requestId;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function isArchiveRequestForSubagent(message: WebSocketMessage, subagentId: string): boolean {

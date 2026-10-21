@@ -2040,6 +2040,10 @@ export const es: TranslationResources = {
     archiveTooltip: "Subagente de archivo",
     archiveFinishedAction: "Archivar subagentes finalizados",
     archiveFinishedRetry: "Reintentar ({{failed}}/{{total}})",
+    stopAction: "Detener {{label}}",
+    stopTooltip: "Detener subagente",
+    stopAllAction: "Detener todos los subagentes",
+    stopAllRetry: "Reintentar ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

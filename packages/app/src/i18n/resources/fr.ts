@@ -2038,6 +2038,10 @@ export const fr: TranslationResources = {
     archiveTooltip: "Archiver le sous-agent",
     archiveFinishedAction: "Archiver les sous-agents terminés",
     archiveFinishedRetry: "Réessayer ({{failed}}/{{total}})",
+    stopAction: "Arrêter {{label}}",
+    stopTooltip: "Arrêter le sous-agent",
+    stopAllAction: "Arrêter tous les sous-agents",
+    stopAllRetry: "Réessayer ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

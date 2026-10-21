@@ -2017,6 +2017,10 @@ export const en = {
     archiveTooltip: "Archive subagent",
     archiveFinishedAction: "Archive finished subagents",
     archiveFinishedRetry: "Retry ({{failed}}/{{total}})",
+    stopAction: "Stop {{label}}",
+    stopTooltip: "Stop subagent",
+    stopAllAction: "Stop all subagents",
+    stopAllRetry: "Retry ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

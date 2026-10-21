@@ -2011,6 +2011,10 @@ export const ja: TranslationResources = {
     archiveTooltip: "サブエージェントをアーカイブ",
     archiveFinishedAction: "完了したサブエージェントをアーカイブ",
     archiveFinishedRetry: "再試行 ({{failed}}/{{total}})",
+    stopAction: "{{label}}を停止",
+    stopTooltip: "サブエージェントを停止",
+    stopAllAction: "すべてのサブエージェントを停止",
+    stopAllRetry: "再試行 ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

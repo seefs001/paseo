@@ -2024,6 +2024,10 @@ export const ru: TranslationResources = {
     archiveTooltip: "Архивировать субагента",
     archiveFinishedAction: "Архивировать завершенные субагенты",
     archiveFinishedRetry: "Повторить ({{failed}}/{{total}})",
+    stopAction: "Остановить {{label}}",
+    stopTooltip: "Остановить субагента",
+    stopAllAction: "Остановить все субагенты",
+    stopAllRetry: "Повторить ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

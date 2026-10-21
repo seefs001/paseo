@@ -1992,6 +1992,10 @@ export const ar: TranslationResources = {
     archiveTooltip: "أرشفة الوكيل الفرعي",
     archiveFinishedAction: "أرشفة الوكلاء الفرعيين المكتملين",
     archiveFinishedRetry: "إعادة المحاولة ({{failed}}/{{total}})",
+    stopAction: "إيقاف {{label}}",
+    stopTooltip: "إيقاف الوكيل الفرعي",
+    stopAllAction: "إيقاف كل الوكلاء الفرعيين",
+    stopAllRetry: "إعادة المحاولة ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

@@ -3,7 +3,7 @@ import { useHosts } from "@/runtime/host-runtime";
 import { useCallback, useMemo, type ReactElement, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { Archive, Unlink } from "lucide-react-native";
+import { Archive, Square, Unlink } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useProviderIcon } from "@/components/provider-icons";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
@@ -20,6 +20,8 @@ import { useAgentFactsLine } from "@/panels/agent-facts-line";
 import { getPanelManifest } from "@/panels/panel-manifest";
 import type { SubagentRow } from "./select";
 import type { ArchiveFinishedStatus } from "./use-archive-finished";
+import { countStoppableSubagents } from "./stop-subagents";
+import { useStopAllSubagents, useStopSubagent, type StopAllStatus } from "./use-stop-subagents";
 import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
@@ -27,11 +29,20 @@ import {
 } from "./track-presentation";
 
 const ThemedArchive = withUnistyles(Archive);
+const ThemedSquare = withUnistyles(Square);
 const ThemedUnlink = withUnistyles(Unlink);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
+});
+const stopIconProps = (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+  fill: theme.colors.foregroundMuted,
+});
+const stopIconActiveProps = (theme: Theme) => ({
+  color: theme.colors.foreground,
+  fill: theme.colors.foreground,
 });
 
 export interface SubagentsTrackProps {
@@ -78,16 +89,32 @@ export function SubagentsTrack({
   onDetachSubagent,
 }: SubagentsTrackProps): ReactElement | null {
   const { t } = useTranslation();
+  const stopAll = useStopAllSubagents(rows);
+  const stopSubagent = useStopSubagent();
+  const stopAllSubagents = stopAll.stopAll;
+  const handleStopAll = useCallback(() => {
+    void stopAllSubagents();
+  }, [stopAllSubagents]);
 
   const isArchivingFinished = archiveFinishedStatus.kind === "archiving";
   const isArchiveFinishedFailed = archiveFinishedStatus.kind === "failed";
-  if (rows.length === 0 && !isArchivingFinished && !isArchiveFinishedFailed) {
+  const isStoppingAll = stopAll.status.kind === "stopping";
+  const isStopAllFailed = stopAll.status.kind === "failed";
+  if (
+    rows.length === 0 &&
+    !isArchivingFinished &&
+    !isArchiveFinishedFailed &&
+    !isStoppingAll &&
+    !isStopAllFailed
+  ) {
     return null;
   }
 
   const pill = buildSubagentPillPresentation(t, rows);
   const finishedCount = countFinishedSubagents(rows);
   const showArchiveFinished = finishedCount > 0 || isArchivingFinished || isArchiveFinishedFailed;
+  const showStopAll = countStoppableSubagents(rows) > 0 || isStoppingAll || isStopAllFailed;
+  const showBulkActions = showStopAll || showArchiveFinished;
 
   return (
     <ComposerTrackPill
@@ -96,13 +123,18 @@ export function SubagentsTrack({
       accessibilityLabel={pill.accessibilityLabel}
       panelTitle={t("subagents.title")}
     >
-      {showArchiveFinished && onArchiveFinished ? (
+      {showBulkActions ? (
         <ComposerTrackActions divided={rows.length > 0}>
-          <ArchiveFinishedRow
-            status={archiveFinishedStatus}
-            disabled={isArchivingFinished}
-            onPress={onArchiveFinished}
-          />
+          {showStopAll ? (
+            <StopAllRow status={stopAll.status} disabled={isStoppingAll} onPress={handleStopAll} />
+          ) : null}
+          {showArchiveFinished && onArchiveFinished ? (
+            <ArchiveFinishedRow
+              status={archiveFinishedStatus}
+              disabled={isArchivingFinished}
+              onPress={onArchiveFinished}
+            />
+          ) : null}
         </ComposerTrackActions>
       ) : null}
       {rows.map((row) => (
@@ -115,6 +147,7 @@ export function SubagentsTrack({
           opensInSheet={opensInSheet(row)}
           onArchiveSubagent={onArchiveSubagent}
           onDetachSubagent={onDetachSubagent}
+          onStopSubagent={stopSubagent}
         />
       ))}
     </ComposerTrackPill>
@@ -179,6 +212,59 @@ function ArchiveFinishedRow({
   );
 }
 
+/** Same interrupt as the composer stop, for every running Paseo subagent in this panel. */
+function StopAllRow({
+  status,
+  disabled,
+  onPress,
+}: {
+  status: StopAllStatus;
+  disabled: boolean;
+  onPress: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+
+  const renderRow = useCallback(
+    ({ active }: { active: boolean }) => (
+      <>
+        <ThemedSquare
+          size={ROW_ICON_SIZE}
+          uniProps={active ? stopIconActiveProps : stopIconProps}
+        />
+        <Text style={styles.rowLabel} numberOfLines={1}>
+          {t("subagents.stopAllAction")}
+        </Text>
+        {status.kind === "stopping" ? (
+          <Text style={styles.rowTrailing} testID="subagents-track-stop-progress">
+            {status.completedCount}/{status.totalCount}
+          </Text>
+        ) : null}
+        {status.kind === "failed" ? (
+          <Text style={styles.rowTrailing} testID="subagents-track-stop-failed">
+            {t("subagents.stopAllRetry", {
+              failed: status.failedCount,
+              total: status.totalCount,
+            })}
+          </Text>
+        ) : null}
+      </>
+    ),
+    [status, t],
+  );
+
+  return (
+    <ComposerTrackRow
+      accessibilityLabel={t("subagents.stopAllAction")}
+      testID="subagents-track-stop-all"
+      disabled={disabled}
+      closeOnSelect={false}
+      onPress={onPress}
+    >
+      {renderRow}
+    </ComposerTrackRow>
+  );
+}
+
 interface SubagentsTrackRowProps {
   serverId: string;
   row: SubagentRow;
@@ -187,6 +273,7 @@ interface SubagentsTrackRowProps {
   opensInSheet: boolean;
   onArchiveSubagent: (address: AgentAddress) => void;
   onDetachSubagent?: (address: AgentAddress) => void;
+  onStopSubagent: (address: AgentAddress) => void;
 }
 
 function SubagentsTrackRow({
@@ -197,6 +284,7 @@ function SubagentsTrackRow({
   opensInSheet,
   onArchiveSubagent,
   onDetachSubagent,
+  onStopSubagent,
 }: SubagentsTrackRowProps): ReactElement {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
@@ -218,6 +306,11 @@ function SubagentsTrackRow({
   const handleDetachPress = useCallback(() => {
     if (row.kind === "paseo") onDetachSubagent?.(row.address);
   }, [onDetachSubagent, row]);
+  const handleStopPress = useCallback(() => {
+    if (row.kind === "paseo") onStopSubagent(row.address);
+  }, [onStopSubagent, row]);
+  const canStop = row.kind === "paseo" && row.turn.phase === "open";
+  const stopDisabled = canStop && row.turn.cancellationRequestId !== null;
   const actionsAlwaysVisible = isNative || isCompact;
 
   const renderRow = useCallback(
@@ -243,6 +336,8 @@ function SubagentsTrackRow({
             displayLabel={displayLabel}
             compact={isCompact}
             visible={actionsAlwaysVisible || active}
+            onStopPress={canStop ? handleStopPress : undefined}
+            stopDisabled={stopDisabled}
             onDetachPress={onDetachSubagent ? handleDetachPress : undefined}
             onArchivePress={handleArchivePress}
           />
@@ -251,9 +346,11 @@ function SubagentsTrackRow({
     ),
     [
       actionsAlwaysVisible,
+      canStop,
       displayLabel,
       handleArchivePress,
       handleDetachPress,
+      handleStopPress,
       isCompact,
       onDetachSubagent,
       presentation,
@@ -262,6 +359,7 @@ function SubagentsTrackRow({
       serverId,
       rowServerId,
       hostLabel,
+      stopDisabled,
     ],
   );
 
@@ -297,6 +395,8 @@ function SubagentRowActions({
   displayLabel,
   compact,
   visible,
+  onStopPress,
+  stopDisabled = false,
   onDetachPress,
   onArchivePress,
 }: {
@@ -304,6 +404,8 @@ function SubagentRowActions({
   displayLabel: string;
   compact: boolean;
   visible: boolean;
+  onStopPress?: () => void;
+  stopDisabled?: boolean;
   onDetachPress?: () => void;
   onArchivePress: () => void;
 }): ReactElement {
@@ -314,6 +416,18 @@ function SubagentRowActions({
       style={visible ? styles.actionClusterVisible : styles.actionClusterHidden}
       pointerEvents={visible ? "auto" : "none"}
     >
+      {onStopPress ? (
+        <SubagentActionButton
+          label={t("subagents.stopAction", { label: displayLabel })}
+          tooltipLabel={t("subagents.stopTooltip")}
+          compact={compact}
+          disabled={stopDisabled}
+          onPress={onStopPress}
+          testID={`subagents-track-stop-${rowId}`}
+        >
+          <ThemedSquare size={iconSize} uniProps={stopIconProps} />
+        </SubagentActionButton>
+      ) : null}
       {onDetachPress ? (
         <SubagentActionButton
           label={t("subagents.detachAction", { label: displayLabel })}
@@ -343,6 +457,7 @@ function SubagentActionButton({
   label,
   tooltipLabel,
   compact,
+  disabled = false,
   onPress,
   testID,
   children,
@@ -350,6 +465,7 @@ function SubagentActionButton({
   label: string;
   tooltipLabel: string;
   compact: boolean;
+  disabled?: boolean;
   onPress: () => void;
   testID: string;
   children: ReactNode;
@@ -364,6 +480,7 @@ function SubagentActionButton({
       tooltip={tooltip}
       tooltipSide="top"
       compact={compact}
+      disabled={disabled}
       onPress={onPress}
       testID={testID}
     >

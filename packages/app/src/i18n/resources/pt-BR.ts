@@ -2025,6 +2025,10 @@ export const ptBR: TranslationResources = {
     archiveTooltip: "Arquivar subagente",
     archiveFinishedAction: "Arquivar subagentes concluídos",
     archiveFinishedRetry: "Tentar novamente ({{failed}}/{{total}})",
+    stopAction: "Parar {{label}}",
+    stopTooltip: "Parar subagente",
+    stopAllAction: "Parar todos os subagentes",
+    stopAllRetry: "Tentar novamente ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

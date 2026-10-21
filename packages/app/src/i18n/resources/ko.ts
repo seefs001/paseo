@@ -2002,6 +2002,10 @@ export const ko: TranslationResources = {
     archiveTooltip: "서브에이전트 보관",
     archiveFinishedAction: "완료된 하위 에이전트 보관",
     archiveFinishedRetry: "다시 시도 ({{failed}}/{{total}})",
+    stopAction: "{{label}} 중지",
+    stopTooltip: "서브에이전트 중지",
+    stopAllAction: "모든 서브에이전트 중지",
+    stopAllRetry: "다시 시도 ({{failed}}/{{total}})",
   },
   panels: {
     draft: {

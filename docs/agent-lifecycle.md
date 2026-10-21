@@ -242,6 +242,8 @@ Claude Code announces subagent lifecycle on the SDK stream (`task_started` / `ta
 
 Archived Paseo subagents disappear from the track, by design. To remove one from the track without closing its tab, use the **archive button** on the row — it opens a confirm dialog and archives the subagent on confirm. Provider-owned rows have no individual Paseo lifecycle controls.
 
+A running Paseo subagent row has a **stop** button beside detach and archive. It interrupts that agent's current turn, the same stop as the composer square, and leaves the agent in the track. **Stop all**, the row above the list, interrupts every running Paseo subagent in the panel at once. Provider-owned rows have no stop control.
+
 The **Archive finished** row at the foot of the panel covers every finished row. It archives idle or errored managed Paseo subagents one at a time, and hides completed, failed, or canceled provider-owned rows in the current app session. Native sessions and timelines are untouched. Running and initializing children remain in the track. If a hidden provider child starts running again, the app brings it back to the track.
 
 To keep the agent alive but remove it from the parent's track, use **detach**. The daemon clears the relationship lifecycle labels, emits the normal agent update, and every client reclassifies the agent from subagent to root/sibling from that updated snapshot.
