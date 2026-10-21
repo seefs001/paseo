@@ -674,6 +674,9 @@ export interface AgentSession {
   readonly id: string | null;
   readonly capabilities: AgentCapabilityFlags;
   readonly features?: AgentFeature[];
+  /** Full durable feature state, including hidden and normalized values.
+   * Omit when the manager owns submitted values; an empty record clears them. */
+  readonly featureValues?: Readonly<Record<string, unknown>>;
   /** New provider-owned rows to commit on registration. streamHistory must also
    * replay them at their original timestamps; restored sessions omit old rows. */
   readonly initialTimeline?: ImportedTimelineEntry[];

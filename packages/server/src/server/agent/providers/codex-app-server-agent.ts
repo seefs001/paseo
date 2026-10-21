@@ -3459,6 +3459,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   private activeForegroundTurnId: string | null = null;
   private activeClientMessageId: string | null = null;
   private cachedRuntimeInfo: AgentRuntimeInfo | null = null;
+  private modelAndThinkingRevision = 0;
   private serviceTier: string | null = null;
   private speedModels: CodexModel[] = [];
   private planModeEnabled = false;
@@ -3590,6 +3591,10 @@ export class CodexAppServerAgentSession implements AgentSession {
       mcpAutoAcceptEnabled: this.config.featureValues?.auto_accept_mcp === true,
       planModeAvailable: this.hasPlanCollaborationMode(),
     });
+  }
+
+  get featureValues(): Readonly<Record<string, unknown>> {
+    return this.config.featureValues ?? {};
   }
 
   async connect(): Promise<void> {
@@ -4626,6 +4631,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   async setModel(modelId: string | null): Promise<void> {
+    this.modelAndThinkingRevision += 1;
     this.config.model = modelId ?? undefined;
     this.reconcileServiceTier();
     this.refreshResolvedCollaborationMode();
@@ -4633,6 +4639,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void | AgentProviderNotice> {
+    this.modelAndThinkingRevision += 1;
     this.config.thinkingOptionId = normalizeCodexThinkingOptionId(thinkingOptionId);
     this.refreshResolvedCollaborationMode();
     this.cachedRuntimeInfo = null;
@@ -5289,11 +5296,16 @@ export class CodexAppServerAgentSession implements AgentSession {
   // A session without a model or effort runs on Codex's configured defaults, whether its
   // thread is new or resumed after a restart.
   private async applyDefaultModelAndThinking(): Promise<string> {
-    const { model, thinkingOptionId } = await this.resolveModelAndThinking();
-    this.config.model = model;
-    this.reconcileServiceTier();
-    this.config.thinkingOptionId = thinkingOptionId;
-    return model;
+    while (true) {
+      const revision = this.modelAndThinkingRevision;
+      const { model, thinkingOptionId } = await this.resolveModelAndThinking();
+      // Explicit resets and ABA changes also invalidate an in-flight defaults read.
+      if (revision !== this.modelAndThinkingRevision) continue;
+      this.config.model = model;
+      this.reconcileServiceTier();
+      this.config.thinkingOptionId = thinkingOptionId;
+      return model;
+    }
   }
 
   private async ensureThread(): Promise<void> {

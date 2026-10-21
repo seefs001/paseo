@@ -1952,6 +1952,10 @@ export class PiRpcAgentSession implements AgentSession {
     return buildPiFeatures(this.state, this.config);
   }
 
+  get featureValues(): Readonly<Record<string, unknown>> {
+    return this.config.featureValues ?? {};
+  }
+
   async setFeature(featureId: string, value: unknown): Promise<void> {
     if (featureId !== "fast_mode") {
       throw new PiFeatureError(featureId, `Unknown Pi feature: ${featureId}`);

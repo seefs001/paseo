@@ -2355,6 +2355,10 @@ class ClaudeAgentSession implements AgentSession {
     });
   }
 
+  get featureValues(): Readonly<Record<string, unknown>> {
+    return this.config.featureValues ?? {};
+  }
+
   async getRuntimeInfo(): Promise<AgentRuntimeInfo> {
     if (this.cachedRuntimeInfo) {
       return { ...this.cachedRuntimeInfo };
@@ -2718,14 +2722,14 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private async applyFastModeFeature(enabled: boolean, query?: Query): Promise<void> {
-    this.config.featureValues = {
-      ...this.config.featureValues,
-      fast_mode: enabled,
-    };
     const activeQuery = query ?? this.query;
     if (activeQuery) {
       await activeQuery.applyFlagSettings({ fastMode: enabled });
     }
+    this.config.featureValues = {
+      ...this.config.featureValues,
+      fast_mode: enabled,
+    };
     this.cachedRuntimeInfo = null;
   }
 

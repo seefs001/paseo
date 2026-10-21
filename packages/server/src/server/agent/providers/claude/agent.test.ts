@@ -18,6 +18,7 @@ import {
 import { claudeProjectDirSync } from "./project-dir.js";
 import { streamSession } from "../test-utils/session-stream-adapter.js";
 import type {
+  AgentClient,
   AgentPromptInput,
   AgentSession,
   AgentTimelineItem,
@@ -25,6 +26,8 @@ import type {
 } from "../../agent-sdk-types.js";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import { buildAgentPrompt, renderPromptAttachmentAsText } from "../../prompt-attachments.js";
+import { AgentManager } from "../../agent-manager.js";
+import { AgentStorage } from "../../agent-storage.js";
 
 interface TestClaudeSession {
   translateMessageToEvents(message: SDKMessage): AgentStreamEvent[];
@@ -1462,6 +1465,90 @@ describe("ClaudeAgentSession features", () => {
     });
 
     await session.close();
+  });
+
+  test("canonical feature values persist Claude model reconciliation and MCP settings", async () => {
+    const { queryFactory } = createQueryMock();
+    const provider = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const client: AgentClient = {
+      provider: "claude",
+      capabilities: provider.capabilities,
+      createSession: (config) => provider.createSession(config),
+      resumeSession: (handle, config) => provider.resumeSession(handle, config),
+      fetchCatalog: async () => ({ models: [], modes: [] }),
+      isAvailable: async () => true,
+    };
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "claude-canonical-features-"));
+    const storage = new AgentStorage(path.join(cwd, "agents"), logger);
+    const manager = new AgentManager({
+      clients: { claude: client },
+      registry: storage,
+      logger,
+      paseoToolsEnabled: false,
+    });
+    let agentId: string | undefined;
+    try {
+      const agent = await manager.createAgent(
+        {
+          provider: "claude",
+          cwd,
+          model: "claude-opus-4-8",
+          featureValues: { fast_mode: true, auto_accept_mcp: false, other_feature: "keep" },
+        },
+        undefined,
+        { workspaceId: undefined },
+      );
+      agentId = agent.id;
+      await manager.setAgentFeature(agent.id, "auto_accept_mcp", true);
+      await manager.setAgentModel(agent.id, "claude-sonnet-4-6");
+      await manager.setAgentModel(agent.id, "claude-opus-4-8");
+      await manager.flush();
+      const expected = { fast_mode: false, auto_accept_mcp: true, other_feature: "keep" };
+      expect((await storage.get(agent.id))?.config?.featureValues).toEqual(expected);
+      const reloaded = await manager.reloadAgentSession(agent.id);
+      expect(reloaded.config.featureValues).toEqual(expected);
+      expect(reloaded.features).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "fast_mode", value: false }),
+          expect.objectContaining({ id: "auto_accept_mcp", value: true }),
+        ]),
+      );
+    } finally {
+      if (agentId) await manager.closeAgent(agentId);
+      await manager.flush();
+      await storage.flush();
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("failed fast-mode flag updates do not change canonical feature values", async () => {
+    const { queryFactory, queryMock } = createQueryMock();
+    const provider = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await provider.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+      featureValues: { fast_mode: false, auto_accept_mcp: true },
+    });
+    try {
+      await session.setModel!("claude-opus-4-8");
+      queryMock.applyFlagSettings.mockRejectedValueOnce(new Error("flag update failed"));
+      await expect(session.setFeature!("fast_mode", true)).rejects.toThrow("flag update failed");
+      expect(session.featureValues).toEqual({ fast_mode: false, auto_accept_mcp: true });
+      expect(session.features).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: false })]),
+      );
+    } finally {
+      await session.close();
+    }
   });
 
   test("toggles fast mode on the active query without restarting it", async () => {

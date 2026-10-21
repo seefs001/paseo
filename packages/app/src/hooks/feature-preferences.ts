@@ -56,10 +56,14 @@ export function omitSharedPiFastMode(
 }
 
 export function resolveFeatureValues(args: {
-  features: AgentFeature[];
+  features: AgentFeature[] | undefined;
   persistedFeatureValues: Record<string, unknown>;
   localFeatureValues: Record<string, unknown>;
 }): Record<string, unknown> {
+  // An unresolved catalog must not erase explicit values from a submitted draft.
+  if (args.features === undefined) {
+    return { ...args.persistedFeatureValues, ...args.localFeatureValues };
+  }
   const next: Record<string, unknown> = {};
 
   for (const feature of args.features) {

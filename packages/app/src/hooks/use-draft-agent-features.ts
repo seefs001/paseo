@@ -92,11 +92,11 @@ export function useDraftAgentFeatures(input: {
   const featureValues = useMemo(
     () =>
       resolveFeatureValues({
-        features: availableFeatures,
+        features: availableFeaturesRaw,
         persistedFeatureValues,
         localFeatureValues,
       }),
-    [availableFeatures, localFeatureValues, persistedFeatureValues],
+    [availableFeaturesRaw, localFeatureValues, persistedFeatureValues],
   );
 
   const features = useMemo(() => {

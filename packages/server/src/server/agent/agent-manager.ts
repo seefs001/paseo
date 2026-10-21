@@ -3916,6 +3916,7 @@ export class AgentManager {
     agent: LiveManagedAgent,
     cancelReason: string,
   ): ManagedAgentClosed {
+    this.syncFeaturesFromSession(agent);
     this.agentStreamCoalescer.flushAndDiscard(agent.id);
     this.agents.delete(agent.id);
     this.previousStatuses.delete(agent.id);
@@ -4119,6 +4120,7 @@ export class AgentManager {
     agent: ManagedAgent,
     options?: { title?: string | null; internal?: boolean },
   ): Promise<void> {
+    this.syncFeaturesFromSession(agent);
     if (!this.registry) {
       return;
     }
@@ -5079,13 +5081,12 @@ export class AgentManager {
   }
 
   private emitState(agent: ManagedAgent, options?: { persist?: boolean }): void {
+    this.syncFeaturesFromSession(agent);
     // Keep attention as an edge-triggered unread signal, not a level signal.
     this.checkAndSetAttention(agent);
     if (options?.persist !== false) {
       this.enqueueBackgroundPersist(agent);
     }
-
-    this.syncFeaturesFromSession(agent);
 
     this.logger.trace(
       {
@@ -5108,8 +5109,12 @@ export class AgentManager {
   }
 
   private syncFeaturesFromSession(agent: ManagedAgent): void {
-    if ("session" in agent && agent.session?.features) {
-      agent.features = agent.session.features;
+    if ("session" in agent && agent.session) {
+      const { features, featureValues } = agent.session;
+      if (features) agent.features = features;
+      if (featureValues !== undefined) {
+        agent.config.featureValues = { ...featureValues };
+      }
     }
   }
 

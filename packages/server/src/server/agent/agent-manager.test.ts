@@ -3,12 +3,13 @@ import {
   formatAgentMessage,
   formatSystemNotificationPrompt,
 } from "./agent-messages/index.js";
-import { expect, test, vi, onTestFinished } from "vitest";
+import { describe, expect, test, vi, onTestFinished } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import {
@@ -55,7 +56,11 @@ import type {
   ResolveAgentDefaultModeInput,
 } from "./agent-sdk-types.js";
 import type { PaseoToolCatalog } from "./tools/types.js";
-import type { ProviderDefinition } from "./provider-registry.js";
+import { wrapSessionProvider, type ProviderDefinition } from "./provider-registry.js";
+import { PiRpcAgentClient } from "./providers/pi/agent.js";
+import { FakePi } from "./providers/pi/test-utils/fake-pi.js";
+import { CodexAppServerAgentSession } from "./providers/codex-app-server-agent.js";
+import { createFakeCodexAppServer } from "./providers/codex/test-utils/fake-app-server.js";
 
 const DESKTOP_OPEN_AGENT_TAB_LABEL = getOpenAgentTabLabel("desktop-client");
 const MOBILE_OPEN_AGENT_TAB_LABEL = getOpenAgentTabLabel("mobile-client");
@@ -12289,3 +12294,240 @@ test.each([
     expect(timelineStore.itemReads).toBe(readsBeforeDispatch);
   },
 );
+
+describe("canonical feature values", () => {
+  interface PiExtensionCommand {
+    handler(args: string, context: unknown): Promise<void>;
+  }
+
+  async function connectPiExtension(pi: FakePi): Promise<void> {
+    const runtime = pi.latestSession();
+    const extensionPath = pi.recordedLaunches.at(-1)!.extensionPaths![0]!;
+    const extension = (await import(pathToFileURL(extensionPath).href)) as {
+      default(api: {
+        on(event: string, listener: unknown): void;
+        events: { on(): void };
+        registerMcpServer(): void;
+        registerCommand(name: string, command: PiExtensionCommand): void;
+      }): void;
+    };
+    extension.default({
+      on: () => undefined,
+      events: { on: () => undefined },
+      registerMcpServer: () => undefined,
+      registerCommand: (name, command) => {
+        runtime.extensionCommands.set(`/${name}`, (args) =>
+          command.handler(args, {
+            model: runtime.state.model,
+            ui: {
+              notify: (message: string) =>
+                runtime.emit({
+                  type: "extension_ui_request",
+                  method: "notify",
+                  id: "canonical-feature-result",
+                  message,
+                }),
+            },
+          }),
+        );
+      },
+    });
+  }
+
+  function createManager(client: AgentClient) {
+    const cwd = mkdtempSync(join(tmpdir(), "agent-canonical-features-"));
+    const storage = new AgentStorage(join(cwd, "agents"), logger);
+    const manager = new AgentManager({
+      clients: { [client.provider]: client },
+      registry: storage,
+      logger,
+      paseoToolsEnabled: false,
+    });
+    onTestFinished(async () => {
+      for (const agent of manager.listAgents()) await manager.closeAgent(agent.id);
+      await manager.flush();
+      await storage.flush();
+      rmSync(cwd, { recursive: true, force: true });
+    });
+    return { manager, storage, cwd };
+  }
+
+  test.each([
+    { name: "new session", featureValues: undefined, expectedInitial: undefined },
+    {
+      name: "legacy scalar",
+      featureValues: { fast_mode: true },
+      expectedInitial: { fast_mode: true, fast_mode_by_model: { "openai/model-a": true } },
+    },
+    {
+      name: "saved map",
+      featureValues: { fast_mode: true, fast_mode_by_model: { "openai/model-a": true } },
+      expectedInitial: { fast_mode: true, fast_mode_by_model: { "openai/model-a": true } },
+    },
+  ])(
+    "Pi persists per-model Fast through toggles, model switches and reload: $name",
+    async ({ featureValues, expectedInitial }) => {
+      const pi = new FakePi();
+      const modelA = { provider: "openai", id: "model-a", api: "openai-responses" };
+      const modelB = { provider: "openai", id: "model-b", api: "openai-responses" };
+      pi.queueSessionSetup((runtime) => {
+        runtime.state = { ...runtime.state, model: modelA };
+      });
+      const provider = new PiRpcAgentClient({ logger, runtime: pi });
+      const client = new (class extends TestAgentClient {
+        constructor() {
+          super("pi");
+        }
+        override async createSession(config: AgentSessionConfig) {
+          return wrapSessionProvider("pi", await provider.createSession(config));
+        }
+        override async resumeSession(
+          handle: AgentPersistenceHandle,
+          config?: Partial<AgentSessionConfig>,
+        ) {
+          return wrapSessionProvider("pi", await provider.resumeSession(handle, config));
+        }
+      })();
+      const { manager, storage, cwd } = createManager(client);
+      const agent = await manager.createAgent(
+        { provider: "pi", cwd, model: "openai/model-a", featureValues },
+        undefined,
+        { workspaceId: undefined },
+      );
+      await connectPiExtension(pi);
+      expect((await storage.get(agent.id))?.config?.featureValues).toEqual(expectedInitial);
+      await manager.setAgentFeature(agent.id, "fast_mode", false);
+      pi.latestSession().setModelResult = modelB;
+      await manager.setAgentModel(agent.id, "openai/model-b");
+      await manager.setAgentFeature(agent.id, "fast_mode", true);
+      pi.latestSession().setModelResult = modelA;
+      await manager.setAgentModel(agent.id, "openai/model-a");
+      await manager.flush();
+      expect((await storage.get(agent.id))?.config?.featureValues).toEqual({
+        fast_mode: false,
+        fast_mode_by_model: { "openai/model-a": false, "openai/model-b": true },
+      });
+      expect(manager.getAgent(agent.id)?.features).toMatchObject([
+        { id: "fast_mode", value: false },
+      ]);
+      pi.queueSessionSetup((runtime) => {
+        runtime.state = { ...runtime.state, model: modelA };
+      });
+      const reloaded = await manager.reloadAgentSession(agent.id);
+      expect(reloaded.features).toMatchObject([{ id: "fast_mode", value: false }]);
+      pi.latestSession().setModelResult = modelB;
+      await manager.setAgentModel(agent.id, "openai/model-b");
+      expect(manager.getAgent(agent.id)?.features).toMatchObject([
+        { id: "fast_mode", value: true },
+      ]);
+    },
+  );
+
+  test("Codex persists reconciled speed and all feature values instead of launch config", async () => {
+    const open = async (config: AgentSessionConfig, handle: AgentPersistenceHandle | null) => {
+      const app = createFakeCodexAppServer({
+        "model/list": () => ({
+          data: [
+            {
+              id: "model-a",
+              isDefault: true,
+              serviceTiers: [{ id: "priority", name: "Fast", description: "Priority" }],
+            },
+            { id: "model-b", serviceTiers: [] },
+          ],
+        }),
+        "collaborationMode/list": () => ({
+          data: [
+            { name: "Code", mode: "code" },
+            { name: "Plan", mode: "plan" },
+          ],
+        }),
+      });
+      const session = new CodexAppServerAgentSession(
+        { ...config },
+        handle,
+        logger,
+        async () => app.child,
+      );
+      await session.connect();
+      return session;
+    };
+    const client = new (class extends TestAgentClient {
+      override createSession(config: AgentSessionConfig) {
+        return open(config, null);
+      }
+      override resumeSession(handle: AgentPersistenceHandle, config?: Partial<AgentSessionConfig>) {
+        return open({ ...config, provider: "codex", cwd: config?.cwd ?? process.cwd() }, handle);
+      }
+    })();
+    const { manager, storage, cwd } = createManager(client);
+    const agent = await manager.createAgent(
+      {
+        provider: "codex",
+        cwd,
+        model: "model-a",
+        thinkingOptionId: "medium",
+        featureValues: {
+          fast_mode: true,
+          plan_mode: false,
+          auto_accept_mcp: false,
+          other_feature: "keep",
+        },
+      },
+      undefined,
+      { workspaceId: undefined },
+    );
+    expect((await storage.get(agent.id))?.config?.featureValues).toEqual({
+      service_tier: "priority",
+      plan_mode: false,
+      auto_accept_mcp: false,
+      other_feature: "keep",
+    });
+    await manager.setAgentFeature(agent.id, "plan_mode", true);
+    await manager.setAgentFeature(agent.id, "auto_accept_mcp", true);
+    await manager.setAgentModel(agent.id, "model-b");
+    await manager.setAgentModel(agent.id, "model-a");
+    await manager.flush();
+    const expected = {
+      service_tier: "default",
+      plan_mode: true,
+      auto_accept_mcp: true,
+      other_feature: "keep",
+    };
+    expect((await storage.get(agent.id))?.config?.featureValues).toEqual(expected);
+    const reloaded = await manager.reloadAgentSession(agent.id);
+    expect(reloaded.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "service_tier", value: "default" }),
+        expect.objectContaining({ id: "plan_mode", value: true }),
+        expect.objectContaining({ id: "auto_accept_mcp", value: true }),
+      ]),
+    );
+    expect(reloaded.config.featureValues).toEqual(expected);
+  });
+
+  test.each([true, false])(
+    "empty snapshots clear feature values only when supported: %s",
+    async (supported) => {
+      const client = new (class extends TestAgentClient {
+        override async createSession(config: AgentSessionConfig) {
+          return Object.assign(new TestAgentSession(config), {
+            featureValues: supported ? {} : undefined,
+          });
+        }
+      })();
+      const { manager, storage, cwd } = createManager(client);
+      const agent = await manager.createAgent(
+        { provider: "codex", cwd, model: "model-a", featureValues: { preserved: false } },
+        undefined,
+        { workspaceId: undefined },
+      );
+      expect(manager.getAgent(agent.id)?.config.featureValues).toEqual(
+        supported ? {} : { preserved: false },
+      );
+      expect((await storage.get(agent.id))?.config?.featureValues).toEqual(
+        supported ? undefined : { preserved: false },
+      );
+    },
+  );
+});

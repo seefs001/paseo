@@ -1,5 +1,5 @@
 import pino from "pino";
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test } from "vitest";
 
 import type { AgentSession, AgentSessionConfig } from "../agent-sdk-types.js";
 import { CodexAppServerAgentSession } from "./codex-app-server-agent.js";
@@ -144,7 +144,159 @@ async function createConnectedSession(
   return harness;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((fulfill) => {
+    resolve = fulfill;
+  });
+  return { promise, resolve };
+}
+
+interface PendingDefaultsCase {
+  name: string;
+  initialModel: string | undefined;
+  update(session: AgentSession): Promise<void>;
+  model: string;
+  thinking: string;
+  tier: string;
+}
+
+const pendingDefaultsCases: PendingDefaultsCase[] = [
+  {
+    name: "explicit model and thinking",
+    initialModel: "model-a",
+    update: async (session) => {
+      await session.setModel!("model-b");
+      await session.setThinkingOption!("high");
+      await session.setFeature!("service_tier", "priority");
+    },
+    model: "model-b",
+    thinking: "high",
+    tier: "priority",
+  },
+  {
+    name: "thinking without a model change",
+    initialModel: "model-a",
+    update: async (session) => {
+      await session.setThinkingOption!("high");
+    },
+    model: "model-a",
+    thinking: "high",
+    tier: "default",
+  },
+  {
+    name: "explicit model reset",
+    initialModel: "model-a",
+    update: async (session) => {
+      await session.setModel!(null);
+      await session.setFeature!("service_tier", "priority");
+    },
+    model: "model-b",
+    thinking: "max",
+    tier: "priority",
+  },
+  {
+    name: "model ABA back to defaults",
+    initialModel: undefined,
+    update: async (session) => {
+      await session.setModel!("model-a");
+      await session.setModel!(null);
+      await session.setFeature!("service_tier", "priority");
+    },
+    model: "model-b",
+    thinking: "max",
+    tier: "priority",
+  },
+  {
+    name: "thinking ABA back to defaults",
+    initialModel: "model-a",
+    update: async (session) => {
+      await session.setThinkingOption!("high");
+      await session.setThinkingOption!(null);
+    },
+    model: "model-a",
+    thinking: "max",
+    tier: "default",
+  },
+  {
+    name: "unchanged defaults",
+    initialModel: "model-a",
+    update: async () => undefined,
+    model: "model-a",
+    thinking: "medium",
+    tier: "default",
+  },
+];
+
 describe("Codex app-server provider features", () => {
+  test.each(pendingDefaultsCases)(
+    "late defaults preserve $name for the session and next turn",
+    async (scenario) => {
+      const entered = deferred<void>();
+      const oldDefaults = deferred<unknown>();
+      let reads = 0;
+      const app = createFakeCodexAppServer({
+        "model/list": () => ({
+          data: [
+            { id: "model-a", defaultReasoningEffort: "medium", serviceTiers: [] },
+            {
+              id: "model-b",
+              isDefault: true,
+              defaultReasoningEffort: "max",
+              serviceTiers: [{ id: "priority", name: "Fast", description: "Priority" }],
+            },
+          ],
+        }),
+        getUserSavedConfig: () => {
+          reads += 1;
+          if (reads === 1) {
+            entered.resolve();
+            return oldDefaults.promise;
+          }
+          return { config: { model: "model-b", modelReasoningEffort: "max" } };
+        },
+      });
+      const session = new CodexAppServerAgentSession(
+        createConfig({ model: scenario.initialModel }),
+        null,
+        createTestLogger(),
+        async () => app.child,
+      );
+      onTestFinished(() => session.close());
+      await session.connect();
+      const starting = session.startTurn("first turn");
+      await entered.promise;
+      await scenario.update(session);
+      oldDefaults.resolve({ config: { model: "model-a", modelReasoningEffort: "medium" } });
+      await starting;
+      expect(await session.getRuntimeInfo()).toMatchObject({
+        model: scenario.model,
+        thinkingOptionId: scenario.thinking,
+      });
+      expect(await app.waitForTurnStart()).toMatchObject({
+        model: scenario.model,
+        effort: scenario.thinking,
+        serviceTier: scenario.tier,
+      });
+      const completed = deferred<void>();
+      const unsubscribe = session.subscribe((event) => {
+        if (event.type === "turn_completed") completed.resolve();
+      });
+      app.completeTurn();
+      await completed.promise;
+      unsubscribe();
+      await session.startTurn("second turn");
+      const starts = app.requests().filter((request) => request.method === "turn/start");
+      expect(starts).toHaveLength(2);
+      expect(starts[1]!.params).toMatchObject({
+        model: scenario.model,
+        effort: scenario.thinking,
+        serviceTier: scenario.tier,
+      });
+      app.assertNoErrors();
+    },
+  );
+
   test("GPT-6.1 Sol offers catalog speed tiers and sends Ultrafast", async () => {
     const { session, appServer } = await createConnectedSession(
       { model: "gpt-6.1-sol" },
