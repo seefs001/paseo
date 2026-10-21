@@ -137,6 +137,12 @@ export` warnings and pollutes the route tree.
 Put shared route policy in `src/navigation`, `src/utils`, stores, or another
 non-route directory.
 
+## Navigation Hooks
+
+Import navigation hooks such as `useIsFocused` from `expo-router`, not
+`@react-navigation/native`. Expo Router 57 embeds its own React Navigation;
+standalone hooks read a different context and throw even below `ExpoRoot`.
+
 ## Native Stack
 
 Keep workspace identity and retention outside native-stack `getId` and
