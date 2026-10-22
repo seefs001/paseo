@@ -73,6 +73,7 @@ function projectionInput(options?: {
   return {
     projects: [makeProject([pinned.placement, unpinned.placement])],
     workspaceRecency: new Map<string, number>(),
+    workspaceSort: "lastActivity" as const,
     pinnedKeys: {
       pinnedWorkspaceKeys: [pinned.placement.workspaceKey],
       pinnedAtByKey: { [pinned.placement.workspaceKey]: "2026-07-12T12:00:00.000Z" },
@@ -114,6 +115,34 @@ function twoProjectInput(groupMode: "project" | "status") {
 }
 
 describe("buildSidebarProjection", () => {
+  it.each(["created", "lastPrompt"] as const)(
+    "preserves %s ordering and shortcut order despite newer activity",
+    (workspaceSort) => {
+      const older = makeWorkspace("older");
+      const newer = makeWorkspace("newer");
+      const projection = buildSidebarProjection({
+        ...projectionInput(),
+        workspaceSort,
+        projects: [makeProject([newer.placement, older.placement])],
+        pinnedKeys: { pinnedWorkspaceKeys: [], pinnedAtByKey: {} },
+        workspaceRecency: new Map([
+          ["srv:older", 1],
+          ["srv:newer", 2],
+        ]),
+        workspaceEntriesByKey: new Map([
+          [older.entry.workspaceKey, older.entry],
+          [newer.entry.workspaceKey, newer.entry],
+        ]),
+      });
+      expect(
+        projection.pinnedGroups.unpinnedProjects[0]?.workspaces.map((entry) => entry.workspaceId),
+      ).toEqual(["newer", "older"]);
+      expect(projection.shortcutModel.shortcutTargets).toEqual([
+        { serverId: "srv", workspaceId: "newer" },
+        { serverId: "srv", workspaceId: "older" },
+      ]);
+    },
+  );
   // The rule that outlived the bug it was written for: a project icon is fetched per project, so
   // whatever a mode groups by, the rows it produces can only reference projects already covered.
   for (const groupMode of ["project", "status"] as const) {

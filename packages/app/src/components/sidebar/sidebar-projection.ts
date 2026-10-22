@@ -11,6 +11,7 @@ import type {
   SidebarWorkspacePlacement,
 } from "@/hooks/use-sidebar-workspaces-list";
 import type { SidebarGroupMode } from "@/stores/sidebar-view-store";
+import type { WorkspaceSort } from "@/projects/workspace-structure";
 import {
   resolveSidebarProjectIconTargets,
   type SidebarProjectIconTarget,
@@ -43,6 +44,7 @@ export interface SidebarProjectionInput {
   pinnedWorkspaceOrder: string[];
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   workspaceRecency: ReadonlyMap<string, number>;
+  workspaceSort: WorkspaceSort;
   projectNamesByViewKey: Map<string, string>;
   groupMode: SidebarGroupMode;
   pinnedCollapsed: boolean;
@@ -62,13 +64,15 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
     const bRank = input.workspaceRecency.get(b.workspaceKey) ?? Number.MAX_SAFE_INTEGER;
     return aRank - bRank;
   }
-  pinnedGroups.unpinnedProjects = pinnedGroups.unpinnedProjects.map((project) => {
-    if (project.workspaces.length < 2) return project;
-    const workspaces = [...project.workspaces].sort(compareRecency);
-    if (workspaces.every((workspace, index) => workspace === project.workspaces[index]))
-      return project;
-    return Object.assign({}, project, { workspaces });
-  });
+  if (input.workspaceSort === "lastActivity") {
+    pinnedGroups.unpinnedProjects = pinnedGroups.unpinnedProjects.map((project) => {
+      if (project.workspaces.length < 2) return project;
+      const workspaces = [...project.workspaces].sort(compareRecency);
+      if (workspaces.every((workspace, index) => workspace === project.workspaces[index]))
+        return project;
+      return Object.assign({}, project, { workspaces });
+    });
+  }
   const pinnedWorkspaceKeys = new Set(input.pinnedKeys.pinnedWorkspaceKeys);
   const unpinnedWorkspaces = Array.from(input.workspaceEntriesByKey.values()).filter(
     (workspace) => !pinnedWorkspaceKeys.has(workspace.workspaceKey),

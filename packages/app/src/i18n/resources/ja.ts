@@ -658,6 +658,9 @@ export const ja: TranslationResources = {
       hostDisconnected: "ホストが接続されていません",
       updateHost: "ネイティブターミナルを使用するにはホストを更新してください。",
       unableToSubscribe: "ターミナルに接続できません",
+      fileUploaded: "ファイルをアップロードしました",
+      pasteFileFailed: "ファイルを貼り付けられませんでした: {{reason}}",
+      uploadingFile: "ファイルをアップロード中…",
     },
     sheet: {
       openAsTab: "タブで開く",
@@ -1213,6 +1216,13 @@ export const ja: TranslationResources = {
       showBackground: "バックグラウンドを表示",
       trigger: "表示設定",
       heading: "表示",
+      sort: {
+        label: "並び順",
+        created: "作成日時",
+        lastPrompt: "最後のプロンプト",
+        lastActivity: "最終アクティビティ",
+        updateHost: "ワークスペースを並べ替えるにはホストを更新してください",
+      },
       grouping: {
         label: "グループ化",
         project: "プロジェクト",
@@ -2031,7 +2041,6 @@ export const ja: TranslationResources = {
         alwaysUseExtension: ".{{extension}} に常に使用",
         alwaysUseFilename: "{{filename}} に常に使用",
         option: "{{title}} — {{owner}}",
-        actions: "ファイルの操作",
         builtin: {
           owner: "Paseo",
           markdown: "Markdown",
@@ -2050,6 +2059,8 @@ export const ja: TranslationResources = {
       notFound: "ファイルが見つかりません",
       failedToLoadPreview: "ファイルプレビューの読み込みに失敗しました",
       editor: {
+        preview: "プレビュー",
+        source: "ソース",
         fileSize: "ファイルサイズ {{size}}",
         lines: "{{count}} 行",
         editorStatus: "エディターの状態 {{status}}",
@@ -2323,7 +2334,7 @@ export const ja: TranslationResources = {
       automaticHint: "Paseo が利用可能な高速モデルを選択します",
       preferredHint: "Paseo が使用するモデルを選択します",
       model: "モデル",
-      fallbackHint: "利用できない場合、Paseo は別の利用可能なモデルを使用します",
+      modelHint: "このモデルのみを使用します。失敗しても、Paseo は別のモデルを試しません",
       docs: "ドキュメント",
       saveError: "メタデータ生成を更新できません",
     },
@@ -2398,11 +2409,6 @@ export const ja: TranslationResources = {
     },
     diagnostics: {
       title: "診断",
-      legacyTerminalRenderer: {
-        label: "以前のターミナルレンダラーを使用",
-        description: "ターミナルを開き直した後、以前の WebView ターミナルを使用します",
-        accessibilityLabel: "以前のターミナルレンダラーを使用",
-      },
       testAudio: "音声をテスト",
       playTest: "テスト再生",
       playing: "再生中...",

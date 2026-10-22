@@ -60,6 +60,7 @@ export function SidebarModelProvider({
   const list = useSidebarWorkspacesList({ enabled: active });
   const showBackground = useSidebarViewStore((state) => state.showBackground);
   const groupMode = useSidebarViewStore((state) => state.groupMode);
+  const workspaceSort = useSidebarViewStore((state) => state.workspaceSort);
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const projectFilters = useSidebarViewStore((state) => state.projectFilters);
   const reconcileLabelFilter = useSidebarViewStore((state) => state.reconcileLabelFilter);
@@ -135,7 +136,7 @@ export function SidebarModelProvider({
           visibleWorkspaceKeys.has(workspace.workspaceKey),
         );
         return workspaces.length > 0 || (!hasActiveLabelFilter && project.workspaces.length === 0)
-          ? [{ ...project, workspaces }]
+          ? [workspaces.length === project.workspaces.length ? project : { ...project, workspaces }]
           : [];
       });
     }
@@ -149,9 +150,10 @@ export function SidebarModelProvider({
     visibleWorkspaceKeys,
   ]);
   const pinnedKeys = usePinnedSidebarKeys(filteredProjects);
+  const needsRecency = groupMode === "status" || workspaceSort === "lastActivity";
   const workspaceRecency = useSidebarRecency({
     workspaces: filteredWorkspaceEntriesByKey,
-    enabled: active !== false,
+    enabled: active !== false && needsRecency,
   });
   const projectionInput = useMemo(
     () => ({
@@ -160,6 +162,7 @@ export function SidebarModelProvider({
       pinnedWorkspaceOrder,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       workspaceRecency,
+      workspaceSort,
       projectNamesByViewKey: list.projectNamesByViewKey,
       groupMode,
       pinnedCollapsed,
@@ -178,6 +181,7 @@ export function SidebarModelProvider({
       pinnedWorkspaceOrder,
       filteredWorkspaceEntriesByKey,
       workspaceRecency,
+      workspaceSort,
       t,
     ],
   );
