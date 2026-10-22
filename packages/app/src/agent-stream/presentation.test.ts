@@ -134,6 +134,170 @@ function piCall(
 
 describe("Pi codemode presentation", () => {
   it.each(["detailed", "overview"] as const)(
+    "keeps skill reads at the top level in %s mode without duplicating nested calls",
+    (level) => {
+      const parent = piCall("code", "codemode", { status: "running" });
+      const skill = piCall("code/1", "read", {
+        parent: "code",
+        status: "running",
+        detail: { type: "read", filePath: "/skills/code-review/SKILL.md" },
+      });
+      const source = piCall("code/2", "read", {
+        parent: "code",
+        detail: { type: "read", filePath: "/repo/src/index.ts" },
+      });
+      const directSkill = piCall("direct", "read", {
+        detail: { type: "read", filePath: "/skills/tdd/SKILL.md" },
+      });
+      const tail = [parent];
+      const head = [skill, source, directSkill];
+      const result = createStreamPresentation()({
+        tail,
+        head,
+        level,
+        isTurnActive: true,
+        transform: undefined,
+      });
+
+      expect(result.tail).toEqual([{ ...parent, nestedCalls: [source] }, skill]);
+      expect(result.head).toEqual([directSkill]);
+      expect(result.groupsByHostId.has(skill.id)).toBe(false);
+      expect(result.groupsByHostId.has(directSkill.id)).toBe(false);
+      expect(tail).toEqual([parent]);
+      expect(head).toEqual([skill, source, directSkill]);
+    },
+  );
+
+  it.each(["detailed", "overview"] as const)(
+    "restores skill reads from history and replaces them with live details once in %s mode",
+    (level) => {
+      const present = createStreamPresentation();
+      const parent = piCall("code", "codemode", {
+        calls: [
+          {
+            id: "code/1",
+            name: "read",
+            args: JSON.stringify({ path: "/skills/code-review/SKILL.md" }),
+            status: "ok",
+          },
+          {
+            id: "code/2",
+            name: "read",
+            args: JSON.stringify({ path: "/skills/code-review/references/checklist.md" }),
+            status: "ok",
+          },
+        ],
+      });
+      const options = { level, head: [], isTurnActive: false, transform: undefined };
+      const restored = present({ ...options, tail: [parent] });
+      expect(restored.tail).toMatchObject([
+        { id: parent.id, nestedCalls: [{ payload: { data: { callId: "code/2" } } }] },
+        {
+          payload: {
+            data: {
+              callId: "code/1",
+              status: "completed",
+              detail: { type: "read", filePath: "/skills/code-review/SKILL.md" },
+            },
+          },
+        },
+      ]);
+      expect(restored.groupsByHostId.has(restored.tail[1].id)).toBe(false);
+
+      const live = piCall("code/1", "read", {
+        parent: "code",
+        detail: {
+          type: "read",
+          filePath: "/skills/code-review/SKILL.md",
+          content: "# Code review",
+        },
+      });
+      const updated = present({ ...options, tail: [parent, live] });
+      expect(updated.tail).toHaveLength(2);
+      expect(updated.tail[0]).toBe(restored.tail[0]);
+      expect(updated.tail[1]).toBe(live);
+      expect(updated.groupsByHostId.has(live.id)).toBe(false);
+    },
+  );
+
+  it("updates a promoted skill without rebuilding unrelated codemode details", () => {
+    const present = createStreamPresentation();
+    const parent = piCall("code", "codemode", { status: "running" });
+    const source = piCall("code/2", "read", {
+      parent: "code",
+      detail: { type: "read", filePath: "/repo/index.ts" },
+    });
+    const detail = { type: "read", filePath: "/skills/tdd/SKILL.md" } as const;
+    const running = piCall("code/1", "read", { parent: "code", status: "running", detail });
+    const failed = piCall("code/1", "read", { parent: "code", status: "failed", detail });
+    const options = {
+      tail: [parent, source],
+      level: "detailed" as const,
+      isTurnActive: true,
+      transform: undefined,
+    };
+    const first = present({ ...options, head: [running] });
+    const next = present({ ...options, head: [failed] });
+    expect(next.tail).toEqual([{ ...parent, nestedCalls: [source] }, failed]);
+    expect(next.tail[0]).toBe(first.tail[0]);
+    expect(next.tail[1].id).toBe(first.tail[1].id);
+    expect(next.head).toEqual([]);
+  });
+
+  it.each(["detailed", "overview"] as const)(
+    "keeps a skill-only codemode output and every skill read visible in %s mode",
+    (level) => {
+      const parent = piCall("code", "codemode", {
+        detail: {
+          type: "unknown",
+          input: "read skills",
+          output: {
+            content: [{ type: "text", text: "Script completed\nOutput:\nLoaded instructions" }],
+            details: {
+              calls: [
+                {
+                  id: "code/1",
+                  name: "read",
+                  args: JSON.stringify({ path: "/skills/tdd/SKILL.md" }),
+                  status: "ok",
+                },
+                {
+                  id: "code/2",
+                  name: "read",
+                  args: JSON.stringify({ path: "/skills/code-review/SKILL.md" }),
+                  status: "error",
+                  error: "File not found",
+                },
+              ],
+            },
+          },
+        },
+      });
+      const result = createStreamPresentation()({
+        tail: [parent],
+        head: [],
+        level,
+        isTurnActive: false,
+        transform: undefined,
+      });
+      expect(result.tail).toMatchObject([
+        {
+          payload: {
+            data: {
+              name: "codemode",
+              detail: { type: "plain_text", text: "Loaded instructions" },
+            },
+          },
+        },
+        { payload: { data: { callId: "code/1", status: "completed" } } },
+        { payload: { data: { callId: "code/2", status: "failed", error: "File not found" } } },
+      ]);
+      expect(result.groupsByHostId.has(result.tail[1].id)).toBe(false);
+      expect(result.groupsByHostId.has(result.tail[2].id)).toBe(false);
+    },
+  );
+
+  it.each(["detailed", "overview"] as const)(
     "folds concurrent nested calls into their own parent in %s mode",
     (level) => {
       const present = createStreamPresentation();

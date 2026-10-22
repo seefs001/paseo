@@ -768,7 +768,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             return (
               <OverviewToolCallGroupView
                 group={group}
-                label={isCodemode ? "Script" : data.name}
+                label={isCodemode ? "Codemode" : data.name}
                 isError={data.status === "failed" || hasFailedChild}
                 expanded={expanded}
                 isLastInSequence={isLastInSequence}
@@ -872,7 +872,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           return renderSingleToolCallItem(item, layoutItem.isLastInToolSequence);
         }
         const single = group.run.calls.length === 1 ? group.run.calls[0] : undefined;
-        if (single?.nestedCalls) {
+        const isCodemode =
+          single?.payload.source === "agent" && single.payload.data.name === "codemode";
+        if (single && (single.nestedCalls || isCodemode)) {
           return renderSingleToolCallItem(single, layoutItem.isLastInToolSequence);
         }
         const expanded = expandedToolCallGroupIds.has(group.run.id);

@@ -1,6 +1,7 @@
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation";
 import { z } from "zod";
+import { getSkillReadName } from "./skill-read";
 import {
   isAgentToolCallItem,
   type AgentToolCallItem,
@@ -323,7 +324,7 @@ function sameItems(left: readonly StreamItem[], right: readonly StreamItem[]): b
 }
 
 interface CodemodeRows {
-  replacements: Map<StreamItem, StreamItem>;
+  replacements: Map<StreamItem, StreamItem[]>;
   hidden: Set<StreamItem>;
 }
 
@@ -339,8 +340,19 @@ function indexChildrenByParent(calls: AgentToolCallItem[]) {
   return childrenByParent;
 }
 
+function splitSkillReads(children: AgentToolCallItem[]) {
+  const skillReads: ToolCallItem[] = [];
+  const nestedCalls: ToolCallItem[] = [];
+  for (const child of children) {
+    const isSkillRead = getSkillReadName(child.payload.data.detail) !== undefined;
+    const destination = isSkillRead ? skillReads : nestedCalls;
+    destination.push(child);
+  }
+  return { skillReads, nestedCalls };
+}
+
 function foldCalls(items: ToolCallItem[], previous: CodemodeRows): CodemodeRows {
-  const replacements = new Map<StreamItem, StreamItem>();
+  const replacements = new Map<StreamItem, StreamItem[]>();
   const hidden = new Set<StreamItem>();
   const calls = items.filter(isAgentToolCallItem);
   const byCallId = new Map(calls.map((call) => [call.payload.data.callId, call]));
@@ -350,7 +362,7 @@ function foldCalls(items: ToolCallItem[], previous: CodemodeRows): CodemodeRows 
     const { data } = parent.payload;
     if (data.name !== "codemode") continue;
     const liveChildren = childrenByParent.get(data.callId) ?? [];
-    const children: ToolCallItem[] = [];
+    const children: AgentToolCallItem[] = [];
     const included = new Set<string>();
     for (const recorded of recordedCalls(parent)) {
       const childId = recorded.payload.data.callId;
@@ -369,11 +381,13 @@ function foldCalls(items: ToolCallItem[], previous: CodemodeRows): CodemodeRows 
       hidden.add(child);
     }
     if (children.length === 0 && !scriptOutputText(parent)) continue;
-    const existing = previous.replacements.get(parent);
+    const { skillReads, nestedCalls } = splitSkillReads(children);
+    const existing = previous.replacements.get(parent)?.[0];
     const unchanged =
-      existing?.kind === "tool_call" && sameItems(existing.nestedCalls ?? [], children);
-    const row = unchanged ? existing : presentCodemodeParent(parent, children);
-    replacements.set(parent, row);
+      existing?.kind === "tool_call" && sameItems(existing.nestedCalls ?? [], nestedCalls);
+    const row = unchanged ? existing : presentCodemodeParent(parent, nestedCalls);
+    // Promote the resolved child so live events and persisted calls share one row.
+    replacements.set(parent, [row, ...skillReads]);
   }
   return { replacements, hidden };
 }
@@ -389,7 +403,7 @@ export function createCodemodeProjection() {
   function project(items: StreamItem[]): StreamItem[] {
     const result = items.flatMap((item) => {
       if (rows.hidden.has(item)) return [];
-      return [rows.replacements.get(item) ?? item];
+      return rows.replacements.get(item) ?? [item];
     });
     return sameItems(items, result) ? items : result;
   }

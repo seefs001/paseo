@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
-import { expectComposerVisible } from "../support/helpers/composer";
+import { cancelAgent, expectComposerVisible } from "../support/helpers/composer";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 
@@ -139,6 +139,65 @@ async function holdStreamAfterFirstCompletedToolCall(page: Page, agentId: string
   };
 }
 
+async function showSkillRead(page: Page, source: "codemode" | "direct"): Promise<void> {
+  let firstCallId: string | null = null;
+  function replaceFirstToolCall(_key: string, value: unknown): unknown {
+    if (typeof value !== "object" || value === null) return value;
+    if (!("type" in value) || value.type !== "tool_call") return value;
+    if (!("callId" in value) || typeof value.callId !== "string") return value;
+    firstCallId ??= value.callId;
+    if (value.callId !== firstCallId) return value;
+    if (source === "direct") {
+      return {
+        ...value,
+        provider: "pi",
+        name: "read",
+        detail: {
+          type: "read",
+          filePath: "/skills/checkout-copy/SKILL.md",
+          content: "---\nname: paseo-committee\n---\n# Committee Skill",
+        },
+      };
+    }
+    return {
+      ...value,
+      provider: "pi",
+      name: "codemode",
+      detail: {
+        type: "unknown",
+        input: "await tools.read({ path: '/skills/code-review/SKILL.md' });",
+        output: {
+          details: {
+            calls: [
+              {
+                id: `${value.callId}/skill`,
+                name: "read",
+                args: JSON.stringify({ path: "/skills/code-review/SKILL.md" }),
+                status: "ok",
+              },
+              {
+                id: `${value.callId}/shell`,
+                name: "bash",
+                args: JSON.stringify({ command: "echo codemode-other-tool" }),
+                status: "ok",
+              },
+            ],
+          },
+        },
+      },
+    };
+  }
+  await page.routeWebSocket(daemonWsRoutePattern(), (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const raw = typeof message === "string" ? message : message.toString("utf8");
+      const rewritten: unknown = JSON.parse(raw, replaceFirstToolCall);
+      socket.send(JSON.stringify(rewritten));
+    });
+  });
+}
+
 async function configureOverviewToolCalls(page: Page): Promise<void> {
   await page.addInitScript(() => {
     localStorage.setItem(
@@ -203,6 +262,77 @@ function readScrollMetrics(root: HTMLElement) {
     viewport: { height: window.innerHeight, width: window.innerWidth },
   };
 }
+
+for (const level of ["overview", "detailed"] as const) {
+  test(`keeps skill reads outside collapsed Codemode in ${level} mode`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.addInitScript((toolCallDetailLevel) => {
+      localStorage.setItem("@paseo:app-settings", JSON.stringify({ toolCallDetailLevel }));
+    }, level);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "codemode-skill-read-",
+      title: "Codemode skill reads",
+      model: "ten-second-stream",
+    });
+    try {
+      await showSkillRead(page, "codemode");
+      await openAgentRoute(page, agent);
+      await expectComposerVisible(page);
+      await agent.client.sendAgentMessage(agent.agentId, "Show the skill reading instructions.");
+      const skill = page.getByTestId("tool-call-badge").filter({ hasText: "Read skill" });
+      const codemode = page.getByTestId("tool-call-group").filter({ hasText: "Codemode" }).first();
+      await expect(skill).toHaveCount(1);
+      // Stop after the first tool so later mock cycles do not scroll this row away.
+      await cancelAgent(page);
+      await skill.scrollIntoViewIfNeeded();
+      await expect(skill).toContainText("code-review");
+      await expect(skill).toBeVisible();
+      await expect(codemode.getByTestId("tool-call-badge")).toHaveCount(0);
+      await codemode.getByRole("button").first().click();
+      await expect(codemode).toContainText("echo codemode-other-tool");
+      await expect(codemode.getByText("Read skill", { exact: true })).toHaveCount(0);
+      await expect(skill).toHaveCount(1);
+      await page.screenshot({ path: testInfo.outputPath("codemode-skills.png") });
+
+      await page.reload();
+      await expect(skill).toHaveCount(1);
+      await skill.scrollIntoViewIfNeeded();
+      await expect(skill).toBeVisible();
+      await expect(codemode.getByTestId("tool-call-badge")).toHaveCount(0);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+}
+
+test("shows the declared skill name on compact layouts and after reload", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const agent = await createOverviewAgent(page, "Declared skill name");
+  try {
+    await showSkillRead(page, "direct");
+    await openOverviewAgent(page, agent);
+    await agent.client.sendAgentMessage(agent.agentId, "Read the committee skill.");
+    const skill = page.getByTestId("tool-call-badge").filter({ hasText: "Read skill" });
+    await expect(skill).toContainText("paseo-committee");
+    await cancelAgent(page);
+    await skill.scrollIntoViewIfNeeded();
+    await expect(skill).not.toContainText("checkout-copy");
+    await expect(skill).not.toContainText("Committee Skill");
+    await page.screenshot({ path: testInfo.outputPath("declared-skill-name.png") });
+    await page.reload();
+    await expect(skill).toContainText("paseo-committee");
+    await skill.scrollIntoViewIfNeeded();
+    await expect(skill).toBeVisible();
+  } finally {
+    await agent.cleanup();
+  }
+});
 
 test.describe("compact overview tool calls", () => {
   test.use({ viewport: COMPACT_VIEWPORT, hasTouch: true });
