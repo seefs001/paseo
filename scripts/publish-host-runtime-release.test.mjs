@@ -38,7 +38,7 @@ test("remote install script downloads this release and does not start a daemon",
     script,
     /https:\/\/github.com\/seefs001\/paseo\/releases\/download\/runtime-2026-10-23\/\$ASSET/,
   );
-  assert.match(script, /paseo-runtime-darwin-arm64\.tar\.gz/);
+  assert.doesNotMatch(script, /darwin|macOS/);
   assert.match(script, /paseo-runtime-linux-x64\.tar\.gz/);
   assert.match(script, /paseo-runtime-linux-arm64\.tar\.gz/);
   assert.match(script, /Node 22/);
@@ -47,7 +47,7 @@ test("remote install script downloads this release and does not start a daemon",
 
 test("publishes the dated release and runtime-latest from the built archives", async () => {
   const assetDir = mkdtempSync(path.join(tmpdir(), "paseo-assets-"));
-  writeFileSync(path.join(assetDir, "paseo-runtime-0.13.0-beta.1-darwin-arm64.tar.gz"), "darwin");
+  writeFileSync(path.join(assetDir, "paseo-runtime-0.13.0-beta.1-linux-arm64.tar.gz"), "arm");
   writeFileSync(path.join(assetDir, "paseo-runtime-0.13.0-beta.1-linux-x64.tar.gz"), "linux");
   const calls = [];
   const result = await publishHostRuntimeRelease({
@@ -78,7 +78,7 @@ test("publishes the dated release and runtime-latest from the built archives", a
   );
   assert.deepEqual(datedUpload.slice(2).sort(), [
     "install.sh",
-    "paseo-runtime-darwin-arm64.tar.gz",
+    "paseo-runtime-linux-arm64.tar.gz",
     "paseo-runtime-linux-x64.tar.gz",
   ]);
   const installer = readFileSync(

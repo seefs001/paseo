@@ -36,7 +36,7 @@ export function runtimeReleaseTag(date) {
 }
 
 export function stableRuntimeAssetName(filename) {
-  const match = /^paseo-runtime-.+-(darwin|linux)-(arm64|x64)\.tar\.gz$/.exec(
+  const match = /^paseo-runtime-.+-(linux)-(arm64|x64)\.tar\.gz$/.exec(
     path.basename(filename),
   );
   if (!match) return null;
@@ -67,12 +67,11 @@ fi
 OS="$(uname -s)"
 MACH="$(uname -m)"
 case "$OS-$MACH" in
-  Darwin-arm64) ASSET="paseo-runtime-darwin-arm64.tar.gz" ;;
   Linux-x86_64) ASSET="paseo-runtime-linux-x64.tar.gz" ;;
   Linux-aarch64|Linux-arm64) ASSET="paseo-runtime-linux-arm64.tar.gz" ;;
   *)
     echo "No runtime package for $OS $MACH." >&2
-    echo "This release has macOS arm64, Linux x64, and Linux arm64." >&2
+    echo "This release has Linux x64 and Linux arm64." >&2
     exit 1
     ;;
 esac
@@ -119,7 +118,7 @@ Install:
 curl -fsSL ${url} | sh
 
 The other machine needs Node 22. This does not start or stop a daemon.
-Built for macOS arm64, Linux x64, and Linux arm64.
+Built for Linux x64 and Linux arm64.
 Date: ${date}.
 `;
 }

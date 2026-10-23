@@ -534,7 +534,7 @@ For tighter loops, you can rebuild a single workspace:
 
 ## Host runtime bundle
 
-The Host runtime workflow builds this checkout's CLI and daemon for macOS arm64, Linux x64, and Linux arm64, then publishes a GitHub Release named `runtime-YYYY-MM-DD`. The date is the calendar day in Asia/Shanghai. Running the workflow again on the same date replaces that release. It also updates `runtime-latest`.
+The Host runtime workflow builds this checkout's CLI and daemon for Linux x64 and Linux arm64, then publishes a GitHub Release named `runtime-YYYY-MM-DD`. The date is the calendar day in Asia/Shanghai. Running the workflow again on the same date replaces that release. It also updates `runtime-latest`.
 
 On the other machine, with Node 22:
 
