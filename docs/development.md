@@ -532,6 +532,20 @@ For tighter loops, you can rebuild a single workspace:
 - Changed `packages/server/src/*`, `packages/cli/src/*`, `packages/relay/src/*`, or `packages/highlight/src/*`: `npm run build:server`.
 - Changed app build dependencies: `npm run build:app-deps`.
 
+## Host runtime bundle
+
+The Host runtime workflow builds this checkout's CLI and daemon for macOS arm64, Linux x64, and Linux arm64, then publishes a GitHub Release named `runtime-YYYY-MM-DD`. The date is the calendar day in Asia/Shanghai. Running the workflow again on the same date replaces that release. It also updates `runtime-latest`.
+
+On the other machine, with Node 22:
+
+```sh
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/runtime-YYYY-MM-DD/install.sh | sh
+```
+
+`install.sh` downloads the archive for that machine and links `paseo` into `~/.local/bin`. It does not start or stop a daemon. `paseo start` uses `~/.paseo`. Turn on the web UI with `paseo daemon config set features.webUi.enabled true --home ~/.paseo`, then start or restart.
+
+The Actions button appears after the workflow file is on the default branch. Choose the branch you want to ship. `npm run package:host-runtime` builds only the archive for the current machine and includes uncommitted changes.
+
 ## Dependency patches
 
 `patches/*.patch` are applied by `scripts/postinstall-patches.mjs` on every install. A patch only

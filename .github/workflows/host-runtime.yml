@@ -1,0 +1,77 @@
+name: Host runtime
+
+# Builds the CLI and daemon, then publishes them to a dated GitHub Release.
+# The workflow file must be on the default branch before the Actions button appears.
+# Run it from the branch you want to ship. The same calendar day replaces that day's release.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Release date YYYY-MM-DD. Defaults to today in Asia/Shanghai."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-runtime-${{ github.ref }}-${{ inputs.date }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+          - os: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+
+      - name: Package CLI and daemon
+        run: node scripts/package-host-runtime.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paseo-runtime-${{ matrix.platform }}-${{ matrix.arch }}
+          path: artifacts/paseo-runtime-*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paseo-runtime-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish the dated release
+        env:
+          HOST_RUNTIME_DATE: ${{ inputs.date }}
+        run: node scripts/publish-host-runtime-release.mjs release-assets
