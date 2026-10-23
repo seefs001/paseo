@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   publishHostRuntimeRelease,
+  readRuntimeNodeMajor,
   renderRemoteInstallScript,
   resolveRuntimeDate,
   runtimeReleaseTag,
@@ -29,10 +30,15 @@ test("drops the package version from the download name", () => {
   assert.equal(stableRuntimeAssetName("install.sh"), null);
 });
 
+test("reads the Node major version recorded in the package", () => {
+  assert.equal(readRuntimeNodeMajor("version=0.13.0-beta.1\nnode=v24.21.0\n"), "24");
+});
+
 test("remote install script downloads this release and does not start a daemon", () => {
   const script = renderRemoteInstallScript({
     repo: "seefs001/paseo",
     tag: "runtime-2026-10-23",
+    nodeMajor: "24",
   });
   assert.match(
     script,
@@ -41,7 +47,7 @@ test("remote install script downloads this release and does not start a daemon",
   assert.doesNotMatch(script, /darwin|macOS/);
   assert.match(script, /paseo-runtime-linux-x64\.tar\.gz/);
   assert.match(script, /paseo-runtime-linux-arm64\.tar\.gz/);
-  assert.match(script, /Node 22/);
+  assert.match(script, /Node 24/);
   assert.doesNotMatch(script, /paseo start|kill /);
 });
 
@@ -55,6 +61,7 @@ test("publishes the dated release and runtime-latest from the built archives", a
     sha: "abc123",
     date: "2026-10-23",
     version: "0.13.0-beta.1",
+    nodeMajor: "24",
     assetDir,
     workDir: path.join(assetDir, ".stage"),
     gh: (args) => {

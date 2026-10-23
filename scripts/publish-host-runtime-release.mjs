@@ -43,24 +43,31 @@ export function stableRuntimeAssetName(filename) {
   return `paseo-runtime-${match[1]}-${match[2]}.tar.gz`;
 }
 
-export function renderRemoteInstallScript({ repo, tag }) {
+export function readRuntimeNodeMajor(runtimeText) {
+  const match = /^node=v(\d+)\./m.exec(runtimeText);
+  if (!match) throw new Error("Could not read the Node version from the runtime package");
+  return match[1];
+}
+
+export function renderRemoteInstallScript({ repo, tag, nodeMajor }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
     throw new Error(`Unexpected repository name ${repo}`);
   }
   if (tag !== LATEST_TAG && !/^runtime-\d{4}-\d{2}-\d{2}$/.test(tag)) {
     throw new Error(`Unexpected release tag ${tag}`);
   }
+  if (!/^\d+$/.test(nodeMajor)) throw new Error(`Unexpected Node version ${nodeMajor}`);
   const base = `https://github.com/${repo}/releases/download/${tag}`;
   return `#!/bin/sh
 set -eu
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "Node 22 is required." >&2
+  echo "Node ${nodeMajor} is required." >&2
   exit 1
 fi
 NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
-if [ "$NODE_MAJOR" != "22" ]; then
-  echo "Node 22 is required. Current node is $(node -v)." >&2
+if [ "$NODE_MAJOR" != "${nodeMajor}" ]; then
+  echo "Node ${nodeMajor} is required. Current node is $(node -v)." >&2
   exit 1
 fi
 
@@ -88,7 +95,7 @@ function readVersion() {
   return JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
 }
 
-function stageAssets(assetDir, stageDir, { repo, tag }) {
+function stageAssets(assetDir, stageDir, { repo, tag, nodeMajor }) {
   mkdirSync(stageDir, { recursive: true });
   const staged = [];
   for (const name of readdirSync(assetDir)) {
@@ -104,12 +111,12 @@ function stageAssets(assetDir, stageDir, { repo, tag }) {
     throw new Error(`No runtime archives found in ${assetDir}`);
   }
   const installer = path.join(stageDir, "install.sh");
-  writeFileSync(installer, renderRemoteInstallScript({ repo, tag }), { mode: 0o755 });
+  writeFileSync(installer, renderRemoteInstallScript({ repo, tag, nodeMajor }), { mode: 0o755 });
   staged.push(installer);
   return staged.sort();
 }
 
-function releaseNotes({ repo, tag, date, version, sha }) {
+function releaseNotes({ repo, tag, date, version, sha, nodeMajor }) {
   const url = `https://github.com/${repo}/releases/download/${tag}/install.sh`;
   return `CLI and daemon ${version} from ${sha}.
 
@@ -117,7 +124,7 @@ Install:
 
 curl -fsSL ${url} | sh
 
-The other machine needs Node 22. This does not start or stop a daemon.
+The other machine needs Node ${nodeMajor}. This does not start or stop a daemon.
 Built for Linux x64 and Linux arm64.
 Date: ${date}.
 `;
@@ -136,6 +143,25 @@ function ghCommand(args, { allowFailure = false } = {}) {
   return exitCode;
 }
 
+function nodeMajorFromArchive(archivePath) {
+  const result = spawnSync("tar", ["-xOzf", archivePath, "paseo-runtime/RUNTIME.txt"], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0 || !result.stdout) {
+    throw new Error(`Could not read RUNTIME.txt from ${archivePath}`);
+  }
+  return readRuntimeNodeMajor(result.stdout);
+}
+
+function resolveNodeMajor(assetDir, nodeMajor) {
+  if (nodeMajor) return nodeMajor;
+  const archive = readdirSync(assetDir)
+    .map((name) => path.join(assetDir, name))
+    .find((file) => statSync(file).isFile() && stableRuntimeAssetName(path.basename(file)));
+  if (!archive) throw new Error(`No runtime archives found in ${assetDir}`);
+  return nodeMajorFromArchive(archive);
+}
+
 export async function publishHostRuntimeRelease({
   repo,
   sha,
@@ -143,6 +169,7 @@ export async function publishHostRuntimeRelease({
   version,
   assetDir,
   workDir,
+  nodeMajor,
   gh = ghCommand,
   upload = (input) =>
     uploadWithRetry(input, {
@@ -153,16 +180,28 @@ export async function publishHostRuntimeRelease({
     }),
 }) {
   const resolvedDate = resolveRuntimeDate(date);
+  const resolvedNodeMajor = resolveNodeMajor(assetDir, nodeMajor);
   const datedTag = runtimeReleaseTag(resolvedDate);
   const tags = [datedTag, LATEST_TAG];
   for (const tag of tags) {
     const stageDir = path.join(workDir, tag);
-    const files = stageAssets(assetDir, stageDir, { repo, tag });
+    const files = stageAssets(assetDir, stageDir, {
+      repo,
+      tag,
+      nodeMajor: resolvedNodeMajor,
+    });
     const title =
       tag === LATEST_TAG
         ? `Paseo runtime latest (${resolvedDate})`
         : `Paseo runtime ${resolvedDate}`;
-    const notes = releaseNotes({ repo, tag, date: resolvedDate, version, sha });
+    const notes = releaseNotes({
+      repo,
+      tag,
+      date: resolvedDate,
+      version,
+      sha,
+      nodeMajor: resolvedNodeMajor,
+    });
     if (gh(["release", "view", tag, "--repo", repo], { allowFailure: true }) === 0) {
       gh(["release", "delete", tag, "--repo", repo, "--yes", "--cleanup-tag"]);
     }
