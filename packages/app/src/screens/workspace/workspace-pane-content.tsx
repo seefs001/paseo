@@ -28,7 +28,7 @@ export interface BuildWorkspacePaneContentModelInput {
   normalizedServerId: string;
   normalizedWorkspaceId: string;
   host: PaneHost;
-  fileNavigationRevision?: number;
+  panelRevision?: number;
   onOpenTab: (target: WorkspaceTabDescriptor["target"]) => void;
   onOpenPreferredTarget: (
     target: WorkspaceTabDescriptor["target"],
@@ -47,7 +47,7 @@ export function buildWorkspacePaneContentModel({
   normalizedServerId,
   normalizedWorkspaceId,
   host,
-  fileNavigationRevision,
+  panelRevision,
   onOpenTab,
   onOpenPreferredTarget,
   onOpenTargetToSide,
@@ -70,7 +70,7 @@ export function buildWorkspacePaneContentModel({
       tabId: tab.tabId,
       target: tab.target,
       state: tab.state,
-      fileNavigationRevision,
+      panelRevision,
       openTab: onOpenTab,
       openPreferredTarget: onOpenPreferredTarget,
       openTargetToSide: onOpenTargetToSide,
@@ -113,7 +113,7 @@ export function WorkspacePaneContent({
       tabId: paneContextValue.tabId,
       target: paneContextValue.target,
       state: paneContextValue.state,
-      fileNavigationRevision: paneContextValue.fileNavigationRevision,
+      panelRevision: paneContextValue.panelRevision,
       openTab,
       openPreferredTarget,
       openTargetToSide: paneContextValue.openTargetToSide ? openTargetToSide : undefined,
@@ -131,7 +131,7 @@ export function WorkspacePaneContent({
       openPreferredTarget,
       openTargetToSide,
       paneContextValue.serverId,
-      paneContextValue.fileNavigationRevision,
+      paneContextValue.panelRevision,
       paneContextValue.tabId,
       paneContextValue.target,
       paneContextValue.state,

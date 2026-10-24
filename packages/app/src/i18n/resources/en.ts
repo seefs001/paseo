@@ -1214,6 +1214,7 @@ export const en = {
       sort: {
         label: "Sort",
         created: "Created",
+        manual: "Manual",
         lastPrompt: "Last prompt",
         lastActivity: "Last activity",
         updateHost: "Update hosts to sort workspaces",
