@@ -167,6 +167,21 @@ function findUntranslatedConnectionErrors(): string[] {
 }
 
 describe("translation resources", () => {
+  it("translates custom-command settings, selection behavior, and validation in every locale", () => {
+    const locales = [ar, es, fr, ja, ko, ptBR, ru, zhCN];
+    for (const locale of locales) {
+      expect(locale.settings.sections.customCommands).not.toBe(en.settings.sections.customCommands);
+      expect(locale.settings.customCommands.autoSend).not.toBe(en.settings.customCommands.autoSend);
+      expect(locale.settings.customCommands.errors.nameReserved).not.toBe(
+        en.settings.customCommands.errors.nameReserved,
+      );
+      expect(locale.settings.customCommands.errors.promptRequired).not.toBe(
+        en.settings.customCommands.errors.promptRequired,
+      );
+    }
+    expect(zhCN.settings.customCommands.autoSend).toBe("选中后自动发送");
+  });
+
   it("keeps all supported language keys in sync with English", () => {
     const englishKeys = canonicalKeys(en);
     expect(canonicalKeys(ar)).toEqual(englishKeys);

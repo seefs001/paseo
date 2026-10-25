@@ -670,9 +670,11 @@ client.addSlashCommand({
 ```
 
 Paseo owns the autocomplete row, input clearing, and error toast. It never sends the command text to
-the agent. Built-in client commands win name and alias collisions, plugin commands win
-provider-command collisions, and the first plugin in stable catalog order wins collisions between
-plugins. Plugin slash commands do not run when the composer has attachments.
+the agent. Built-in client commands win name and alias collisions. User-defined prompts in
+Settings → Custom commands take precedence over plugins and provider commands; a plugin must not
+assume it owns a name the user configured. Plugin commands win provider-command collisions, and
+the first plugin in stable catalog order wins collisions between plugins. Plugin slash commands
+do not run when the composer has attachments.
 
 ## Contribute composer attachments
 

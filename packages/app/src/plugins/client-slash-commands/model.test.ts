@@ -10,6 +10,7 @@ describe("plugin client slash commands", () => {
     const collision = vi.fn();
     const result = mergeSlashCommandSources({
       builtIn: [{ name: "clear", aliases: ["new"] }],
+      custom: [],
       plugins: [
         { name: "clear", pluginId: "review" },
         { name: "new", pluginId: "alias-collision" },
@@ -26,6 +27,26 @@ describe("plugin client slash commands", () => {
       "provider:usage",
     ]);
     expect(collision).toHaveBeenCalledTimes(3);
+  });
+
+  it("lets custom prompts override plugins and providers without replacing built-ins", () => {
+    const collision = vi.fn();
+    const result = mergeSlashCommandSources({
+      builtIn: [{ name: "clear", aliases: ["new"] }],
+      custom: [{ name: "new" }, { name: "review" }, { name: "explain" }],
+      plugins: [{ name: "review" }, { name: "publish" }],
+      provider: [{ name: "explain" }, { name: "publish" }, { name: "help" }],
+      onPluginCollision: collision,
+    });
+
+    expect(result.map(({ source, command }) => `${source}:${command.name}`)).toEqual([
+      "built-in:clear",
+      "custom:review",
+      "custom:explain",
+      "plugin:publish",
+      "provider:help",
+    ]);
+    expect(collision).toHaveBeenCalledExactlyOnceWith({ name: "review" }, "custom");
   });
 
   it("passes the trimmed raw remainder as args", () => {

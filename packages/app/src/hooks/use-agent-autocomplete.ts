@@ -37,6 +37,8 @@ import {
   type SessionMentionCandidate,
 } from "@/utils/session-mention-autocomplete";
 import { CLIENT_SLASH_COMMANDS, type ClientSlashCommand } from "@/client-slash-commands";
+import type { CustomCommand } from "@/custom-commands/model";
+import { expandSelectedCustomCommand, type ExpandedCustomCommand } from "@/custom-commands/expand";
 import type { PluginClientSlashCommand } from "@/plugins/client-slash-commands";
 import { mergeSlashCommandSources } from "@/plugins/client-slash-commands/model";
 import {
@@ -67,6 +69,8 @@ export interface UseAgentAutocompleteInput {
   ) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
+  customCommands: readonly CustomCommand[];
+  onCustomCommandSelected: (selection: ExpandedCustomCommand) => void;
 }
 
 export interface AgentAutocompleteKeyPressEvent {
@@ -82,6 +86,7 @@ export interface AgentAutocompleteInputSnapshot {
 
 type AgentAutocompleteOption =
   | (AutocompleteOption & { type: "client_command"; command: ClientSlashCommand })
+  | (AutocompleteOption & { type: "custom_command"; command: CustomCommand })
   | (AutocompleteOption & {
       type: "plugin_command";
       command: PluginClientSlashCommand;
@@ -133,6 +138,7 @@ interface ApplyAgentAutocompleteSelectionInput {
   setUserInput: (nextValue: string) => void;
   onAutocompleteApplied?: () => void;
   onSessionMentionSelected?: UseAgentAutocompleteInput["onSessionMentionSelected"];
+  onCustomCommandSelected: UseAgentAutocompleteInput["onCustomCommandSelected"];
   serverId: string;
 }
 
@@ -147,9 +153,19 @@ function applyAgentAutocompleteSelection(input: ApplyAgentAutocompleteSelectionI
   });
   const selectedIsCommand =
     selected.type === "client_command" ||
+    selected.type === "custom_command" ||
     selected.type === "plugin_command" ||
     selected.type === "provider_command";
   if (input.snapshot && selectedIsCommand && !current.slashCommand) return;
+  if (selected.type === "custom_command" && current.slashCommand) {
+    const text = expandSelectedCustomCommand({
+      text: current.text,
+      range: current.slashCommand,
+      command: selected.command,
+    });
+    input.onCustomCommandSelected({ command: selected.command, text });
+    return;
+  }
   if (
     selected.type === "client_command" &&
     selected.command.execution === "immediate" &&
@@ -291,6 +307,7 @@ interface DirectorySuggestionEntry {
 
 type AvailableCommand =
   | { source: "client"; command: ClientSlashCommand }
+  | { source: "custom"; command: CustomCommand }
   | { source: "plugin"; command: PluginClientSlashCommand }
   | { source: "provider"; command: AgentSlashCommand };
 
@@ -436,6 +453,16 @@ function mapDirectorySuggestionsToEntries(payload: {
 }
 
 function mapCommandToOption(entry: AvailableCommand, t: TFunction): AgentAutocompleteOption {
+  if (entry.source === "custom") {
+    return {
+      id: entry.command.name,
+      label: `/${entry.command.name}`,
+      description: entry.command.description,
+      kind: "command",
+      type: "custom_command",
+      command: entry.command,
+    };
+  }
   const command = entry.command;
   const base = {
     id: command.name,
@@ -468,6 +495,7 @@ interface BuildAutocompleteOptionsInput {
   mode: AutocompleteMode;
   commands: AgentSlashCommand[];
   pluginCommands: readonly PluginClientSlashCommand[];
+  customCommands: readonly CustomCommand[];
   isDraftContext: boolean;
   commandFilterQuery: string;
   activeSlashCommand: SlashCommandRange | null;
@@ -491,6 +519,7 @@ export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsI
     }));
     const rootCommands: AvailableCommand[] = mergeSlashCommandSources({
       builtIn: CLIENT_SLASH_COMMANDS,
+      custom: input.customCommands,
       plugins: input.pluginCommands,
       provider: input.commands,
       onPluginCollision(command, winner) {
@@ -697,11 +726,14 @@ function resolveAutocompleteMode(args: {
 function resolveAutocompleteIsVisible(args: {
   mode: AutocompleteMode;
   canLoadCommands: boolean;
+  customCommandCount: number;
+  isCommandsLoading: boolean;
   serverId: string;
   autocompleteCwd: string;
 }): boolean {
   if (args.mode === "command") {
-    return args.canLoadCommands;
+    if (args.customCommandCount > 0) return true;
+    return args.canLoadCommands && !args.isCommandsLoading;
   }
   if (args.mode === "file") {
     return Boolean(args.serverId) && args.autocompleteCwd.length > 0;
@@ -825,6 +857,8 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     onSessionMentionSelected,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
+    customCommands,
+    onCustomCommandSelected,
   } = input;
 
   const activeSlashCommand = useMemo(
@@ -880,13 +914,6 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     mentionKind: mention?.kind ?? null,
     showCommandAutocomplete,
   });
-  const canShowAutocomplete = resolveAutocompleteIsVisible({
-    mode,
-    canLoadCommands,
-    serverId,
-    autocompleteCwd,
-  });
-
   const commandsQuery = useAgentCommandsQuery({
     serverId,
     agentId,
@@ -896,7 +923,14 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const { commands, isError, error } = commandsQuery;
   const isCommandsLoading = canListCommands && commandsQuery.isLoading;
 
-  const isVisible = canShowAutocomplete && !(mode === "command" && isCommandsLoading);
+  const isVisible = resolveAutocompleteIsVisible({
+    mode,
+    canLoadCommands,
+    customCommandCount: customCommands.length,
+    isCommandsLoading,
+    serverId,
+    autocompleteCwd,
+  });
 
   const sessionCandidates = useMemo(
     () =>
@@ -957,6 +991,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         commandFilterQuery,
         commands,
         pluginCommands: pluginClientSlashCommands,
+        customCommands,
         activeSlashCommand,
         fileSuggestions: fileSuggestionsQuery.data ?? [],
         sessionCandidates,
@@ -973,6 +1008,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       commandFilterQuery,
       commands,
       pluginClientSlashCommands,
+      customCommands,
       fileSuggestionsQuery.data,
       isDraftContext,
       isVisible,
@@ -995,6 +1031,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         activeFileMention,
         canExecuteClientSlashCommand,
         onClientSlashCommand,
+        onCustomCommandSelected,
         setUserInput,
         onAutocompleteApplied,
         onSessionMentionSelected,
@@ -1005,6 +1042,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       canExecuteClientSlashCommand,
       onAutocompleteApplied,
       onClientSlashCommand,
+      onCustomCommandSelected,
       onSessionMentionSelected,
       serverId,
       setUserInput,
@@ -1038,7 +1076,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   });
   const errorMessage = resolveAutocompleteErrorMessage({
     mode,
-    isCommandError: isError,
+    isCommandError: isError && options.length === 0,
     commandError: error,
     fileSuggestionsError: fileSuggestionsQuery.error,
     t,

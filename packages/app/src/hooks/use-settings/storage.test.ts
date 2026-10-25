@@ -20,6 +20,7 @@ import {
   type SettingsDeps,
 } from "./storage";
 import { createFakeDesktopBridge, createInMemoryKeyValueStorage } from "./fakes";
+import { upsertCustomCommand, type CustomCommand } from "@/custom-commands/model";
 import {
   DEFAULT_SIDEBAR_ROW_ITEMS,
   SIDEBAR_ROW_ITEMS,
@@ -44,6 +45,39 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  it.each([undefined, null, "invalid", {}])(
+    "defaults custom commands to an empty list without changing other settings: %j",
+    async (customCommands) => {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ customCommands, vimKeybindings: true }),
+        }),
+      });
+      const loaded = await loadAppSettingsFromStorage(deps);
+      expect(loaded.customCommands).toEqual([]);
+      expect(loaded.vimKeybindings).toBe(true);
+    },
+  );
+
+  it("validates persisted commands independently and defaults auto-send off", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          customCommands: [
+            { id: "valid", name: " /检查 ", prompt: "检查代码" },
+            { id: "invalid", name: "SHARE", prompt: "Not allowed" },
+          ],
+          language: "zh-CN",
+        }),
+      }),
+    });
+    const loaded = await loadAppSettingsFromStorage(deps);
+    expect(loaded.customCommands).toEqual([
+      { id: "valid", name: "检查", description: "", prompt: "检查代码", autoSend: false },
+    ]);
+    expect(loaded.language).toBe("zh-CN");
+  });
+
   it("persists file panel associations, including panels absent from this host", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();
@@ -691,6 +725,95 @@ describe("saveAppSettings", () => {
       },
     });
   });
+
+  it("persists custom command create, edit, and delete while keeping other app preferences", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          ...DEFAULT_CLIENT_SETTINGS,
+          language: "zh-CN",
+          futureSetting: true,
+        }),
+      }),
+    });
+    const queryClient = new QueryClient();
+    const command: CustomCommand = {
+      id: "stable-id",
+      name: "review",
+      description: "",
+      prompt: "Review the diff",
+      autoSend: false,
+    };
+    await saveAppSettings({
+      queryClient,
+      deps,
+      updates: (current) => ({
+        customCommands: upsertCustomCommand({ command, commands: current.customCommands }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(deps)).customCommands).toEqual([command]);
+
+    const edited = { ...command, name: "检查", prompt: "检查代码", autoSend: true };
+    await saveAppSettings({
+      queryClient,
+      deps,
+      updates: (current) => ({
+        customCommands: upsertCustomCommand({ command: edited, commands: current.customCommands }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(deps)).customCommands).toEqual([edited]);
+
+    await saveAppSettings({
+      queryClient,
+      deps,
+      updates: (current) => ({
+        customCommands: current.customCommands.filter((candidate) => candidate.id !== command.id),
+      }),
+    });
+    const loaded = await loadAppSettingsFromStorage(deps);
+    expect(loaded.customCommands).toEqual([]);
+    expect(loaded.language).toBe("zh-CN");
+    expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toMatchObject({
+      futureSetting: true,
+    });
+  });
+
+  it.each(["create", "delete"] as const)(
+    "restores cached commands when a %s write fails",
+    async (operation) => {
+      const command: CustomCommand = {
+        id: "stable-id",
+        name: "review",
+        description: "",
+        prompt: "Review the diff",
+        autoSend: false,
+      };
+      const initialCommands = operation === "delete" ? [command] : [];
+      const nextCommands = operation === "create" ? [command] : [];
+      const initial = { ...DEFAULT_CLIENT_SETTINGS, customCommands: initialCommands };
+      const storage = createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify(initial),
+      });
+      const deps: SettingsDeps = {
+        storage: {
+          ...storage,
+          async setItem() {
+            throw new Error("Storage write failed");
+          },
+        },
+        desktop: createFakeDesktopBridge(),
+      };
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, initial);
+
+      await expect(
+        saveAppSettings({ queryClient, deps, updates: { customCommands: nextCommands } }),
+      ).rejects.toThrow("Storage write failed");
+
+      expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toEqual(initial);
+      expect(JSON.parse(storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toEqual(initial);
+    },
+  );
 
   it("persists session title instructions without replacing other preferences", async () => {
     const deps = makeDeps({

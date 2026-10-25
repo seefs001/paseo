@@ -166,6 +166,7 @@ import { openAgentShare, type AgentShareModel } from "@/agent-sharing/model";
 import { normalizeNativePastedImages, type NativePastedFile } from "./native-pasted-image";
 import { PluginResourceAttachmentPill, usePluginAttachmentPicker } from "@/plugins";
 import { resolveClientSlashCommand, type ClientSlashCommand } from "@/client-slash-commands";
+import { expandCustomCommand, type ExpandedCustomCommand } from "@/custom-commands/expand";
 import {
   appendWorkspaceFileAttachment,
   getWorkspaceFileAttachmentKey,
@@ -1784,20 +1785,28 @@ function ComposerContentImpl({
       if (clientSlashCommand && runClientSlashCommand(clientSlashCommand)) {
         return;
       }
-      const pluginSlashCommand = resolvePluginClientSlashCommand({
-        text: payload.text,
-        hasAttachments: outgoingAttachments.length > 0,
-        commands: pluginClientSlashCommands,
-      });
-      if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
+      const customCommand = mode.showAutocomplete
+        ? expandCustomCommand({ text: payload.text, commands: appSettings.customCommands })
+        : null;
+      if (!customCommand) {
+        const pluginSlashCommand = resolvePluginClientSlashCommand({
+          text: payload.text,
+          hasAttachments: outgoingAttachments.length > 0,
+          commands: pluginClientSlashCommands,
+        });
+        if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
+      }
 
       if (blurOnSubmit) {
         messageInputRef.current?.blur();
       }
-      void sendMessageWithContent(payload.text, outgoingAttachments, payload.forceSend);
+      const outgoingMessage = customCommand ? customCommand.text : payload.text;
+      void sendMessageWithContent(outgoingMessage, outgoingAttachments, payload.forceSend);
     },
     [
       attachments,
+      appSettings.customCommands,
+      mode.showAutocomplete,
       blurOnSubmit,
       buildOutgoingAttachments,
       runClientSlashCommand,
@@ -2039,16 +2048,24 @@ function ComposerContentImpl({
       if (clientSlashCommand && runClientSlashCommand(clientSlashCommand)) {
         return;
       }
-      const pluginSlashCommand = resolvePluginClientSlashCommand({
-        text: payload.text,
-        hasAttachments: outgoingAttachments.length > 0,
-        commands: pluginClientSlashCommands,
-      });
-      if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
-      queueMessage(payload.text, outgoingAttachments);
+      const customCommand = mode.showAutocomplete
+        ? expandCustomCommand({ text: payload.text, commands: appSettings.customCommands })
+        : null;
+      if (!customCommand) {
+        const pluginSlashCommand = resolvePluginClientSlashCommand({
+          text: payload.text,
+          hasAttachments: outgoingAttachments.length > 0,
+          commands: pluginClientSlashCommands,
+        });
+        if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
+      }
+      const outgoingMessage = customCommand ? customCommand.text : payload.text;
+      queueMessage(outgoingMessage, outgoingAttachments);
     },
     [
       attachments,
+      appSettings.customCommands,
+      mode.showAutocomplete,
       buildOutgoingAttachments,
       pluginClientSlashCommands,
       queueMessage,
@@ -2420,6 +2437,37 @@ function ComposerContentImpl({
     [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
   );
 
+  const isSubmitLoadingVisible =
+    isProcessing || isSubmitLoading || isUploadingFile || pendingNativeImagePastes > 0;
+  const isSubmitDisabled =
+    isSubmitLoadingVisible ||
+    Boolean(agentControls?.isModelLoading) ||
+    (waitForForgeAutoAttachOnSubmit && isForgeResolving);
+
+  const handleCustomCommandSelected = useCallback(
+    ({ command, text }: ExpandedCustomCommand) => {
+      replaceUserInput(text);
+      const shouldAutoSend = command.autoSend && !isSubmitDisabled && !isComposerLocked;
+      if (!shouldAutoSend) {
+        messageInputRef.current?.focus();
+        return;
+      }
+      if (blurOnSubmit) messageInputRef.current?.blur();
+      const outgoingAttachments = buildOutgoingAttachments(attachments);
+      void sendMessageWithContent(text, outgoingAttachments, activeSendBehavior !== "queue");
+    },
+    [
+      replaceUserInput,
+      isSubmitDisabled,
+      isComposerLocked,
+      blurOnSubmit,
+      buildOutgoingAttachments,
+      attachments,
+      sendMessageWithContent,
+      activeSendBehavior,
+    ],
+  );
+
   const autocompleteConfiguration = useMemo(
     () => ({
       setUserInput: replaceUserInput,
@@ -2429,6 +2477,8 @@ function ComposerContentImpl({
       draft: commandDraft,
       canExecuteClientSlashCommand: buildOutgoingAttachments(attachments).length === 0,
       onClientSlashCommand: runClientSlashCommand,
+      customCommands: appSettings.customCommands,
+      onCustomCommandSelected: handleCustomCommandSelected,
       onSessionMentionSelected: sessionMentionScopeKey ? handleSessionMentionSelected : undefined,
       pluginClientSlashCommands,
     }),
@@ -2441,19 +2491,14 @@ function ComposerContentImpl({
       buildOutgoingAttachments,
       attachments,
       runClientSlashCommand,
+      appSettings.customCommands,
+      handleCustomCommandSelected,
       sessionMentionScopeKey,
       handleSessionMentionSelected,
       pluginClientSlashCommands,
     ],
   );
   const messageInputContainerRef = useRef<View>(null);
-
-  const isSubmitLoadingVisible =
-    isProcessing || isSubmitLoading || isUploadingFile || pendingNativeImagePastes > 0;
-  const isSubmitDisabled =
-    isSubmitLoadingVisible ||
-    Boolean(agentControls?.isModelLoading) ||
-    (waitForForgeAutoAttachOnSubmit && isForgeResolving);
 
   // Disable drops while submitting/uploading: the submit path clears and restores attachments,
   // so a drop in that window would be lost or land on a locked draft. `disabled` hides the

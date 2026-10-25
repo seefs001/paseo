@@ -9,6 +9,7 @@ import {
   resolveKnownHostRoute,
   buildSessionsRoute,
   buildSettingsAddHostRoute,
+  buildSettingsSectionRoute,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
   decodeFilePathFromPathSegment,
@@ -263,6 +264,11 @@ describe("host settings section slugs", () => {
 });
 
 describe("settings section slugs", () => {
+  it("routes custom commands through the app-level settings section", () => {
+    expect(isSettingsSectionSlug("custom-commands")).toBe(true);
+    expect(buildSettingsSectionRoute("custom-commands")).toBe("/settings/custom-commands");
+  });
+
   it("includes desktop notification settings", () => {
     expect(isSettingsSectionSlug("notifications")).toBe(true);
   });

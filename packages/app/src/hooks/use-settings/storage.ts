@@ -2,6 +2,7 @@ import { isSyntaxThemeId, type SyntaxThemeId } from "@getpaseo/highlight";
 import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
 import type { QueryClient } from "@tanstack/react-query";
 import type { DesktopSettings } from "@/desktop/settings/desktop-settings";
+import { normalizeCustomCommands, type CustomCommand } from "@/custom-commands/model";
 import type { AppLanguage } from "@/i18n/locales";
 import type { SidebarNavPreference } from "@/sidebar-nav/model";
 import {
@@ -79,6 +80,7 @@ export interface AppSettings {
   pluginThemeId: string | null;
   language: AppLanguage;
   sendBehavior: SendBehavior;
+  customCommands: CustomCommand[];
   sessionTitlePrompt: string;
   serviceUrlBehavior: ServiceUrlBehavior;
   terminalScrollbackLines: number;
@@ -140,6 +142,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   pluginThemeId: null,
   language: "system",
   sendBehavior: "steer",
+  customCommands: [],
   sessionTitlePrompt: "",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -219,6 +222,7 @@ const StoredAppSettingsSchema = z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
     sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
+    customCommands: z.unknown().transform(normalizeCustomCommands).default([]),
     sessionTitlePrompt: z.string().max(4000).catch(""),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(
@@ -364,13 +368,20 @@ export async function saveAppSettings(input: {
   const current = normalizeAppSettings(storedCurrent);
   const updates = typeof input.updates === "function" ? input.updates(current) : input.updates;
   const next = { ...current, ...updates };
-  input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
-  await writeAppSettings(
-    input.deps.storage,
-    (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
-      StoredAppSettingsSchema.parse({}),
-    next,
-  );
+  const published = input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
+  try {
+    await writeAppSettings(
+      input.deps.storage,
+      (await readSettingsObject(input.deps.storage, APP_SETTINGS_KEY)) ??
+        StoredAppSettingsSchema.parse({}),
+      next,
+    );
+  } catch (error) {
+    if (input.queryClient.getQueryData(APP_SETTINGS_QUERY_KEY) === published) {
+      input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, current);
+    }
+    throw error;
+  }
 }
 
 export async function loadAppSettingsFromStorage(deps: SettingsDeps): Promise<AppSettings> {

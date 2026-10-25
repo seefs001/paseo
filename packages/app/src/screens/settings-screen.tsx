@@ -53,6 +53,7 @@ import { AppearanceSection } from "@/screens/settings/appearance/appearance-sect
 import { OpenLocationSection } from "@/screens/settings/open-location/open-location-section";
 import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
 import { ChatSection } from "@/screens/settings/chat/chat-section";
+import { CustomCommandsSection } from "@/screens/settings/custom-commands-section";
 import { SidebarNavSection } from "@/screens/settings/sidebar/sidebar-nav-section";
 import { SendingSection } from "@/screens/settings/general/sending-section";
 import {
@@ -166,6 +167,12 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
     Content: SidebarNavSection,
   },
   { id: "chat", labelKey: "settings.sections.chat", icon: MessageSquare, Content: ChatSection },
+  {
+    id: "custom-commands",
+    labelKey: "settings.sections.customCommands",
+    icon: SquareTerminal,
+    Content: CustomCommandsSection,
+  },
   {
     id: "terminal",
     labelKey: "settings.sections.terminal",

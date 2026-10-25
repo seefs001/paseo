@@ -5,30 +5,38 @@ export interface SlashCommandDescriptor {
 
 export type AvailableSlashCommand<
   BuiltIn extends SlashCommandDescriptor,
+  Custom extends SlashCommandDescriptor,
   Plugin extends SlashCommandDescriptor,
   Provider extends SlashCommandDescriptor,
 > =
   | { source: "built-in"; command: BuiltIn }
+  | { source: "custom"; command: Custom }
   | { source: "plugin"; command: Plugin }
   | { source: "provider"; command: Provider };
 
 export function mergeSlashCommandSources<
   BuiltIn extends SlashCommandDescriptor,
+  Custom extends SlashCommandDescriptor,
   Plugin extends SlashCommandDescriptor,
   Provider extends SlashCommandDescriptor,
 >(input: {
   builtIn: readonly BuiltIn[];
+  custom: readonly Custom[];
   plugins: readonly Plugin[];
   provider: readonly Provider[];
-  onPluginCollision(command: Plugin, winner: "built-in" | "plugin"): void;
-}): Array<AvailableSlashCommand<BuiltIn, Plugin, Provider>> {
-  const commands: Array<AvailableSlashCommand<BuiltIn, Plugin, Provider>> = input.builtIn.map(
-    (command) => ({ source: "built-in", command }),
-  );
-  const claimed = new Map<string, "built-in" | "plugin">();
+  onPluginCollision(command: Plugin, winner: "built-in" | "custom" | "plugin"): void;
+}): Array<AvailableSlashCommand<BuiltIn, Custom, Plugin, Provider>> {
+  const commands: Array<AvailableSlashCommand<BuiltIn, Custom, Plugin, Provider>> =
+    input.builtIn.map((command) => ({ source: "built-in", command }));
+  const claimed = new Map<string, "built-in" | "custom" | "plugin">();
   for (const command of input.builtIn) {
     claimed.set(command.name, "built-in");
     for (const alias of command.aliases ?? []) claimed.set(alias, "built-in");
+  }
+  for (const command of input.custom) {
+    if (claimed.has(command.name)) continue;
+    claimed.set(command.name, "custom");
+    commands.push({ source: "custom", command });
   }
   for (const command of input.plugins) {
     const winner = claimed.get(command.name);
