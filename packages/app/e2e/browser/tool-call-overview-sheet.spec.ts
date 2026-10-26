@@ -202,7 +202,7 @@ async function configureOverviewToolCalls(page: Page): Promise<void> {
   await page.addInitScript(() => {
     localStorage.setItem(
       "@paseo:app-settings",
-      JSON.stringify({ toolCallDetailLevel: "overview" }),
+      JSON.stringify({ chatDisplay: "collapseToolCalls" }),
     );
   });
 }

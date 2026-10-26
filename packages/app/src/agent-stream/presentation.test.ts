@@ -6,6 +6,7 @@ import { transformTimelineItem, type TimelineItemTransform } from "@/plugins/tim
 import type { InstalledPlugin } from "@/plugins/types";
 import {
   applyStreamEvent,
+  getStreamItemMessageId,
   hydrateStreamState,
   type StreamItem,
   type ToolCallItem,
@@ -15,7 +16,7 @@ import type { AgentStreamEventPayload } from "@getpaseo/protocol/messages";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { buildAgentStreamRenderModel } from "./model";
-import { createStreamPresentation, getStreamItemMessageId } from "./presentation";
+import { createStreamPresentation } from "./presentation";
 
 const runtime = {
   paseo: {},
@@ -99,6 +100,8 @@ function pluginData(items: StreamItem[]): unknown[] {
   return items.flatMap((item) => (item.kind === "plugin" ? [item.data] : []));
 }
 
+const expandedTurnHostIds = new Set<string>();
+
 function piCall(
   callId: string,
   name: string,
@@ -154,7 +157,8 @@ describe("Pi codemode presentation", () => {
       const result = createStreamPresentation()({
         tail,
         head,
-        level,
+        display: level === "detailed" ? ("full" as const) : ("collapseToolCalls" as const),
+        expandedTurnHostIds,
         isTurnActive: true,
         transform: undefined,
       });
@@ -188,7 +192,13 @@ describe("Pi codemode presentation", () => {
           },
         ],
       });
-      const options = { level, head: [], isTurnActive: false, transform: undefined };
+      const options = {
+        display: level === "detailed" ? ("full" as const) : ("collapseToolCalls" as const),
+        expandedTurnHostIds,
+        head: [],
+        isTurnActive: false,
+        transform: undefined,
+      };
       const restored = present({ ...options, tail: [parent] });
       expect(restored.tail).toMatchObject([
         { id: parent.id, nestedCalls: [{ payload: { data: { callId: "code/2" } } }] },
@@ -232,7 +242,8 @@ describe("Pi codemode presentation", () => {
     const failed = piCall("code/1", "read", { parent: "code", status: "failed", detail });
     const options = {
       tail: [parent, source],
-      level: "detailed" as const,
+      display: "full" as const,
+      expandedTurnHostIds,
       isTurnActive: true,
       transform: undefined,
     };
@@ -276,7 +287,8 @@ describe("Pi codemode presentation", () => {
       const result = createStreamPresentation()({
         tail: [parent],
         head: [],
-        level,
+        display: level === "detailed" ? ("full" as const) : ("collapseToolCalls" as const),
+        expandedTurnHostIds,
         isTurnActive: false,
         transform: undefined,
       });
@@ -308,7 +320,14 @@ describe("Pi codemode presentation", () => {
       const direct = piCall("direct", "bash");
       const tail = [first, second, direct];
       const head = [read, bash];
-      const result = present({ tail, head, level, isTurnActive: true, transform: undefined });
+      const result = present({
+        tail,
+        head,
+        display: level === "detailed" ? ("full" as const) : ("collapseToolCalls" as const),
+        expandedTurnHostIds,
+        isTurnActive: true,
+        transform: undefined,
+      });
       const visible =
         level === "overview" ? result.groupsByHostId.get(first.id)!.run.calls : result.tail;
       expect(visible).toEqual([
@@ -342,7 +361,11 @@ describe("Pi codemode presentation", () => {
       isTurnActive: false,
       transform: undefined,
     };
-    const overview = present({ ...options, level: "overview" });
+    const overview = present({
+      ...options,
+      display: "collapseToolCalls" as const,
+      expandedTurnHostIds,
+    });
     const group = overview.groupsByHostId.get(parent.id);
     expect(group?.summary).toEqual({
       readFileCount: 2,
@@ -355,7 +378,7 @@ describe("Pi codemode presentation", () => {
     expect(group?.run.calls).toEqual([{ ...parent, nestedCalls: [read, command] }, direct]);
     expect(group?.isLoading).toBe(false);
 
-    const detailed = present({ ...options, level: "detailed" });
+    const detailed = present({ ...options, display: "full" as const, expandedTurnHostIds });
     expect(detailed.tail).toEqual(group?.run.calls);
     expect(detailed.head).toEqual([]);
     expect(options.tail).toEqual([parent, read, command, direct]);
@@ -373,7 +396,8 @@ describe("Pi codemode presentation", () => {
     });
     const live = piCall("code/1", "read", { parent: "code" });
     const options = {
-      level: "detailed" as const,
+      display: "full" as const,
+      expandedTurnHostIds,
       isTurnActive: false,
       transform: undefined,
       head: [],
@@ -402,7 +426,8 @@ describe("Pi codemode presentation", () => {
     const parent = piCall("code", "codemode", { status: "running" });
     const child = piCall("code/1", "read", { parent: "code" });
     const options = {
-      level: "overview" as const,
+      display: "collapseToolCalls" as const,
+      expandedTurnHostIds,
       isTurnActive: true,
       transform: undefined,
       head: [],
@@ -426,7 +451,8 @@ describe("Pi codemode presentation", () => {
     const child = piCall("code/1", "bash", { parent: "code", status: "failed" });
     const present = createStreamPresentation();
     const result = present({
-      level: "detailed",
+      display: "full" as const,
+      expandedTurnHostIds,
       tail: [parent, child],
       head: [],
       isTurnActive: false,
@@ -476,7 +502,8 @@ describe("Pi codemode presentation", () => {
     });
     const present = createStreamPresentation();
     const result = present({
-      level: "detailed",
+      display: "full" as const,
+      expandedTurnHostIds,
       tail: [parent],
       head: [],
       isTurnActive: false,
@@ -555,7 +582,8 @@ describe("Pi codemode presentation", () => {
       "/tmp/codemode-full.txt",
     ]);
     const overview = createStreamPresentation()({
-      level: "overview",
+      display: "collapseToolCalls" as const,
+      expandedTurnHostIds,
       tail: [parent],
       head: [],
       isTurnActive: false,
@@ -580,7 +608,13 @@ describe("Pi codemode presentation", () => {
     const live = piCall("code/1", "read", { parent: "code", status: "running" });
     const orphan = piCall("orphan", "bash", { parent: "unloaded" });
     const tail = [parent, live, orphan];
-    const options = { level: "detailed" as const, isTurnActive: true, transform: undefined, tail };
+    const options = {
+      display: "full" as const,
+      expandedTurnHostIds,
+      isTurnActive: true,
+      transform: undefined,
+      tail,
+    };
     const result = present({ ...options, head: [] });
     expect(result.tail).toEqual([{ ...parent, nestedCalls: [live] }, orphan]);
     const text: StreamItem = {
@@ -614,7 +648,8 @@ describe("short reasoning before a tool", () => {
       timestamp: new Date(0),
     };
     const result = createStreamPresentation()({
-      level: "detailed",
+      display: "full" as const,
+      expandedTurnHostIds,
       isTurnActive: false,
       transform: undefined,
       tail: [
@@ -641,7 +676,11 @@ describe("short reasoning before a tool", () => {
   });
 });
 
-const presentationOptions = { level: "overview" as const, isTurnActive: true };
+const presentationOptions = {
+  display: "collapseToolCalls" as const,
+  expandedTurnHostIds,
+  isTurnActive: true,
+};
 
 function streamHarness(transform?: TimelineItemTransform) {
   let state: { tail: StreamItem[]; head: StreamItem[] } = { tail: [], head: [] };
