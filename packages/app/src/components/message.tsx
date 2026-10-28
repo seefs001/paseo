@@ -1,3 +1,4 @@
+import { MessagePreview, MessageSender } from "@/components/user-message";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
 import { AssistantTurnInfo } from "@/components/assistant-turn-info";
@@ -96,6 +97,7 @@ export type { InlinePathTarget } from "@/assistant-file-links";
 export type { AssistantForkTarget };
 
 interface UserMessageProps {
+  sender?: AgentMessage["sender"];
   serverId?: string;
   agentId?: string;
   messageId?: string;
@@ -424,6 +426,7 @@ function UserMessageAttachmentChip({ attachment, onOpenMention }: UserMessageAtt
 const MESSAGE_TEXT_DATASET = { messageText: "true" };
 
 export const UserMessage = memo(function UserMessage({
+  sender,
   serverId,
   agentId,
   messageId,
@@ -522,35 +525,38 @@ export const UserMessage = memo(function UserMessage({
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
       >
+        {sender ? <MessageSender sender={sender} serverId={serverId} /> : null}
         <View style={userMessageStylesheet.bubble}>
-          {hasImages ? (
-            <View style={imagePreviewContainerStyle}>
-              {images.map((image) => (
-                <UserMessageImagePill
-                  key={image.id}
-                  image={image}
-                  onOpen={setLightboxMetadata}
-                  accessibilityLabel={t("composer.attachments.openImage")}
-                />
-              ))}
-            </View>
-          ) : null}
-          {hasAttachments ? (
-            <View style={attachmentPreviewContainerStyle}>
-              {attachments.map((attachment, index) => (
-                <UserMessageAttachmentChip
-                  key={`${attachment.type}:${"number" in attachment ? attachment.number : index}`}
-                  attachment={attachment}
-                  onOpenMention={handleOpenMention}
-                />
-              ))}
-            </View>
-          ) : null}
-          {hasText ? (
-            <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
-              {message}
-            </Text>
-          ) : null}
+          <MessagePreview>
+            {hasImages ? (
+              <View style={imagePreviewContainerStyle}>
+                {images.map((image) => (
+                  <UserMessageImagePill
+                    key={image.id}
+                    image={image}
+                    onOpen={setLightboxMetadata}
+                    accessibilityLabel={t("composer.attachments.openImage")}
+                  />
+                ))}
+              </View>
+            ) : null}
+            {hasAttachments ? (
+              <View style={attachmentPreviewContainerStyle}>
+                {attachments.map((attachment, index) => (
+                  <UserMessageAttachmentChip
+                    key={`${attachment.type}:${"number" in attachment ? attachment.number : index}`}
+                    attachment={attachment}
+                    onOpenMention={handleOpenMention}
+                  />
+                ))}
+              </View>
+            ) : null}
+            {hasText ? (
+              <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
+                {message}
+              </Text>
+            ) : null}
+          </MessagePreview>
         </View>
         {hasText ? (
           <View
@@ -585,7 +591,7 @@ export const UserMessage = memo(function UserMessage({
 
 interface AssistantTurnFooterProps {
   turnInfo?: AgentTurnInfo;
-  getContent: () => string;
+  getContent?: () => string;
   completedAt?: Date;
   durationMs?: number | null;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
@@ -686,10 +692,12 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
 
   return (
     <View style={assistantTurnFooterStylesheet.container}>
-      <TurnCopyButton
-        getContent={getContent}
-        containerStyle={assistantTurnFooterStylesheet.copyButton}
-      />
+      {getContent ? (
+        <TurnCopyButton
+          getContent={getContent}
+          containerStyle={assistantTurnFooterStylesheet.copyButton}
+        />
+      ) : null}
       <AssistantTurnInfo info={turnInfo} completedAt={completedAt} durationMs={durationMs} />
       {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
       {primaryLabel ? (

@@ -197,7 +197,7 @@ function CompletedTurnFooter({
   return (
     <View style={stylesheet.turnFooterSlot}>
       <AssistantTurnFooter
-        getContent={getContent}
+        getContent={items[startIndex]?.kind === "assistant_message" ? getContent : undefined}
         turnInfo={
           items[startIndex]?.kind === "assistant_message" ? items[startIndex].turnInfo : undefined
         }

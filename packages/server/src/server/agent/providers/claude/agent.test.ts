@@ -35,7 +35,7 @@ import { AgentManager } from "../../agent-manager.js";
 import { AgentStorage } from "../../agent-storage.js";
 
 interface TestClaudeSession {
-  translateMessageToEvents(message: SDKMessage): AgentStreamEvent[];
+  translateMessageToEvents(message: SDKMessage): Promise<AgentStreamEvent[]>;
   close(): Promise<void>;
 }
 
@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe("convertClaudeHistoryEntry", () => {
-  test("maps user tool results to timeline items", () => {
+  test("maps user tool results to timeline items", async () => {
     const toolUseId = "toolu_test";
     const entry = {
       type: "user",
@@ -82,14 +82,14 @@ describe("convertClaudeHistoryEntry", () => {
     ];
 
     const mapBlocks = vi.fn().mockReturnValue(stubTimeline);
-    const result = convertClaudeHistoryEntry(entry, mapBlocks);
+    const result = await convertClaudeHistoryEntry(entry, mapBlocks);
 
     expect(result).toEqual(stubTimeline);
     expect(mapBlocks).toHaveBeenCalledTimes(1);
     expect(Array.isArray(mapBlocks.mock.calls[0][0])).toBe(true);
   });
 
-  test("replays persisted Claude tool results as completed tool calls", () => {
+  test("replays persisted Claude tool results as completed tool calls", async () => {
     const entry = {
       type: "user",
       message: {
@@ -127,12 +127,12 @@ describe("convertClaudeHistoryEntry", () => {
 
     const mapPersistedToolResultBlocks = (): AgentTimelineItem[] => completedToolCall;
 
-    expect(convertClaudeHistoryEntry(entry, mapPersistedToolResultBlocks)).toEqual(
+    expect(await convertClaudeHistoryEntry(entry, mapPersistedToolResultBlocks)).toEqual(
       completedToolCall,
     );
   });
 
-  test("returns user messages when no tool blocks exist", () => {
+  test("returns user messages when no tool blocks exist", async () => {
     const entry = {
       type: "user",
       message: {
@@ -141,7 +141,7 @@ describe("convertClaudeHistoryEntry", () => {
       },
     };
 
-    expect(convertClaudeHistoryEntry(entry, () => [])).toEqual([
+    expect(await convertClaudeHistoryEntry(entry, () => [])).toEqual([
       {
         type: "user_message",
         text: "Run npm test",
@@ -149,7 +149,7 @@ describe("convertClaudeHistoryEntry", () => {
     ]);
   });
 
-  test("converts compact boundary metadata variants", () => {
+  test("converts compact boundary metadata variants", async () => {
     const fixtures = [
       {
         entry: {
@@ -178,7 +178,7 @@ describe("convertClaudeHistoryEntry", () => {
     ] as const;
 
     for (const fixture of fixtures) {
-      expect(convertClaudeHistoryEntry(fixture.entry, () => [])).toEqual([
+      expect(await convertClaudeHistoryEntry(fixture.entry, () => [])).toEqual([
         {
           type: "compaction",
           status: "completed",
@@ -189,7 +189,7 @@ describe("convertClaudeHistoryEntry", () => {
     }
   });
 
-  test("skips synthetic user entries", () => {
+  test("skips synthetic user entries", async () => {
     const entry = {
       type: "user",
       isSynthetic: true,
@@ -200,13 +200,13 @@ describe("convertClaudeHistoryEntry", () => {
     };
 
     const mapBlocks = vi.fn().mockReturnValue([]);
-    const result = convertClaudeHistoryEntry(entry, mapBlocks);
+    const result = await convertClaudeHistoryEntry(entry, mapBlocks);
 
     expect(result).toEqual([]);
     expect(mapBlocks).not.toHaveBeenCalled();
   });
 
-  test("skips meta user entries from Claude skill loading", () => {
+  test("skips meta user entries from Claude skill loading", async () => {
     const entry = {
       type: "user",
       isMeta: true,
@@ -222,13 +222,13 @@ describe("convertClaudeHistoryEntry", () => {
     };
 
     const mapBlocks = vi.fn().mockReturnValue([]);
-    const result = convertClaudeHistoryEntry(entry, mapBlocks);
+    const result = await convertClaudeHistoryEntry(entry, mapBlocks);
 
     expect(result).toEqual([]);
     expect(mapBlocks).not.toHaveBeenCalled();
   });
 
-  test("skips interrupt placeholder transcript noise", () => {
+  test("skips interrupt placeholder transcript noise", async () => {
     const interruptEntry = {
       type: "user",
       message: {
@@ -249,11 +249,11 @@ describe("convertClaudeHistoryEntry", () => {
       .fn()
       .mockReturnValue([{ type: "assistant_message", text: "No response requested." }]);
 
-    expect(convertClaudeHistoryEntry(interruptEntry, mapBlocks)).toEqual([]);
-    expect(convertClaudeHistoryEntry(assistantNoiseEntry, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(interruptEntry, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(assistantNoiseEntry, mapBlocks)).toEqual([]);
   });
 
-  test("skips <local-command-stdout> messages (model switch, /context, etc.)", () => {
+  test("skips <local-command-stdout> messages (model switch, /context, etc.)", async () => {
     // Real entries from Claude Code JSONL history files
     const modelSwitch = {
       type: "user",
@@ -308,24 +308,24 @@ describe("convertClaudeHistoryEntry", () => {
 
     const mapBlocks = vi.fn().mockReturnValue([]);
 
-    expect(convertClaudeHistoryEntry(modelSwitch, mapBlocks)).toEqual([]);
-    expect(convertClaudeHistoryEntry(modelSwitchWithAnsi, mapBlocks)).toEqual([]);
-    expect(convertClaudeHistoryEntry(contextDump, mapBlocks)).toEqual([]);
-    expect(convertClaudeHistoryEntry(planMode, mapBlocks)).toEqual([]);
-    expect(convertClaudeHistoryEntry(goodbye, mapBlocks)).toEqual([]);
-    expect(convertClaudeHistoryEntry(empty, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(modelSwitch, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(modelSwitchWithAnsi, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(contextDump, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(planMode, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(goodbye, mapBlocks)).toEqual([]);
+    expect(await convertClaudeHistoryEntry(empty, mapBlocks)).toEqual([]);
 
     // Real user messages must NOT be filtered
     const realMessage = {
       type: "user",
       message: { role: "user", content: "fix the bug in auth.ts" },
     };
-    expect(convertClaudeHistoryEntry(realMessage, mapBlocks)).toEqual([
+    expect(await convertClaudeHistoryEntry(realMessage, mapBlocks)).toEqual([
       { type: "user_message", text: "fix the bug in auth.ts" },
     ]);
   });
 
-  test("maps task notifications to synthetic tool calls", () => {
+  test("maps task notifications to synthetic tool calls", async () => {
     const entry = {
       type: "system",
       subtype: "task_notification",
@@ -336,7 +336,7 @@ describe("convertClaudeHistoryEntry", () => {
       output_file: "/tmp/bg-fail-1.txt",
     };
 
-    expect(convertClaudeHistoryEntry(entry, () => [])).toEqual([
+    expect(await convertClaudeHistoryEntry(entry, () => [])).toEqual([
       {
         type: "tool_call",
         callId: "task_notification_task-note-system-1",
@@ -360,7 +360,7 @@ describe("convertClaudeHistoryEntry", () => {
     ]);
   });
 
-  test("maps queue-operation task notifications to synthetic tool calls", () => {
+  test("maps queue-operation task notifications to synthetic tool calls", async () => {
     const entry = {
       type: "queue-operation",
       operation: "enqueue",
@@ -375,7 +375,7 @@ describe("convertClaudeHistoryEntry", () => {
       ].join("\n"),
     };
 
-    expect(convertClaudeHistoryEntry(entry, () => [])).toEqual([
+    expect(await convertClaudeHistoryEntry(entry, () => [])).toEqual([
       {
         type: "tool_call",
         callId: "task_notification_task-note-queue-1",
@@ -399,7 +399,7 @@ describe("convertClaudeHistoryEntry", () => {
     ]);
   });
 
-  test("passes assistant content blocks through to the mapper", () => {
+  test("passes assistant content blocks through to the mapper", async () => {
     const entry = {
       type: "assistant",
       message: {
@@ -417,7 +417,7 @@ describe("convertClaudeHistoryEntry", () => {
     ];
     const mapBlocks = vi.fn().mockReturnValue(mappedTimeline);
 
-    expect(convertClaudeHistoryEntry(entry, mapBlocks)).toEqual(mappedTimeline);
+    expect(await convertClaudeHistoryEntry(entry, mapBlocks)).toEqual(mappedTimeline);
     expect(mapBlocks).toHaveBeenCalledWith(entry.message.content);
   });
 });
@@ -1269,7 +1269,7 @@ describe("ClaudeAgentSession features", () => {
         input: Record<string, unknown>,
         options: Record<string, unknown>,
       ): Promise<PermissionResult>;
-      translateMessageToEvents(message: SDKMessage): AgentStreamEvent[];
+      translateMessageToEvents(message: SDKMessage): Promise<AgentStreamEvent[]>;
     };
 
     try {
@@ -1309,7 +1309,7 @@ describe("ClaudeAgentSession features", () => {
         ),
       ).resolves.toMatchObject({ behavior: "deny", interrupt: undefined });
 
-      internal.translateMessageToEvents({
+      await internal.translateMessageToEvents({
         type: "command_lifecycle",
         command_uuid: steerUuid,
         state: "started",
@@ -2540,7 +2540,7 @@ describe("ClaudeAgentSession context window usage", () => {
   test("emits canonical task snapshots from Claude TaskCreate results", async () => {
     const session = await createSessionForTest();
     try {
-      session.translateMessageToEvents({
+      await session.translateMessageToEvents({
         type: "assistant",
         message: {
           content: [
@@ -2554,7 +2554,7 @@ describe("ClaudeAgentSession context window usage", () => {
         },
       } as unknown as SDKMessage);
 
-      const events = session.translateMessageToEvents({
+      const events = await session.translateMessageToEvents({
         type: "user",
         message: {
           content: [{ type: "tool_result", tool_use_id: "task-create-1", content: "created" }],
@@ -3756,9 +3756,9 @@ describe("ClaudeAgentSession context window usage", () => {
     ]);
 
     try {
-      const compactEvents = (session as unknown as TestClaudeSession).translateMessageToEvents(
-        createCompactBoundary(),
-      );
+      const compactEvents = await (
+        session as unknown as TestClaudeSession
+      ).translateMessageToEvents(createCompactBoundary());
       expect(compactEvents).toContainEqual(
         expect.objectContaining({
           type: "usage_updated",
@@ -3944,7 +3944,7 @@ describe("ClaudeAgentSession context window usage", () => {
   test("result.result is surfaced as an assistant message when no model output was produced", async () => {
     const session = await createSessionForTest();
 
-    const events = session.translateMessageToEvents({
+    const events = await session.translateMessageToEvents({
       type: "result",
       subtype: "success",
       result: "Unknown command: /foo-doesnt-exist",
@@ -3979,7 +3979,7 @@ describe("ClaudeAgentSession context window usage", () => {
   test("result.result is not duplicated when the model produced output during the turn", async () => {
     const session = await createSessionForTest();
 
-    const events = session.translateMessageToEvents({
+    const events = await session.translateMessageToEvents({
       type: "result",
       subtype: "success",
       result: "Here is the answer.",
