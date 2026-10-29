@@ -1869,7 +1869,10 @@ function computeShimmerMetrics(input: {
     32,
     Math.min(120, input.labelRowWidth > 0 ? input.labelRowWidth * 0.28 : 0),
   );
-  const isWebShimmer = input.isLoading && isWeb;
+  // The web overlay was an infinite background-position animation. That repaints
+  // the label on every display frame and keeps the Electron window presenting.
+  // The label underneath already uses the loading colour.
+  const isWebShimmer = false;
   // React Native Web only observes a node when onLayout exists at mount. Keep
   // measuring while idle so a retained badge has dimensions when it starts loading.
   const shouldMeasureWebShimmer = isWeb;

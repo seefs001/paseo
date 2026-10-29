@@ -13,7 +13,13 @@ import {
   SYNCED_LOADER_DOT_COUNT,
   getSyncedLoaderDotOpacity,
   getSyncedLoaderStep,
+  msUntilNextSyncedLoaderStep,
 } from "@/components/synced-loader-state";
+
+// On web, requestAnimationFrame follows the display refresh. The loader's picture
+// changes about six times a second, so a per-frame clock presents the Electron
+// window for no visible change. Native keeps the UI-thread frame clock.
+const LOADER_CLOCK_IS_COARSE = typeof document !== "undefined";
 
 const GRID_COLUMNS = 2;
 const DOT_KEYS = Array.from({ length: SYNCED_LOADER_DOT_COUNT }, (_, i) => `dot-${i}`);
@@ -22,6 +28,15 @@ const activeLoaderCount = makeMutable(0);
 const clockRunning = makeMutable(false);
 let nextStepListenerId = 1;
 
+function scheduleNextLoaderStep(nowMs: number): void {
+  "worklet";
+  if (LOADER_CLOCK_IS_COARSE) {
+    setTimeout(advanceSharedStep, msUntilNextSyncedLoaderStep(nowMs));
+    return;
+  }
+  requestAnimationFrame(advanceSharedStep);
+}
+
 function advanceSharedStep(): void {
   "worklet";
   if (activeLoaderCount.value === 0) {
@@ -29,11 +44,12 @@ function advanceSharedStep(): void {
     return;
   }
 
-  const nextStep = getSyncedLoaderStep(Date.now());
+  const now = Date.now();
+  const nextStep = getSyncedLoaderStep(now);
   if (sharedStep.value !== nextStep) {
     sharedStep.value = nextStep;
   }
-  requestAnimationFrame(advanceSharedStep);
+  scheduleNextLoaderStep(now);
 }
 
 function registerStepListener(
@@ -56,7 +72,7 @@ function registerStepListener(
   if (!clockRunning.value) {
     clockRunning.value = true;
     sharedStep.value = step.value;
-    requestAnimationFrame(advanceSharedStep);
+    scheduleNextLoaderStep(Date.now());
   }
 }
 

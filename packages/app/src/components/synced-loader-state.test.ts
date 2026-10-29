@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { getSyncedLoaderDotOpacity, getSyncedLoaderStep } from "./synced-loader-state";
+import {
+  SYNCED_LOADER_STEP_MS,
+  getSyncedLoaderDotOpacity,
+  getSyncedLoaderStep,
+  msUntilNextSyncedLoaderStep,
+} from "./synced-loader-state";
 
 describe("synced loader state", () => {
   test("advances through six wall-clock-aligned steps every 950 milliseconds", () => {
@@ -8,6 +13,13 @@ describe("synced loader state", () => {
     const steps = sampleTimes.map(getSyncedLoaderStep);
 
     expect(steps).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 0]);
+  });
+
+  test("waits until the next step instead of the next display frame", () => {
+    expect(msUntilNextSyncedLoaderStep(0)).toBeCloseTo(SYNCED_LOADER_STEP_MS, 5);
+    expect(msUntilNextSyncedLoaderStep(100)).toBeCloseTo(SYNCED_LOADER_STEP_MS - 100, 5);
+    expect(msUntilNextSyncedLoaderStep(158)).toBe(1);
+    expect(msUntilNextSyncedLoaderStep(159)).toBeGreaterThan(150);
   });
 
   test("preserves the six visible snake states", () => {

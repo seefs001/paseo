@@ -1,5 +1,6 @@
 const SYNCED_LOADER_DURATION_MS = 950;
 export const SYNCED_LOADER_DOT_COUNT = 6;
+export const SYNCED_LOADER_STEP_MS = SYNCED_LOADER_DURATION_MS / SYNCED_LOADER_DOT_COUNT;
 
 const SYNCED_LOADER_OPACITY_STATES = [
   [1, 0, 0.78, 0, 0.56, 0.34],
@@ -14,6 +15,13 @@ export function getSyncedLoaderStep(nowMs: number): number {
   "worklet";
   const elapsedMs = nowMs % SYNCED_LOADER_DURATION_MS;
   return Math.floor((elapsedMs * SYNCED_LOADER_DOT_COUNT) / SYNCED_LOADER_DURATION_MS);
+}
+
+/** Delay until the next visible step. The dots do not change between steps. */
+export function msUntilNextSyncedLoaderStep(nowMs: number): number {
+  "worklet";
+  const remaining = SYNCED_LOADER_STEP_MS - (nowMs % SYNCED_LOADER_STEP_MS);
+  return remaining < 1 ? 1 : remaining;
 }
 
 export function getSyncedLoaderDotOpacity(step: number, dot: number): number {
