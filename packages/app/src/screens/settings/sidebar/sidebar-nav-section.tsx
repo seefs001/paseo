@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowUp,
   Blocks,
+  Cable,
   CalendarClock,
   Gauge,
   History,
@@ -44,6 +45,7 @@ const BUILTIN_ICONS: Record<BuiltinSidebarItemId, LucideIcon> = {
   history: History,
   search: Search,
   schedules: CalendarClock,
+  "mcp-calls": Cable,
   usage: Gauge,
 };
 

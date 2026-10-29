@@ -13,6 +13,11 @@ import {
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
+import {
+  decodeProfileReferences,
+  textReferenceToAgentAttachment,
+} from "@/composer/profile-reference/model";
+import { ProfileReferenceMessage } from "@/composer/profile-reference/message";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { TaskListRow } from "@/components/task-list-row";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -463,9 +468,28 @@ export const UserMessage = memo(function UserMessage({
     [lightboxMetadata],
   );
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
-  const hasText = message.trim().length > 0;
+  const { text: displayText, references } = useMemo(
+    () => decodeProfileReferences(message),
+    [message],
+  );
+  const visibleAttachments = useMemo(() => {
+    if (references.length === 0) {
+      return attachments;
+    }
+    const inlineCards = new Set(
+      references.map((reference) => textReferenceToAgentAttachment(reference).text),
+    );
+    return attachments.filter(
+      (attachment) =>
+        attachment.type !== "text" ||
+        (attachment.contextKind !== "agent_profile" &&
+          attachment.contextKind !== "agent_session") ||
+        !inlineCards.has(attachment.text),
+    );
+  }, [attachments, references]);
+  const hasText = displayText.trim().length > 0;
   const hasImages = images.length > 0;
-  const hasAttachments = attachments.length > 0;
+  const hasAttachments = visibleAttachments.length > 0;
   const showTrailingRow = !isPending && hasText && (isCompact || isNative || isHovered);
   const formattedTimestamp = useMemo(
     () => formatMessageTimestamp(new Date(timestamp)),
@@ -475,7 +499,7 @@ export const UserMessage = memo(function UserMessage({
 
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
-  const getMessageContent = useCallback(() => message, [message]);
+  const getMessageContent = useCallback(() => displayText, [displayText]);
   const handleRewind = useCallback(
     (input: { mode: RewindMode; rewoundText: string }) => {
       return rewindMutation.rewindAgent(input);
@@ -542,7 +566,7 @@ export const UserMessage = memo(function UserMessage({
             ) : null}
             {hasAttachments ? (
               <View style={attachmentPreviewContainerStyle}>
-                {attachments.map((attachment, index) => (
+                {visibleAttachments.map((attachment, index) => (
                   <UserMessageAttachmentChip
                     key={`${attachment.type}:${"number" in attachment ? attachment.number : index}`}
                     attachment={attachment}
@@ -553,7 +577,11 @@ export const UserMessage = memo(function UserMessage({
             ) : null}
             {hasText ? (
               <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
-                {message}
+                <ProfileReferenceMessage
+                  text={displayText}
+                  references={references}
+                  onOpenMention={handleOpenMention}
+                />
               </Text>
             ) : null}
           </MessagePreview>
@@ -2236,14 +2264,14 @@ export const ExpandableBadge = memo(function ExpandableBadge({
         </View>
       </Pressable>
       {detailContent ? (
-        <Pressable
+        <View
           ref={detailWrapperRef}
           style={detailWrapperStyle}
-          onHoverIn={handleDetailHoverIn}
-          onHoverOut={handleDetailHoverOut}
+          onPointerEnter={isWeb ? handleDetailHoverIn : undefined}
+          onPointerLeave={isWeb ? handleDetailHoverOut : undefined}
         >
           {detailContent}
-        </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -2416,6 +2444,7 @@ export const ToolCall = memo(function ToolCall({
         errorText={presentation.errorText}
         maxHeight={maxDetailHeight}
         showLoadingSkeleton={presentation.isLoadingDetails}
+        live={status === "running" || status === "executing"}
       />
     );
   }, [
@@ -2425,6 +2454,7 @@ export const ToolCall = memo(function ToolCall({
     presentation.errorText,
     presentation.isLoadingDetails,
     maxDetailHeight,
+    status,
   ]);
 
   if (presentation.isPlan && effectiveDetail?.type === "plan") {

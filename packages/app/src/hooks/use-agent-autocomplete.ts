@@ -19,20 +19,19 @@ import {
   useWorkspaceLayoutStore,
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-store";
-import { buildAgentProfileComposerAttachment } from "@/attachments/agent-profile";
-import { buildAgentSessionComposerAttachment } from "@/attachments/agent-session";
-import type {
-  AgentProfileContextAttachment,
-  AgentSessionContextAttachment,
-} from "@/attachments/types";
-import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import {
-  applySessionMentionReplacement,
-  rankAgentProfileMentions,
+  useProfileReferenceAutocomplete,
+  type ProfileReferenceSelection,
+} from "@/composer/profile-reference/use-autocomplete";
+import {
+  sessionReferenceLabel,
+  type ProfileReferenceRange,
+  type SessionReferenceSource,
+} from "@/composer/profile-reference/model";
+import {
   rankSessionMentionCandidates,
   mentionOptionGroups,
   resolveComposerMention,
-  type AgentProfileMention,
   type ComposerMentionKind,
   type SessionMentionCandidate,
 } from "@/utils/session-mention-autocomplete";
@@ -64,9 +63,12 @@ export interface UseAgentAutocompleteInput {
   draft?: DraftCommandTarget;
   onAutocompleteApplied?: () => void;
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
-  onSessionMentionSelected?: (
-    attachment: AgentSessionContextAttachment | AgentProfileContextAttachment,
-  ) => void;
+  /** Enables `@` agent session references; the composer owns the draft update. */
+  onSessionReferenceSelected?: (selection: SessionReferenceSelection) => void;
+  /** Enables `#` agent profile references; the composer owns the draft update. */
+  onProfileReferenceSelected?: (selection: ProfileReferenceSelection) => void;
+  /** Bound reference intervals; `#` or `@` inside one does not reopen the picker. */
+  boundReferenceRanges?: readonly ProfileReferenceRange[];
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
   customCommands: readonly CustomCommand[];
@@ -77,6 +79,13 @@ export interface AgentAutocompleteKeyPressEvent {
   key: string;
   preventDefault: () => void;
   input: AgentAutocompleteInputSnapshot;
+}
+
+export interface SessionReferenceSelection {
+  /** The live text the mention range indexes into. */
+  text: string;
+  mention: FileMentionRange;
+  session: SessionReferenceSource;
 }
 
 export interface AgentAutocompleteInputSnapshot {
@@ -101,11 +110,6 @@ type AgentAutocompleteOption =
       type: "agent_session";
       mention: FileMentionRange;
       candidate: SessionMentionCandidate;
-    })
-  | (AutocompleteOption & {
-      type: "agent_profile";
-      mention: FileMentionRange;
-      profile: AgentProfileMention;
     });
 
 interface AgentAutocompleteResult {
@@ -137,9 +141,8 @@ interface ApplyAgentAutocompleteSelectionInput {
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   setUserInput: (nextValue: string) => void;
   onAutocompleteApplied?: () => void;
-  onSessionMentionSelected?: UseAgentAutocompleteInput["onSessionMentionSelected"];
+  onSessionReferenceSelected?: UseAgentAutocompleteInput["onSessionReferenceSelected"];
   onCustomCommandSelected: UseAgentAutocompleteInput["onCustomCommandSelected"];
-  serverId: string;
 }
 
 function applyAgentAutocompleteSelection(input: ApplyAgentAutocompleteSelectionInput): void {
@@ -187,16 +190,15 @@ function applyAgentAutocompleteSelection(input: ApplyAgentAutocompleteSelectionI
     return;
   }
 
-  const mentionAttachment = mentionAttachmentForSelection(selected, input.serverId);
-  if (mentionAttachment) {
-    applySelectedMention({
+  if (
+    applySelectedSessionReference({
+      selected,
       text: current.text,
       mention: current.fileMention,
-      attachment: mentionAttachment,
-      setUserInput: input.setUserInput,
-      onSessionMentionSelected: input.onSessionMentionSelected,
+      onSessionReferenceSelected: input.onSessionReferenceSelected,
       onAutocompleteApplied: input.onAutocompleteApplied,
-    });
+    })
+  ) {
     return;
   }
 
@@ -232,48 +234,36 @@ function applySelectedCommand(input: {
   input.onAutocompleteApplied?.();
 }
 
-function mentionAttachmentForSelection(
-  selected: AgentAutocompleteOption,
-  serverId: string,
-): AgentSessionContextAttachment | AgentProfileContextAttachment | null {
-  if (selected.type === "agent_session") {
-    return buildAgentSessionComposerAttachment({
-      serverId: selected.candidate.serverId,
-      agentId: selected.candidate.id,
-      title: selected.candidate.title,
-      provider: selected.candidate.provider,
-      model: selected.candidate.model,
-      cwd: selected.candidate.cwd,
-      workspaceId: selected.candidate.workspaceId,
-    });
-  }
-  if (selected.type === "agent_profile") {
-    return buildAgentProfileComposerAttachment({
-      serverId,
-      profile: selected.profile,
-    });
-  }
-  return null;
-}
-
-function applySelectedMention(input: {
+function applySelectedSessionReference(input: {
+  selected: AgentAutocompleteOption;
   text: string;
   mention: FileMentionRange | null;
-  attachment: AgentSessionContextAttachment | AgentProfileContextAttachment;
-  setUserInput: (nextValue: string) => void;
-  onSessionMentionSelected?: UseAgentAutocompleteInput["onSessionMentionSelected"];
+  onSessionReferenceSelected?: UseAgentAutocompleteInput["onSessionReferenceSelected"];
   onAutocompleteApplied?: () => void;
-}): void {
-  if (!input.mention) return;
-  input.setUserInput(
-    applySessionMentionReplacement({
-      text: input.text,
-      mention: input.mention,
-      label: input.attachment.attachment.title ?? "",
-    }),
-  );
-  input.onSessionMentionSelected?.(input.attachment);
+}): boolean {
+  if (
+    input.selected.type !== "agent_session" ||
+    !input.mention ||
+    !input.onSessionReferenceSelected
+  ) {
+    return false;
+  }
+  const candidate = input.selected.candidate;
+  input.onSessionReferenceSelected({
+    text: input.text,
+    mention: input.mention,
+    session: {
+      serverId: candidate.serverId,
+      agentId: candidate.id,
+      title: candidate.title,
+      provider: candidate.provider,
+      model: candidate.model,
+      cwd: candidate.cwd,
+      workspaceId: candidate.workspaceId,
+    },
+  });
   input.onAutocompleteApplied?.();
+  return true;
 }
 
 function resolveAgentAutocompleteSnapshot(input: {
@@ -323,18 +313,13 @@ function wantsSessionMentions(mode: AutocompleteMode): boolean {
   return kind !== null && mentionOptionGroups(kind).sessions;
 }
 
-function wantsProfileMentions(mode: AutocompleteMode): boolean {
-  const kind = mentionKindFromMode(mode);
-  return kind !== null && mentionOptionGroups(kind).profiles;
-}
-
 function wantsFileSuggestions(mode: AutocompleteMode): boolean {
   const kind = mentionKindFromMode(mode);
   return kind !== null && mentionOptionGroups(kind).files;
 }
 
 function isMentionAutocompleteMode(mode: AutocompleteMode): boolean {
-  return mode === "file" || mode === "chat" || mode === "agent" || mode === "all";
+  return mode === "file" || mode === "chat" || mode === "all";
 }
 
 function resolveFileSuggestionsEnabled(input: {
@@ -502,8 +487,6 @@ interface BuildAutocompleteOptionsInput {
   activeFileMention: FileMentionRange | null;
   fileSuggestions: DirectorySuggestionEntry[];
   sessionCandidates: SessionMentionCandidate[];
-  profileMentions: AgentProfileMention[];
-  serverId: string;
   t: TFunction;
 }
 
@@ -560,15 +543,10 @@ function buildMentionAutocompleteOptions(
   const sessionOptions = wantsSessionMentions(input.mode)
     ? input.sessionCandidates.map((entry) => mapSessionCandidateToOption(entry, mention))
     : [];
-  const profileOptions = wantsProfileMentions(input.mode)
-    ? input.profileMentions.map((entry) =>
-        mapProfileMentionToOption(entry, mention, input.serverId, input.t),
-      )
-    : [];
   const fileOptions = wantsFileSuggestions(input.mode)
     ? input.fileSuggestions.map((entry) => mapWorkspaceEntryToOption(entry, mention))
     : [];
-  return orderAutocompleteOptions([...profileOptions, ...sessionOptions, ...fileOptions]);
+  return orderAutocompleteOptions([...sessionOptions, ...fileOptions]);
 }
 
 function mapWorkspaceEntryToOption(
@@ -601,30 +579,12 @@ function mapSessionCandidateToOption(
   return {
     type: "agent_session",
     id: `${candidate.serverId}:${candidate.id}`,
-    label: candidate.title?.trim() || shortId,
+    label: sessionReferenceLabel({ title: candidate.title ?? "", agentId: candidate.id }),
     detail: mentionProviderModelDetail(candidate.provider, candidate.model),
     description: shortId,
     kind: "agent",
     mention,
     candidate,
-  };
-}
-
-function mapProfileMentionToOption(
-  profile: AgentProfileMention,
-  mention: FileMentionRange,
-  serverId: string,
-  t: TFunction,
-): AgentAutocompleteOption {
-  return {
-    type: "agent_profile",
-    id: `${serverId}:${profile.id}`,
-    label: profile.name,
-    detail: mentionProviderModelDetail(profile.provider, profile.model),
-    description: t("message.attachments.agentProfile"),
-    kind: "agent",
-    mention,
-    profile,
   };
 }
 
@@ -645,20 +605,6 @@ function collectOpenAgentTabIdsForServer(
     }
   }
   return ids;
-}
-
-function collectRankedProfileMentions(input: {
-  mode: AutocompleteMode;
-  profiles: readonly AgentProfileMention[];
-  query: string;
-}): AgentProfileMention[] {
-  if (!wantsProfileMentions(input.mode)) {
-    return [];
-  }
-  return rankAgentProfileMentions({
-    profiles: input.profiles,
-    query: input.query,
-  });
 }
 
 function collectRankedSessionMentions(input: {
@@ -814,9 +760,6 @@ function resolveAutocompleteEmptyText(args: {
   if (args.mode === "chat") {
     return args.t("agentAutocomplete.noSessions");
   }
-  if (args.mode === "agent") {
-    return args.t("agentAutocomplete.noProfiles");
-  }
   if (args.mode === "all") {
     return args.t("agentAutocomplete.noMentions");
   }
@@ -843,6 +786,7 @@ function resolveDraftCommandContext(draft: DraftCommandTarget | undefined) {
 
 export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAutocompleteResult {
   const skills = useSkillAutocomplete(input);
+  const profileReferences = useProfileReferenceAutocomplete(input);
   const { t } = useTranslation();
   const {
     userInput,
@@ -854,7 +798,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     draft,
     onAutocompleteApplied,
     onClientSlashCommand,
-    onSessionMentionSelected,
+    onSessionReferenceSelected,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
     customCommands,
@@ -872,17 +816,21 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const showCommandAutocomplete = activeSlashCommand !== null;
   const commandFilterQuery = activeSlashCommand?.query ?? "";
 
-  const activeFileMention = useMemo(
-    () =>
-      findActiveFileMention({
-        text: userInput,
-        cursorIndex,
-      }),
-    [cursorIndex, userInput],
-  );
+  const boundReferenceRanges = input.boundReferenceRanges;
+  const activeFileMention = useMemo(() => {
+    const mention = findActiveFileMention({
+      text: userInput,
+      cursorIndex,
+    });
+    if (!mention || !boundReferenceRanges) return mention;
+    const insideReference = boundReferenceRanges.some(
+      (range) => mention.start >= range.start && mention.start < range.end,
+    );
+    return insideReference ? null : mention;
+  }, [boundReferenceRanges, cursorIndex, userInput]);
   const mention = resolveComposerMention({
     mentionQuery: activeFileMention === null ? null : activeFileMention.query,
-    canAttachSessionMention: Boolean(onSessionMentionSelected),
+    canAttachSessionMention: Boolean(onSessionReferenceSelected),
   });
   const mentionFilter = mention?.filter ?? "";
   const [debouncedFileFilterQuery, setDebouncedFileFilterQuery] = useState(mentionFilter);
@@ -908,7 +856,6 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
-  const { config: daemonConfig } = useDaemonConfig(serverId);
 
   const mode = resolveAutocompleteMode({
     mentionKind: mention?.kind ?? null,
@@ -944,16 +891,6 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         query: mentionFilter,
       }),
     [agentId, agentsById, mentionFilter, layoutByWorkspace, mode, serverId, workspaceId],
-  );
-
-  const profileMentions = useMemo(
-    () =>
-      collectRankedProfileMentions({
-        mode,
-        profiles: daemonConfig?.agentProfiles ?? [],
-        query: mentionFilter,
-      }),
-    [daemonConfig?.agentProfiles, mentionFilter, mode],
   );
 
   const fileSuggestionsQuery = useQuery({
@@ -995,8 +932,6 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         activeSlashCommand,
         fileSuggestions: fileSuggestionsQuery.data ?? [],
         sessionCandidates,
-        profileMentions,
-        serverId,
         isDraftContext,
         isVisible,
         mode,
@@ -1013,8 +948,6 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       isDraftContext,
       isVisible,
       mode,
-      profileMentions,
-      serverId,
       sessionCandidates,
       t,
     ],
@@ -1034,8 +967,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         onCustomCommandSelected,
         setUserInput,
         onAutocompleteApplied,
-        onSessionMentionSelected,
-        serverId,
+        onSessionReferenceSelected,
       });
     },
     [
@@ -1043,8 +975,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       onAutocompleteApplied,
       onClientSlashCommand,
       onCustomCommandSelected,
-      onSessionMentionSelected,
-      serverId,
+      onSessionReferenceSelected,
       setUserInput,
       userInput,
       cursorIndex,
@@ -1086,6 +1017,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const emptyText = resolveAutocompleteEmptyText({ mode, draft, t });
 
   if (skills.isActive) return skills;
+  if (profileReferences.isActive) return profileReferences;
 
   return {
     isVisible,

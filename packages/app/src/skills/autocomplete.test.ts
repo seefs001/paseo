@@ -53,6 +53,15 @@ describe("shared skill autocomplete", () => {
       { ...base, name: "other", description: "Draw images" },
     ];
     expect(rankSkills(skills, "REVIEW").map((s) => s.name)).toEqual(["zebra", "beta", "alpha"]);
+    expect(
+      rankSkills(
+        [
+          { ...base, name: "tdd", usageCount: 9 },
+          { ...base, name: "to-spec", userInvoked: true },
+        ],
+        "",
+      ).map((skill) => skill.name),
+    ).toEqual(["to-spec", "tdd"]);
     expect(rankSkills(skills, "other").map((s) => s.name)).toEqual(["other"]);
     expect(skills[0].name).toBe("zebra");
   });

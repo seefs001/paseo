@@ -20,6 +20,7 @@ import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
+  prepareComposerMessageForSubmit,
 } from "@/composer/attachments/submit";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { MenuHeader } from "@/components/headers/menu-header";
@@ -74,6 +75,7 @@ import {
 } from "@/projects/host-projects";
 import { useProjectIcons } from "@/projects/icons";
 import type { ComposerAttachment } from "@/attachments/types";
+import { updateProfileReferences } from "@/composer/profile-reference/model";
 import { useDraftWorkspaceAttachmentScopeKey } from "@/attachments/workspace-attachments-store";
 import type { MessagePayload } from "@/composer/types";
 import type { UserComposerAttachment } from "@/attachments/types";
@@ -441,7 +443,9 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     format: attachmentSubmitFormat,
   });
   const workspaceNamingAttachments = getWorkspaceNamingAttachments(reviewAttachments);
-  const wirePayload = splitComposerAttachmentsForSubmit(attachments, {
+  const wirePayload = prepareComposerMessageForSubmit({
+    text,
+    attachments,
     format: attachmentSubmitFormat,
   });
   const images = await encodeImages(wirePayload.images);
@@ -456,7 +460,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       thinkingOptionId: composerState.effectiveThinkingOptionId || undefined,
       featureValues: composerState.featureValues,
     },
-    initialPrompt: text,
+    initialPrompt: wirePayload.text,
     clientMessageId: `${input.draftId}:initial-message`,
     images: images?.length ? images : undefined,
     attachments: wirePayload.attachments?.length ? wirePayload.attachments : undefined,
@@ -598,7 +602,15 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
   const draftId = draftIdInput?.trim() || generateDraftId();
   const clientMessageId = `${draftId}:initial-message`;
   const timestamp = Date.now();
-  const wirePayload = splitComposerAttachmentsForSubmit(attachments, {
+  const trimmedText = text.trim();
+  const trimmedAttachments = updateProfileReferences({
+    previousText: text,
+    text: trimmedText,
+    attachments,
+  });
+  const wirePayload = prepareComposerMessageForSubmit({
+    text: trimmedText,
+    attachments: trimmedAttachments,
     format: resolveComposerAttachmentSubmitFormat({
       supportsForgeAttachments: input.supportsForgeSearch,
     }),
@@ -616,7 +628,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     workspaceId,
     agentId: null,
     clientMessageId,
-    text: text.trim(),
+    text: wirePayload.text,
     timestamp,
     ...(wirePayload.images.length > 0 ? { images: wirePayload.images } : {}),
     ...(wirePayload.attachments.length > 0 ? { attachments: wirePayload.attachments } : {}),
@@ -626,8 +638,8 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     serverId,
     workspaceId,
     draftId,
-    text: text.trim(),
-    attachments,
+    text: trimmedText,
+    attachments: trimmedAttachments,
     cwd: submission.cwd,
     provider: submission.provider,
     clientMessageId,
@@ -1569,6 +1581,7 @@ export function NewWorkspaceScreen({
       blurOnSubmit={true}
       textSource={chatDraft.textSource}
       onChangeText={chatDraft.editText}
+      onReplaceInput={chatDraft.replaceInput}
       textReplacement={chatDraft.textReplacement}
       attachments={chatDraft.attachments}
       attachmentScopeKeys={visibleDraftContextScopeKeys}

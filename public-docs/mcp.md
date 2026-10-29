@@ -72,6 +72,21 @@ voice-only `speak` tool is separate from this policy.
 This setting limits the catalog presented to an agent. It is not a security boundary for an agent
 that can access the host through a shell.
 
+## Label MCP calls
+
+The **MCP calls** page in the sidebar lists recent calls on each connected host. Tool arguments are
+stored; results are not. Filter the list by tool name, caller, host, outcome, or label.
+
+To tag the calls of an external client, add `label` to the MCP URL you give that client:
+
+```text
+http://127.0.0.1:6767/mcp/agents?label=cursor
+```
+
+Separate values with commas or repeat the parameter to add several labels. Calls from an agent carry
+that agent's labels as `key=value`, including labels set through `create_agent`; Paseo's internal
+`paseo.*` labels are left out. A call keeps at most 8 labels of up to 48 characters each.
+
 ## Mental model
 
 Workspaces decide where work happens; agent parentage decides who owns the work.

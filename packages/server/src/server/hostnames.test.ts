@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { PersistedConfigSchema } from "./persisted-config.js";
-import { isHostnameAllowed, mergeHostnames, parseHostnamesEnv } from "./hostnames.js";
+import {
+  isHostnameAllowed,
+  mergeHostnames,
+  normalizeHostnameAllowlist,
+  parseHostnamesEnv,
+} from "./hostnames.js";
 
 describe("hostnames (vite-style)", () => {
   it("allows localhost by default", () => {
@@ -35,6 +40,16 @@ describe("hostnames (vite-style)", () => {
   it("merges arrays (append + de-dupe) and short-circuits on true", () => {
     expect(mergeHostnames([["a"], ["a", "b"]])).toEqual(["a", "b"]);
     expect(mergeHostnames([["a"], true, ["b"]])).toBe(true);
+  });
+
+  it("normalizes an allowlist and rejects a host that is not a name", () => {
+    expect(normalizeHostnameAllowlist([" Paseo.Example.COM ", "paseo.example.com"])).toEqual([
+      "paseo.example.com",
+    ]);
+    expect(normalizeHostnameAllowlist([".Example.com"])).toEqual([".example.com"]);
+    expect(() => normalizeHostnameAllowlist(["https://paseo.example.com"])).toThrow(
+      /Invalid hostname/,
+    );
   });
 
   it("parses env var values", () => {

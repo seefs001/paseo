@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import {
+  isTextSelectionHoldingReveal,
+  subscribeTextSelectionHold,
+} from "@/agent-stream/text-selection-hold";
 import {
   advanceTextReveal,
   beginTextReveal,
@@ -27,6 +31,12 @@ export function useRevealedText(text: string, phase: MarkdownPhase): string {
   const [, forceRender] = useState(0);
   const frameRef = useRef<number | null>(null);
   const lastFrameAtRef = useRef<number | null>(null);
+  // Re-render when a selection starts or ends so the clock restarts after the hold.
+  const holdReveal = useSyncExternalStore(
+    subscribeTextSelectionHold,
+    isTextSelectionHoldingReveal,
+    () => false,
+  );
 
   stateRef.current = retargetTextReveal(stateRef.current, text);
 
@@ -39,6 +49,11 @@ export function useRevealedText(text: string, phase: MarkdownPhase): string {
         forceRender((tick) => tick + 1);
       }
     };
+
+    // Replacing the text node drops the selection, and follow-output then scrolls it away.
+    if (isTextSelectionHoldingReveal()) {
+      return;
+    }
 
     if (!pacingSupported || phase !== "streaming") {
       settle();
@@ -55,6 +70,9 @@ export function useRevealedText(text: string, phase: MarkdownPhase): string {
 
     const tick = (timestamp: number) => {
       frameRef.current = null;
+      if (isTextSelectionHoldingReveal()) {
+        return;
+      }
       const frame = nextTextRevealFrame(lastFrameAtRef.current, timestamp);
       if (!frame) {
         frameRef.current = requestAnimationFrame(tick);
@@ -79,7 +97,7 @@ export function useRevealedText(text: string, phase: MarkdownPhase): string {
         frameRef.current = null;
       }
     };
-  }, [text, pacingSupported, phase]);
+  }, [text, pacingSupported, phase, holdReveal]);
 
   return pacingSupported
     ? visibleRevealedText(stateRef.current, { streaming: phase === "streaming" })

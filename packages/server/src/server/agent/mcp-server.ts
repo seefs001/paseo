@@ -6,11 +6,22 @@ import type {
   ServerRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { formatCallArguments } from "./mcp-call-log.js";
 import { addModelVisibleStructuredContent } from "./tools/paseo-tool-serialization.js";
 import { createPaseoToolCatalog, type PaseoToolHostDependencies } from "./tools/paseo-tools.js";
 import type { PaseoToolResult } from "./tools/types.js";
 
-export type AgentMcpServerOptions = PaseoToolHostDependencies;
+export interface McpToolCallRecord {
+  tool: string;
+  ok: boolean;
+  error: string | null;
+  durationMs: number;
+  arguments: string | null;
+}
+
+export type AgentMcpServerOptions = PaseoToolHostDependencies & {
+  recordToolCall?: (event: McpToolCallRecord) => void;
+};
 
 type McpToolContext = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -29,7 +40,8 @@ function toMcpToolResult(result: PaseoToolResult): CallToolResult {
 }
 
 export async function createAgentMcpServer(options: AgentMcpServerOptions): Promise<McpServer> {
-  const catalog = await createPaseoToolCatalog(options);
+  const { recordToolCall, ...catalogOptions } = options;
+  const catalog = await createPaseoToolCatalog(catalogOptions);
   const server = new McpServer({
     name: "agent-mcp",
     version: "2.0.0",
@@ -43,10 +55,42 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         description: tool.description,
         inputSchema: tool.inputSchema,
       },
-      async (args: unknown, context?: McpToolContext) =>
-        toMcpToolResult(await catalog.executeTool(tool.name, args, { signal: context?.signal })),
+      async (args: unknown, context?: McpToolContext) => {
+        const started = Date.now();
+        try {
+          const result = await catalog.executeTool(tool.name, args, { signal: context?.signal });
+          safeRecordToolCall(recordToolCall, {
+            tool: tool.name,
+            ok: result.isError !== true,
+            error: result.isError === true ? "Tool returned an error" : null,
+            durationMs: Date.now() - started,
+            arguments: formatCallArguments(args),
+          });
+          return toMcpToolResult(result);
+        } catch (error) {
+          safeRecordToolCall(recordToolCall, {
+            tool: tool.name,
+            ok: false,
+            error: error instanceof Error ? error.message : "Tool call failed",
+            durationMs: Date.now() - started,
+            arguments: formatCallArguments(args),
+          });
+          throw error;
+        }
+      },
     );
   }
 
   return server;
+}
+
+function safeRecordToolCall(
+  recordToolCall: AgentMcpServerOptions["recordToolCall"],
+  event: McpToolCallRecord,
+): void {
+  try {
+    recordToolCall?.(event);
+  } catch {
+    // A log failure must not fail the tool call.
+  }
 }

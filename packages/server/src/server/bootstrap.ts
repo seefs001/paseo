@@ -143,6 +143,8 @@ import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
+import { getMcpCallLog, recordMcpRequestBody, resolveCallLabels } from "./agent/mcp-call-log.js";
+import { mergeHostDisabledTools } from "./agent/paseo-tool-policy.js";
 import {
   createPaseoToolCatalog,
   createPaseoAgentToolManifest,
@@ -416,6 +418,7 @@ export interface PaseoDaemonConfig {
   trustedProxies?: true | string[];
   mcpEnabled?: boolean;
   mcpInjectIntoAgents?: boolean;
+  mcpDisabledTools?: readonly string[];
   browserToolsEnabled?: boolean;
   git?: {
     maxProcessesPerSecond: number;
@@ -566,7 +569,10 @@ function resolveReloadEnv(config: PaseoDaemonConfig): NodeJS.ProcessEnv {
   return config.configReload?.env ?? process.env;
 }
 
-function createInitialMutableDaemonConfig(config: ResolvedDaemonSettings): MutableDaemonConfig {
+function createInitialMutableDaemonConfig(
+  config: ResolvedDaemonSettings,
+  passwordSet: boolean,
+): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
   const initialConfig: MutableDaemonConfig = {
@@ -574,6 +580,9 @@ function createInitialMutableDaemonConfig(config: ResolvedDaemonSettings): Mutab
     mcp: {
       enabled: config.mcpEnabled ?? true,
       injectIntoAgents: config.mcpInjectIntoAgents ?? true,
+      ...(config.mcpDisabledTools !== undefined
+        ? { disabledTools: [...config.mcpDisabledTools] }
+        : {}),
     },
     ...(config.hostnames !== undefined ? { hostnames: config.hostnames } : {}),
     cors: { allowedOrigins: config.corsAllowedOrigins },
@@ -588,6 +597,7 @@ function createInitialMutableDaemonConfig(config: ResolvedDaemonSettings): Mutab
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
     },
+    passwordSet,
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,
@@ -625,7 +635,10 @@ export async function createPaseoDaemon(
   const bootstrapStart = performance.now();
   const elapsed = () => `${(performance.now() - bootstrapStart).toFixed(0)}ms`;
   const daemonVersion = config.daemonVersion ?? resolveDaemonVersion(import.meta.url);
-  const initialMutableConfig = createInitialMutableDaemonConfig(config);
+  const initialMutableConfig = createInitialMutableDaemonConfig(
+    config,
+    Boolean(config.auth?.password),
+  );
   const speechService = createSpeechService({
     logger,
     openaiConfig: config.openai,
@@ -642,13 +655,17 @@ export async function createPaseoDaemon(
     }),
     reloadSource: {
       resolve: (persisted) => {
+        const reloadEnv = resolveReloadEnv(config);
         const reloaded = resolveReloadableConfig(persisted, {
-          env: resolveReloadEnv(config),
+          env: reloadEnv,
           cli: config.configReload?.cli,
           relayEnabledFallback: config.configReload?.relayEnabledFallback,
         });
         return {
-          mutable: createInitialMutableDaemonConfig(reloaded),
+          mutable: createInitialMutableDaemonConfig(
+            reloaded,
+            Boolean(reloadEnv.PASEO_PASSWORD?.trim() || persisted.daemon?.auth?.password),
+          ),
           overrideControlledPaths: reloaded.overrideControlledPaths,
         };
       },
@@ -1553,9 +1570,13 @@ export async function createPaseoDaemon(
     createPaseoWorktree: createAgentCommandDependencies.createPaseoWorktree,
     browserToolsEnabled: browserToolsPolicy.isEnabled(),
     browserToolsBroker,
-    paseoToolPolicy:
+    paseoToolPolicy: mergeHostDisabledTools(
       runtime.paseoToolPolicy ??
-      (runtime.callerAgentId ? agentManager.getPaseoToolPolicy(runtime.callerAgentId) : undefined),
+        (runtime.callerAgentId
+          ? agentManager.getPaseoToolPolicy(runtime.callerAgentId)
+          : undefined),
+      daemonConfigStore.get().mcp.disabledTools,
+    ),
     paseoHome: config.paseoHome,
     worktreesRoot: config.worktreesRoot,
     callerAgentId: runtime.callerAgentId,
@@ -1581,15 +1602,56 @@ export async function createPaseoDaemon(
   {
     const agentMcpRoute = "/mcp/agents";
 
-    const createAgentMcpSession = async (callerAgentId?: string) => {
-      const agentMcpServer = await createAgentMcpServer(
-        createAgentToolHostDependencies({
+    const mcpCallLog = () => getMcpCallLog(config.paseoHome, logger);
+    const readCallerAgentId = (req: express.Request): string | null => {
+      const raw = req.query.callerAgentId;
+      if (typeof raw === "string") return raw;
+      if (Array.isArray(raw) && typeof raw[0] === "string") return raw[0];
+      return null;
+    };
+    const recordHttpCall = (params: {
+      body: unknown;
+      callerAgentId: string | null;
+      labels: readonly string[];
+      ok: boolean;
+      error: string | null;
+      durationMs: number;
+      skipToolCalls: number;
+    }) => {
+      try {
+        recordMcpRequestBody(mcpCallLog(), params);
+      } catch (error) {
+        logger.warn({ err: error }, "Failed to record Agent MCP call");
+      }
+    };
+
+    const createAgentMcpSession = async (session: {
+      callerAgentId: string | undefined;
+      labels: readonly string[];
+      onToolCall: () => void;
+    }) => {
+      const { callerAgentId } = session;
+      const agentMcpServer = await createAgentMcpServer({
+        ...createAgentToolHostDependencies({
           callerAgentId,
           paseoToolPolicy: callerAgentId
             ? agentManager.getPaseoToolPolicy(callerAgentId)
             : undefined,
         }),
-      );
+        recordToolCall: (event) => {
+          session.onToolCall();
+          mcpCallLog().record({
+            callerAgentId: callerAgentId ?? null,
+            method: "tools/call",
+            tool: event.tool,
+            ok: event.ok,
+            error: event.error,
+            durationMs: event.durationMs,
+            arguments: event.arguments,
+            labels: session.labels,
+          });
+        },
+      });
 
       // Stateless mode: each HTTP request builds a fresh server + transport that is
       // torn down when the response closes, so no per-session state is retained between
@@ -1616,7 +1678,23 @@ export async function createPaseoDaemon(
       req: express.Request,
       res: express.Response,
     ): Promise<void> => {
+      const callerAgentId = readCallerAgentId(req);
+      const labels = resolveCallLabels({
+        connection: req.query.label,
+        agentLabels: callerAgentId ? (agentManager.getAgent(callerAgentId)?.labels ?? null) : null,
+      });
       if (!mcpEnabled) {
+        if (req.method === "POST") {
+          recordHttpCall({
+            body: req.body,
+            callerAgentId,
+            labels,
+            ok: false,
+            error: "Agent MCP endpoint disabled",
+            durationMs: 0,
+            skipToolCalls: 0,
+          });
+        }
         res.status(404).json({ error: "Agent MCP endpoint disabled" });
         return;
       }
@@ -1631,6 +1709,17 @@ export async function createPaseoDaemon(
           authorizationHeader: req.header("authorization"),
         }))
       ) {
+        if (req.method === "POST") {
+          recordHttpCall({
+            body: req.body,
+            callerAgentId,
+            labels,
+            ok: false,
+            error: "Unauthorized",
+            durationMs: 0,
+            skipToolCalls: 0,
+          });
+        }
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
@@ -1646,6 +1735,22 @@ export async function createPaseoDaemon(
           "Agent MCP request",
         );
       }
+      const started = Date.now();
+      let toolCallsRecorded = 0;
+      let recordedHttp = false;
+      const settleHttpCall = (ok: boolean, error: string | null) => {
+        if (recordedHttp || req.method !== "POST") return;
+        recordedHttp = true;
+        recordHttpCall({
+          body: req.body,
+          callerAgentId,
+          labels,
+          ok,
+          error,
+          durationMs: Date.now() - started,
+          skipToolCalls: toolCallsRecorded,
+        });
+      };
       try {
         // Stateless: GET (standalone SSE) and DELETE (session termination) have no
         // meaning without sessions. The MCP client tolerates 405 on the GET stream
@@ -1661,14 +1766,13 @@ export async function createPaseoDaemon(
           });
           return;
         }
-        const callerAgentIdRaw = req.query.callerAgentId;
-        let callerAgentId: string | undefined;
-        if (typeof callerAgentIdRaw === "string") {
-          callerAgentId = callerAgentIdRaw;
-        } else if (Array.isArray(callerAgentIdRaw) && typeof callerAgentIdRaw[0] === "string") {
-          callerAgentId = callerAgentIdRaw[0];
-        }
-        const { server, transport } = await createAgentMcpSession(callerAgentId);
+        const { server, transport } = await createAgentMcpSession({
+          callerAgentId: callerAgentId ?? undefined,
+          labels,
+          onToolCall: () => {
+            toolCallsRecorded += 1;
+          },
+        });
         res.on("close", () => {
           void transport.close();
           void server.close();
@@ -1679,8 +1783,13 @@ export async function createPaseoDaemon(
           res as unknown as ServerResponse,
           req.body,
         );
+        settleHttpCall(
+          res.statusCode < 400,
+          res.statusCode < 400 ? null : `HTTP ${res.statusCode}`,
+        );
       } catch (err) {
         logger.error({ err }, "Failed to handle Agent MCP request");
+        settleHttpCall(false, "Internal MCP server error");
         if (!res.headersSent) {
           res.status(500).json({
             jsonrpc: "2.0",

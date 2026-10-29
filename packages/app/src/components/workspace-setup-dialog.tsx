@@ -27,7 +27,7 @@ import { encodeImages } from "@/utils/encode-images";
 import { toErrorMessage } from "@/utils/error-messages";
 import {
   resolveComposerAttachmentSubmitFormat,
-  splitComposerAttachmentsForSubmit,
+  prepareComposerMessageForSubmit,
 } from "@/composer/attachments/submit";
 import type {
   CreateAgentRequestOptions,
@@ -317,7 +317,9 @@ export function WorkspaceSetupDialog() {
           throw new Error(t("workspaceSetup.errors.selectModel"));
         }
 
-        const wirePayload = splitComposerAttachmentsForSubmit(attachments, {
+        const wirePayload = prepareComposerMessageForSubmit({
+          text,
+          attachments,
           format: resolveComposerAttachmentSubmitFormat({
             supportsForgeAttachments: supportsForgeSearch,
           }),
@@ -327,7 +329,7 @@ export function WorkspaceSetupDialog() {
         let createdAgent: AgentSnapshotPayload | undefined;
         const { workspaceId: _workspaceId, ...agentInput } = buildCreateAgentOptions({
           composerState,
-          text,
+          text: wirePayload.text,
           attachments: wirePayload.attachments,
           encodedImages: encodedImages ?? null,
           workspaceDirectory: cwd,
@@ -446,6 +448,7 @@ export function WorkspaceSetupDialog() {
             blurOnSubmit={true}
             textSource={chatDraft.textSource}
             onChangeText={chatDraft.editText}
+            onReplaceInput={chatDraft.replaceInput}
             textReplacement={chatDraft.textReplacement}
             attachments={chatDraft.attachments}
             onChangeAttachments={chatDraft.setAttachments}

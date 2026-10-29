@@ -223,9 +223,15 @@ export const MutableDaemonConfigSchema = z
       .object({
         enabled: z.boolean().optional(),
         injectIntoAgents: z.boolean(),
+        // COMPAT(mcpToolAllowlist): added in v0.14.0, remove gate after 2027-05-15.
+        // Absent means every Paseo tool method stays allowed.
+        disabledTools: z.array(z.string().min(1)).optional(),
       })
       .passthrough(),
     hostnames: z.union([z.literal(true), z.array(z.string())]).optional(),
+    // COMPAT(daemonPassword): added in v0.13.2, remove gate after 2027-05-01.
+    // True when a password hash is stored. The hash is never sent.
+    passwordSet: z.boolean().optional(),
     cors: z
       .object({
         allowedOrigins: z.array(z.string()),
@@ -264,7 +270,17 @@ export const MutableDaemonConfigSchema = z
 export const MutableDaemonConfigPatchSchema = z
   .object({
     relay: MutableRelayConfigSchema.partial().optional(),
-    mcp: z.object({ injectIntoAgents: z.boolean().optional() }).passthrough().optional(),
+    mcp: z
+      .object({
+        injectIntoAgents: z.boolean().optional(),
+        disabledTools: z.array(z.string().min(1)).optional(),
+      })
+      .passthrough()
+      .optional(),
+    // COMPAT(daemonHostnames): added in v0.13.2, remove gate after 2027-05-01.
+    // Older daemons ignore this patch. The client hides the control until
+    // server_info.features.daemonHostnames is set.
+    hostnames: z.union([z.literal(true), z.array(z.string())]).optional(),
     browserTools: MutableBrowserToolsConfigSchema.partial().optional(),
     providers: z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
@@ -1492,6 +1508,37 @@ export const HubManagementDaemonPermissionsUpdateRequestSchema = z.object({
 export const DiagnosticsRequestSchema = z.object({
   type: z.literal("diagnostics.request"),
   requestId: z.string(),
+});
+
+export const McpCallRecordSchema = z.object({
+  id: z.string().min(1),
+  at: z.string().min(1),
+  callerAgentId: z.string().nullable(),
+  method: z.string().min(1),
+  tool: z.string().nullable(),
+  ok: z.boolean(),
+  error: z.string().nullable(),
+  durationMs: z.number().int().nonnegative(),
+  /** Tool input, clipped. Absent on records written before this field existed. */
+  arguments: z.string().max(4_001).nullable().optional(),
+  /**
+   * `label` values from the client's MCP URL, then the caller agent's labels as `key=value`.
+   * Absent when there are none and on records written before this field existed.
+   */
+  labels: z.array(z.string().min(1)).optional(),
+});
+export type McpCallRecord = z.infer<typeof McpCallRecordSchema>;
+
+export const DaemonMcpListCallsRequestSchema = z.object({
+  type: z.literal("daemon.mcp.list_calls.request"),
+  requestId: z.string(),
+  limit: z.number().int().positive().max(200).optional(),
+});
+
+export const DaemonPasswordSetRequestSchema = z.object({
+  type: z.literal("daemon.password.set.request"),
+  requestId: z.string(),
+  password: z.string().min(1).max(1024),
 });
 
 export const PluginCatalogGetRequestSchema = z.object({
@@ -3360,6 +3407,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HubManagementDaemonDisconnectRequestSchema,
   HubManagementDaemonPermissionsUpdateRequestSchema,
   DiagnosticsRequestSchema,
+  DaemonMcpListCallsRequestSchema,
+  DaemonPasswordSetRequestSchema,
   PluginCatalogGetRequestSchema,
   PluginListRequestSchema,
   PluginLogsGetRequestSchema,
@@ -3900,6 +3949,14 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
+        // COMPAT(daemonHostnames): added in v0.13.2, remove gate after 2027-05-01.
+        daemonHostnames: z.boolean().optional(),
+        // COMPAT(mcpCallLog): added in v0.13.2, remove gate after 2027-05-01.
+        mcpCallLog: z.boolean().optional(),
+        // COMPAT(mcpToolAllowlist): added in v0.14.0, remove gate after 2027-05-15.
+        mcpToolAllowlist: z.boolean().optional(),
+        // COMPAT(daemonPassword): added in v0.13.2, remove gate after 2027-05-01.
+        daemonPassword: z.boolean().optional(),
       })
       .optional(),
   })
@@ -5255,6 +5312,27 @@ export const DiagnosticsResponseSchema = z.object({
     .object({
       requestId: z.string(),
       diagnostic: z.string(),
+    })
+    .passthrough(),
+});
+
+export const DaemonMcpListCallsResponseSchema = z.object({
+  type: z.literal("daemon.mcp.list_calls.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      calls: z.array(McpCallRecordSchema),
+    })
+    .passthrough(),
+});
+
+export const DaemonPasswordSetResponseSchema = z.object({
+  type: z.literal("daemon.password.set.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      passwordSet: z.literal(true),
+      restartRequired: z.literal(true),
     })
     .passthrough(),
 });
@@ -7143,6 +7221,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   HubManagementDaemonDisconnectResponseSchema,
   HubManagementDaemonPermissionsUpdateResponseSchema,
   DiagnosticsResponseSchema,
+  DaemonMcpListCallsResponseSchema,
+  DaemonPasswordSetResponseSchema,
   GetDaemonConfigResponseMessageSchema,
   SetDaemonConfigResponseMessageSchema,
   ReadProjectConfigResponseMessageSchema,

@@ -6,7 +6,8 @@ import React, {
   useReducer,
   useState,
 } from "react";
-import { TextInput } from "react-native";
+import { Text, TextInput } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import PasteInput, {
   type PastedFile,
@@ -14,6 +15,7 @@ import PasteInput, {
 } from "@mattermost/react-native-paste-input";
 import { useIsInsideBottomSheet } from "@/components/ui/bottom-sheet-scope";
 import type { EditingTextInputHandle, EditingTextInputProps } from "./types";
+import { splitHighlightedText } from "./highlight-ranges";
 
 type NativeInput = (TextInput | PasteTextInputInstance) & {
   blur(): void;
@@ -31,6 +33,8 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     const isInsideBottomSheet = useIsInsideBottomSheet();
     const {
       initialValue = "",
+      highlights,
+      onHighlightPress,
       onChangeText,
       onPasteImages,
       onPasteError,
@@ -56,7 +60,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     // Fabric re-measures the Android input when its `text` prop changes. A native edit only
     // refreshes a cached spannable, and batched IME deletes (Gboard hold-to-delete) leave the
     // measured height at the previous content, so an emptied draft keeps several lines. Render
-    // again after every edit so `defaultValue` carries the current text and the input is
+    // again after every edit so `defaultValue` (or highlighted children) carries the text and is
     // re-measured. Only this leaf renders; the composer stays isolated from typing.
     const [, bumpTextRevision] = useReducer((revision: number) => revision + 1, 0);
 
@@ -90,6 +94,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
         getText: () => textRef.current,
         replaceText: (nextText, selection) => {
           textRef.current = nextText;
+          bumpTextRevision();
           if (inputRef.current?.replaceText) {
             inputRef.current.replaceText(nextText, selection);
             return;
@@ -147,6 +152,23 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     );
 
     const autoFocus = replacement.revision === 0 ? props.autoFocus : replacement.autoFocus;
+    // Fabric concatenates text and children. Removing the last highlight swaps the
+    // sources in one render; its attributed-string comparison also clears the old styling.
+    const contentProps = highlights?.length
+      ? {
+          children: (
+            <Text>
+              {splitHighlightedText(textRef.current, highlights).map((part) => (
+                <HighlightedInputText
+                  key={part.start}
+                  part={part}
+                  onHighlightPress={onHighlightPress}
+                />
+              ))}
+            </Text>
+          ),
+        }
+      : { defaultValue: textRef.current };
 
     if (onPasteImages || onPasteError) {
       return (
@@ -155,7 +177,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
           autoFocus={autoFocus}
           key={replacement.revision}
           ref={assignInputRef as React.Ref<PasteTextInputInstance>}
-          defaultValue={textRef.current}
+          {...contentProps}
           onChangeText={handleChangeText}
           onPaste={handlePaste}
         />
@@ -168,7 +190,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
           autoFocus={autoFocus}
           key={replacement.revision}
           ref={assignInputRef as unknown as React.Ref<never>}
-          defaultValue={textRef.current}
+          {...contentProps}
           onChangeText={handleChangeText}
         />
       );
@@ -179,9 +201,33 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
         autoFocus={autoFocus}
         key={replacement.revision}
         ref={assignInputRef as React.Ref<TextInput>}
-        defaultValue={textRef.current}
+        {...contentProps}
         onChangeText={handleChangeText}
       />
     );
   },
 );
+
+const styles = StyleSheet.create((theme) => ({
+  highlight: { backgroundColor: theme.colors.interactionHighlight },
+}));
+
+function HighlightedInputText({ part, onHighlightPress }: HighlightedInputTextProps) {
+  const handlePress = useCallback(() => {
+    onHighlightPress?.(part.start);
+  }, [onHighlightPress, part.start]);
+  return (
+    <Text
+      style={part.highlighted ? styles.highlight : undefined}
+      onPress={part.highlighted && onHighlightPress ? handlePress : undefined}
+      suppressHighlighting
+    >
+      {part.text}
+    </Text>
+  );
+}
+
+interface HighlightedInputTextProps {
+  part: { start: number; text: string; highlighted: boolean };
+  onHighlightPress: EditingTextInputProps["onHighlightPress"];
+}

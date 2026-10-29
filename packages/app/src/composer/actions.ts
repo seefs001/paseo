@@ -12,13 +12,14 @@ import {
   userAttachmentsOnly,
 } from "@/attachments/workspace-attachment-utils";
 import {
-  splitComposerAttachmentsForSubmit,
+  prepareComposerMessageForSubmit,
   type ComposerAttachmentSubmitFormat,
 } from "@/composer/attachments/submit";
 import { createUserMessage, generateMessageId, type UserMessageItem } from "@/types/stream";
 import type { MessageSubmissionRejectionOutcome } from "@/composer/submission/model";
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { i18n } from "@/i18n/i18next";
+import { updateProfileReferences } from "@/composer/profile-reference/model";
 
 export interface QueuedComposerMessage {
   id: string;
@@ -53,7 +54,7 @@ export interface ComposerSendClient {
       messageId: string;
       activeTurnBehavior?: ActiveTurnBehavior;
       images: Array<{ data: string; mimeType: string }>;
-      attachments: ReturnType<typeof splitComposerAttachmentsForSubmit>["attachments"];
+      attachments: ReturnType<typeof prepareComposerMessageForSubmit>["attachments"];
     },
   ) => Promise<unknown>;
   uploadFile: (input: { fileName: string; mimeType: string; bytes: Uint8Array }) => Promise<{
@@ -202,13 +203,15 @@ export interface DispatchComposerAgentMessageInput {
 export async function dispatchComposerAgentMessage(
   input: DispatchComposerAgentMessageInput,
 ): Promise<void> {
-  const wirePayload = splitComposerAttachmentsForSubmit(input.attachments, {
+  const wirePayload = prepareComposerMessageForSubmit({
+    text: input.text,
+    attachments: input.attachments,
     format: input.attachmentSubmitFormat,
   });
   const clientMessageId = generateMessageId();
   const userMessage = createUserMessage({
     clientMessageId,
-    text: input.text,
+    text: wirePayload.text,
     timestamp: new Date(),
     images: wirePayload.images,
     attachments: wirePayload.attachments,
@@ -219,7 +222,7 @@ export async function dispatchComposerAgentMessage(
   input.submission.begin(input.agentId, userMessage);
   try {
     const imagesData = await input.encodeImages(wirePayload.images);
-    await input.client.sendAgentMessage(input.agentId, input.text, {
+    await input.client.sendAgentMessage(input.agentId, wirePayload.text, {
       messageId: clientMessageId,
       ...(input.activeTurnBehavior ? { activeTurnBehavior: input.activeTurnBehavior } : {}),
       images: imagesData ?? [],
@@ -245,13 +248,18 @@ export interface QueueComposerMessageResult {
 
 export function queueComposerMessage(input: QueueComposerMessageInput): QueueComposerMessageResult {
   const trimmed = input.text.trim();
-  if (!trimmed && input.attachments.length === 0) {
+  const attachments = updateProfileReferences({
+    previousText: input.text,
+    text: trimmed,
+    attachments: input.attachments,
+  });
+  if (!trimmed && attachments.length === 0) {
     return { queued: null };
   }
   const item: QueuedComposerMessage = {
     id: generateMessageId(),
     text: trimmed,
-    attachments: input.attachments,
+    attachments,
   };
   input.queue.write((prev) => {
     const next = new Map(prev);
@@ -348,7 +356,12 @@ export function openComposerAttachment(input: OpenComposerAttachmentInput): void
     input.setLightboxMetadata(input.attachment.metadata);
     return;
   }
-  if (input.attachment.kind === "file" || input.attachment.kind === "workspace_file") {
+  if (
+    input.attachment.kind === "file" ||
+    input.attachment.kind === "workspace_file" ||
+    input.attachment.kind === "profile_reference" ||
+    input.attachment.kind === "session_reference"
+  ) {
     return;
   }
   if (isWorkspaceAttachment(input.attachment)) {

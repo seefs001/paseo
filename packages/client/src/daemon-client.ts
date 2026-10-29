@@ -151,6 +151,7 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type {
   AgentConfigApply,
+  McpCallRecord,
   MutableDaemonConfig,
   MutableDaemonConfigPatch,
 } from "@getpaseo/protocol/messages";
@@ -5618,6 +5619,36 @@ export class DaemonClient {
       },
       responseType: "set_daemon_config_response",
     });
+  }
+
+  async listMcpCalls(limit?: number, requestId?: string): Promise<McpCallRecord[]> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"daemon.mcp.list_calls.response">({
+        requestId,
+        message: {
+          type: "daemon.mcp.list_calls.request",
+          ...(limit !== undefined ? { limit } : {}),
+        },
+      });
+    return payload.calls;
+  }
+
+  async setDaemonPassword(
+    password: string,
+    requestId?: string,
+  ): Promise<{ passwordSet: true; restartRequired: true }> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"daemon.password.set.response">({
+        requestId,
+        message: {
+          type: "daemon.password.set.request",
+          password,
+        },
+      });
+    return {
+      passwordSet: payload.passwordSet,
+      restartRequired: payload.restartRequired,
+    };
   }
 
   async listLocalSpeechModels(requestId?: string): Promise<LocalSpeechModel[]> {

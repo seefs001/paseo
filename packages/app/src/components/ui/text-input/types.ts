@@ -19,7 +19,11 @@ export interface EditingTextInputProps extends Omit<
   "defaultValue" | "onChangeText" | "value"
 > {
   initialValue?: string;
-  onChangeText?: (text: string) => void;
+  /** Background-only highlights, in UTF-16 half-open text intervals. */
+  highlights?: readonly { start: number; end: number }[];
+  /** A collapsed caret press that landed on a highlight. Index is a UTF-16 offset. */
+  onHighlightPress?: (index: number) => void;
+  onChangeText?: (text: string, selectionBefore?: { start: number; end: number }) => void;
   onPasteImages?: (files: readonly NativePastedFile[]) => void;
   onPasteError?: (message: string) => void;
   variant?: "default" | "bottom-sheet";

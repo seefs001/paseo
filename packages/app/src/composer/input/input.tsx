@@ -130,7 +130,8 @@ export interface MessageInputProps {
   editingSession?: ComposerEditingSession;
   submissionError?: React.ReactNode;
   value: string;
-  onChangeText: (text: string) => void;
+  /** `selectionBefore` is the caret the edit replaced, so callers can locate it without diffing. */
+  onChangeText: (text: string, selectionBefore?: { start: number; end: number }) => void;
   onSubmit: (payload: MessagePayload) => void;
   /** When true, the submit button is enabled even without text or images (e.g. external attachment selected). */
   hasExternalContent?: boolean;
@@ -195,6 +196,10 @@ export interface MessageInputProps {
   readOnly?: boolean;
   /** Command issued when application state must replace native-owned text. */
   textReplacement: TextReplacement;
+  /** Background-only highlights over bound text, such as `#` and `@` references. */
+  highlights?: readonly { start: number; end: number }[];
+  /** Opens a preview when a press lands on a highlighted reference. */
+  onHighlightPress?: (index: number) => void;
   /** Replaces the submit icon with this label, still inside the composer's own toolbar row. */
   submitLabel?: string;
 }
@@ -649,7 +654,7 @@ interface ComposerTextSurfaceProps {
   readOnlyTextStyle: React.ComponentProps<typeof Text>["style"];
   placeholder: string;
   accessibilityLabel: string;
-  onChangeText: (text: string) => void;
+  onChangeText: (text: string, selectionBefore?: { start: number; end: number }) => void;
   onFocus: () => void;
   onBlur: () => void;
   editable: boolean;
@@ -665,6 +670,8 @@ interface ComposerTextSurfaceProps {
   focusHintVisible: boolean;
   focusInputKeys: ShortcutChord | null | undefined;
   focusHintLabel: string;
+  highlights: readonly { start: number; end: number }[] | undefined;
+  onHighlightPress: ((index: number) => void) | undefined;
 }
 
 /**
@@ -679,9 +686,9 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
     if (!isWeb) setMeasurementText(props.value);
   }, [props.value, props.textReplacementKey]);
   const handleTextChange = useCallback(
-    (text: string) => {
+    (text: string, selectionBefore?: { start: number; end: number }) => {
       if (!isWeb) setMeasurementText(text);
-      onChangeText(text);
+      onChangeText(text, selectionBefore);
     },
     [onChangeText, setMeasurementText],
   );
@@ -715,6 +722,8 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         ref={props.textInputRef}
         dataSet={COMPOSER_INPUT_DATASET}
         initialValue={props.value}
+        highlights={props.highlights}
+        onHighlightPress={props.onHighlightPress}
         onChangeText={handleTextChange}
         placeholder={props.placeholder}
         accessibilityLabel={props.accessibilityLabel}
@@ -1102,7 +1111,7 @@ function computeSendButtonState(input: SendButtonStateInput): SendButtonStateOut
 
 interface ResolvedMessageInputProps {
   value: string;
-  onChangeText: (text: string) => void;
+  onChangeText: MessageInputProps["onChangeText"];
   onSubmit: (payload: MessagePayload) => void;
   hasExternalContent: boolean;
   allowEmptySubmit: boolean;
@@ -1144,6 +1153,8 @@ interface ResolvedMessageInputProps {
   inputMode: ComposerInputMode;
   readOnly: boolean;
   textReplacement: TextReplacement;
+  highlights: MessageInputProps["highlights"];
+  onHighlightPress: MessageInputProps["onHighlightPress"];
   submitLabel: string | undefined;
 }
 
@@ -1192,6 +1203,8 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     inputMode: props.inputMode ?? "chat",
     readOnly: props.readOnly ?? false,
     textReplacement: props.textReplacement,
+    highlights: props.highlights,
+    onHighlightPress: props.onHighlightPress,
     submitLabel: props.submitLabel,
   };
 }
@@ -1270,6 +1283,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       inputMode,
       readOnly,
       textReplacement,
+      highlights,
+      onHighlightPress,
       submitLabel,
     } = resolveMessageInputProps(props);
     const { isPaneFocused } = useComposerKeyboardScope();
@@ -1458,6 +1473,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       retainedSelectionRef.current = null;
       if (textReplacement.text === "") {
         textInputRef.current?.reset();
+      } else if (textReplacement.selection) {
+        selectionRef.current = textReplacement.selection;
+        textInputRef.current?.replaceText(textReplacement.text, textReplacement.selection);
+        // A programmatic caret move fires no selection event; autocomplete must not read the old one.
+        onSelectionChangeCallback?.(textReplacement.selection);
       } else if (retainedSelection) {
         const selection = resolveRetainedSelection(retainedSelection, textReplacement.text.length);
         selectionRef.current = selection;
@@ -1465,7 +1485,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       } else {
         textInputRef.current?.replaceText(textReplacement.text);
       }
-    }, [textReplacement, updateComposerHeightForText, updateLiveTextPresence]);
+    }, [
+      textReplacement,
+      updateComposerHeightForText,
+      updateLiveTextPresence,
+      onSelectionChangeCallback,
+    ]);
 
     useEffect(() => {
       return () => {
@@ -1860,11 +1885,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     });
 
     const handleInputChange = useCallback(
-      (nextValue: string) => {
+      (nextValue: string, selectionBefore?: { start: number; end: number }) => {
+        const editedSelection = selectionBefore ?? selectionRef.current;
         updateComposerHeightForText?.(valueRef.current, nextValue);
         valueRef.current = nextValue;
         updateLiveTextPresence(nextValue);
-        onChangeText(nextValue);
+        onChangeText(nextValue, editedSelection);
       },
       [onChangeText, updateComposerHeightForText, updateLiveTextPresence],
     );
@@ -2072,10 +2098,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             focusHintLabel={t("composer.input.focusHint", {
               shortcut: focusInputKeys ? formatShortcut(focusInputKeys[0], getShortcutOs()) : "",
             })}
+            highlights={highlights}
+            onHighlightPress={onHighlightPress}
           />
         </RenderProfile>
       ),
       [
+        highlights,
+        onHighlightPress,
         readOnly,
         textReplacement,
         assignTextInput,

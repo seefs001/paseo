@@ -651,6 +651,7 @@ export function WorkspaceDraftAgentTab({
             blurOnSubmit={true}
             textSource={draftInput.textSource}
             onChangeText={draftInput.editText}
+            onReplaceInput={draftInput.replaceInput}
             textReplacement={draftInput.textReplacement}
             attachments={draftInput.attachments}
             attachmentScopeKeys={attachmentScopeKeys}

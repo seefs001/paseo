@@ -129,10 +129,8 @@ import { useAppSettings } from "@/hooks/use-settings";
 import { RenderProfile } from "@/utils/render-profiler";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
-import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
+import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type {
-  AgentProfileContextAttachment,
-  AgentSessionContextAttachment,
   AttachmentMetadata,
   ComposerAttachment,
   UserComposerAttachment,
@@ -141,11 +139,23 @@ import type {
 } from "@/attachments/types";
 import type { SelectedFile } from "@/attachments/selected-file";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
-import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import {
-  useWorkspaceAttachmentsForScopes,
-  useWorkspaceAttachmentsStore,
-} from "@/attachments/workspace-attachments-store";
+  findTextReferenceAt,
+  getProfileReferenceHighlights,
+  insertProfileReference,
+  insertSessionReference,
+  isTextReference,
+  textReferenceToAgentAttachment,
+  updateProfileReferences,
+  type ProfileReferenceRange,
+  type TextReference,
+} from "@/composer/profile-reference/model";
+import type { ProfileReferenceSelection } from "@/composer/profile-reference/use-autocomplete";
+import type { SessionReferenceSelection } from "@/hooks/use-agent-autocomplete";
+import { getAgentMentionDetail } from "@/attachments/agent-mention-detail";
+import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
+import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
+import { useWorkspaceAttachmentsForScopes } from "@/attachments/workspace-attachments-store";
 import { droppedItemsToSelectedFiles } from "@/composer/attachments/drop";
 import { getFileTypeLabel } from "@/attachments/file-types";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -347,6 +357,43 @@ interface RenderAttachmentTrayArgs {
   };
 }
 
+function isTrayAttachment(attachment: ComposerAttachment): attachment is TrayAttachment {
+  return !isTextReference(attachment);
+}
+
+function haveSameRanges(
+  left: readonly ProfileReferenceRange[],
+  right: readonly ProfileReferenceRange[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (range, index) => range.start === right[index]?.start && range.end === right[index]?.end,
+    )
+  );
+}
+
+/**
+ * Bound reference intervals against the live draft text. Rerenders the composer only when an
+ * interval moves, not on every keystroke.
+ */
+function useProfileReferenceHighlights(
+  textSource: ComposerTextSource,
+  attachments: readonly UserComposerAttachment[],
+): readonly ProfileReferenceRange[] | undefined {
+  const hasReferences = attachments.some(isTextReference);
+  const cacheRef = useRef<readonly ProfileReferenceRange[] | undefined>(undefined);
+  const getSnapshot = useCallback(() => {
+    if (!hasReferences) return undefined;
+    const next = getProfileReferenceHighlights({ text: textSource.getSnapshot(), attachments });
+    const current = cacheRef.current;
+    if (current && haveSameRanges(current, next)) return current;
+    cacheRef.current = next.length > 0 ? next : undefined;
+    return cacheRef.current;
+  }, [attachments, hasReferences, textSource]);
+  return useSyncExternalStore(textSource.subscribe, getSnapshot, getSnapshot);
+}
+
 function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | null {
   const {
     serverId,
@@ -357,19 +404,22 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
     handleRemoveAttachment,
     labels,
   } = args;
-  if (selectedAttachments.length === 0 && pendingFiles.length === 0) return null;
+  // Profile references live inline in the text; the tray only shows standalone attachments.
+  if (!selectedAttachments.some(isTrayAttachment) && pendingFiles.length === 0) return null;
   return (
     <View style={styles.attachmentTray} testID="composer-attachment-tray">
       {selectedAttachments.map((attachment, index) =>
-        renderComposerAttachmentPill({
-          serverId,
-          attachment,
-          index,
-          disabled: isComposerLocked,
-          onOpen: handleOpenAttachment,
-          onRemove: handleRemoveAttachment,
-          labels,
-        }),
+        isTrayAttachment(attachment)
+          ? renderComposerAttachmentPill({
+              serverId,
+              attachment,
+              index,
+              disabled: isComposerLocked,
+              onOpen: handleOpenAttachment,
+              onRemove: handleRemoveAttachment,
+              labels,
+            })
+          : null,
       )}
       {pendingFiles.map(({ id, file }) => (
         <AttachmentFrame key={id} testID="composer-pending-file-attachment">
@@ -412,9 +462,12 @@ function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
   );
 }
 
+type TrayAttachment = Exclude<ComposerAttachment, TextReference>;
+
 interface RenderComposerAttachmentPillArgs {
   serverId: string;
-  attachment: ComposerAttachment;
+  /** Indexes `selectedAttachments`, which also holds the inline profile references. */
+  attachment: TrayAttachment;
   index: number;
   disabled: boolean;
   onOpen: (attachment: ComposerAttachment) => void;
@@ -953,7 +1006,13 @@ interface ComposerProps {
   /** When true, blurs the input immediately when submitting. */
   blurOnSubmit?: boolean;
   textSource: ComposerTextSource;
-  onChangeText: (text: string) => void;
+  onChangeText: (text: string, selectionBefore?: ProfileReferenceRange) => void;
+  /** Replaces text, attachments and caret in one draft write; enables `#` profile references. */
+  onReplaceInput?: (input: {
+    text: string;
+    attachments: UserComposerAttachment[];
+    selection?: ProfileReferenceRange;
+  }) => void;
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
   attachmentScopeKeys?: readonly string[];
@@ -1265,6 +1324,7 @@ function ComposerContentImpl({
   blurOnSubmit = false,
   textSource,
   onChangeText,
+  onReplaceInput,
   textReplacement,
   attachments,
   attachmentScopeKeys = EMPTY_ATTACHMENT_SCOPE_KEYS,
@@ -1512,23 +1572,69 @@ function ComposerContentImpl({
     ],
   );
 
-  const sessionMentionScopeKey = useMemo(() => {
-    const scopeKey = attachmentScopeKeys.find((key) => key.trim().length > 0);
-    return scopeKey?.trim() ?? "";
-  }, [attachmentScopeKeys]);
+  const profileReferenceHighlights = useProfileReferenceHighlights(textSource, attachments);
+  const [mentionPreview, setMentionPreview] = useState<AgentAttachment | null>(null);
 
-  const handleSessionMentionSelected = useCallback(
-    (attachment: AgentSessionContextAttachment | AgentProfileContextAttachment) => {
-      if (!sessionMentionScopeKey) {
-        return;
+  // Reference ranges index the draft text. Text that diverges from it (a live editor snapshot,
+  // a trimmed or expanded message) carries them across first, one contiguous edit per step:
+  // a single diff over trim plus expansion would see one span covering the reference.
+  const alignProfileReferences = useCallback(
+    (steps: readonly string[]): UserComposerAttachment[] => {
+      let previousText = textSource.getSnapshot();
+      let aligned = attachments;
+      for (const text of steps) {
+        aligned = updateProfileReferences({ previousText, text, attachments: aligned });
+        previousText = text;
       }
-      useWorkspaceAttachmentsStore.getState().addWorkspaceAttachment({
-        scopeKey: sessionMentionScopeKey,
-        attachment,
-      });
+      return aligned;
     },
-    [sessionMentionScopeKey],
+    [attachments, textSource],
   );
+
+  const handleProfileReferenceSelected = useCallback(
+    ({ text, mention, profile }: ProfileReferenceSelection) => {
+      if (!onReplaceInput) return;
+      onReplaceInput(
+        insertProfileReference({
+          text,
+          attachments: alignProfileReferences([text]),
+          mention,
+          profile,
+          serverId,
+        }),
+      );
+    },
+    [alignProfileReferences, onReplaceInput, serverId],
+  );
+
+  const handleSessionReferenceSelected = useCallback(
+    ({ text, mention, session }: SessionReferenceSelection) => {
+      if (!onReplaceInput) return;
+      onReplaceInput(
+        insertSessionReference({
+          text,
+          attachments: alignProfileReferences([text]),
+          mention,
+          session,
+        }),
+      );
+    },
+    [alignProfileReferences, onReplaceInput],
+  );
+
+  const handleHighlightPress = useCallback(
+    (index: number) => {
+      const reference = findTextReferenceAt({
+        text: textSource.getSnapshot(),
+        attachments,
+        index,
+      });
+      if (!reference) return;
+      setMentionPreview(textReferenceToAgentAttachment(reference));
+    },
+    [attachments, textSource],
+  );
+  const handleCloseMentionPreview = useCallback(() => setMentionPreview(null), []);
 
   const runPluginClientSlashCommand = useCallback(
     (resolved: { command: (typeof pluginClientSlashCommands)[number]; args: string }): boolean => {
@@ -1758,7 +1864,14 @@ function ComposerContentImpl({
         clearDraft,
         setUserInput: replaceUserInput,
         setAttachments: (nextAttachments) => {
-          setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
+          const userAttachments = composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments);
+          // A failed send restores text first; references written after it would be checked
+          // against the still-empty draft text and dropped, so restore both in one write.
+          if (onReplaceInput && userAttachments.some(isTextReference)) {
+            onReplaceInput({ text: outgoingMessage.trim(), attachments: userAttachments });
+            return;
+          }
+          setSelectedAttachments(userAttachments);
         },
         setSendError,
         setIsProcessing,
@@ -1779,6 +1892,7 @@ function ComposerContentImpl({
       completeSubmit,
       hasExternalContent,
       isAgentRunning,
+      onReplaceInput,
       queueMessage,
       setSelectedAttachments,
       replaceUserInput,
@@ -1814,11 +1928,20 @@ function ComposerContentImpl({
       if (blurOnSubmit) {
         messageInputRef.current?.blur();
       }
-      const outgoingMessage = customCommand ? customCommand.text : payload.text;
-      void sendMessageWithContent(outgoingMessage, outgoingAttachments, payload.forceSend);
+      // The input already trimmed the payload; an expanded command is trimmed again here.
+      const outgoingMessage = (customCommand ? customCommand.text : payload.text).trim();
+      const steps = customCommand
+        ? [payload.text, customCommand.text, outgoingMessage]
+        : [payload.text];
+      void sendMessageWithContent(
+        outgoingMessage,
+        buildOutgoingAttachments(alignProfileReferences(steps)),
+        payload.forceSend,
+      );
     },
     [
       attachments,
+      alignProfileReferences,
       appSettings.customCommands,
       mode.showAutocomplete,
       blurOnSubmit,
@@ -2026,10 +2149,14 @@ function ComposerContentImpl({
         queue: queueWriter,
       });
       if (!result) return;
+      if (onReplaceInput && result.attachments.some(isTextReference)) {
+        onReplaceInput({ text: result.text, attachments: result.attachments });
+        return;
+      }
       replaceUserInput(result.text);
       setSelectedAttachments(result.attachments);
     },
-    [agentId, queueWriter, replaceUserInput, setSelectedAttachments],
+    [agentId, onReplaceInput, queueWriter, replaceUserInput, setSelectedAttachments],
   );
 
   const handleSendQueuedNow = useCallback(
@@ -2073,11 +2200,15 @@ function ComposerContentImpl({
         });
         if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
       }
-      const outgoingMessage = customCommand ? customCommand.text : payload.text;
-      queueMessage(outgoingMessage, outgoingAttachments);
+      const outgoingMessage = (customCommand ? customCommand.text : payload.text).trim();
+      const steps = customCommand
+        ? [payload.text, customCommand.text, outgoingMessage]
+        : [payload.text];
+      queueMessage(outgoingMessage, buildOutgoingAttachments(alignProfileReferences(steps)));
     },
     [
       attachments,
+      alignProfileReferences,
       appSettings.customCommands,
       mode.showAutocomplete,
       buildOutgoingAttachments,
@@ -2469,6 +2600,11 @@ function ComposerContentImpl({
 
   const handleCustomCommandSelected = useCallback(
     ({ command, text }: ExpandedCustomCommand) => {
+      // Align before the replacement rewrites the draft text the ranges index.
+      const outgoingMessage = text.trim();
+      const outgoingAttachments = buildOutgoingAttachments(
+        alignProfileReferences([text, outgoingMessage]),
+      );
       replaceUserInput(text);
       const shouldAutoSend = command.autoSend && !isSubmitDisabled && !isComposerLocked;
       if (!shouldAutoSend) {
@@ -2476,16 +2612,19 @@ function ComposerContentImpl({
         return;
       }
       if (blurOnSubmit) messageInputRef.current?.blur();
-      const outgoingAttachments = buildOutgoingAttachments(attachments);
-      void sendMessageWithContent(text, outgoingAttachments, activeSendBehavior !== "queue");
+      void sendMessageWithContent(
+        outgoingMessage,
+        outgoingAttachments,
+        activeSendBehavior !== "queue",
+      );
     },
     [
+      alignProfileReferences,
       replaceUserInput,
       isSubmitDisabled,
       isComposerLocked,
       blurOnSubmit,
       buildOutgoingAttachments,
-      attachments,
       sendMessageWithContent,
       activeSendBehavior,
     ],
@@ -2502,7 +2641,9 @@ function ComposerContentImpl({
       onClientSlashCommand: runClientSlashCommand,
       customCommands: appSettings.customCommands,
       onCustomCommandSelected: handleCustomCommandSelected,
-      onSessionMentionSelected: sessionMentionScopeKey ? handleSessionMentionSelected : undefined,
+      onSessionReferenceSelected: onReplaceInput ? handleSessionReferenceSelected : undefined,
+      onProfileReferenceSelected: onReplaceInput ? handleProfileReferenceSelected : undefined,
+      boundReferenceRanges: profileReferenceHighlights,
       pluginClientSlashCommands,
     }),
     [
@@ -2516,8 +2657,10 @@ function ComposerContentImpl({
       runClientSlashCommand,
       appSettings.customCommands,
       handleCustomCommandSelected,
-      sessionMentionScopeKey,
-      handleSessionMentionSelected,
+      onReplaceInput,
+      handleSessionReferenceSelected,
+      handleProfileReferenceSelected,
+      profileReferenceHighlights,
       pluginClientSlashCommands,
     ],
   );
@@ -2571,6 +2714,10 @@ function ComposerContentImpl({
         }
       >
         <AttachmentLightbox source={lightboxSource} onClose={handleLightboxClose} />
+        <AgentMentionDetailSheet
+          detail={mentionPreview ? getAgentMentionDetail(mentionPreview, t) : null}
+          onClose={handleCloseMentionPreview}
+        />
         {/* Input area */}
         <View style={inputAreaContainerStyle}>
           <View style={inputAreaContentStyle}>
@@ -2643,6 +2790,8 @@ function ComposerContentImpl({
                   inputMode={inputMode}
                   readOnly={readOnly}
                   textReplacement={textReplacement}
+                  highlights={profileReferenceHighlights}
+                  onHighlightPress={handleHighlightPress}
                   submitLabel={submitLabel}
                 />
               </RenderProfile>

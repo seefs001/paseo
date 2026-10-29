@@ -25,6 +25,7 @@ import type { Theme } from "@/styles/theme";
 import { WEB_SCROLLBAR_SIZE_PX } from "@/styles/web-scrollbar";
 import { DomOverlayScrollbar } from "@/components/ui/overlay-scrollbar/dom-overlay-scrollbar";
 import { estimateStreamItemHeight } from "./web-virtualization";
+import { isTextSelectionHoldingReveal } from "./text-selection-hold";
 import { createReadingAnchor } from "./reading-anchor";
 import type { StreamRenderInput, StreamStrategy, StreamViewportHandle } from "./strategy";
 import { useRevisedHistoryRows } from "./history-row-revision";
@@ -985,7 +986,8 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
       }
       updateScrollMetrics();
       evaluateHistoryStart();
-      if (!followOutputRef.current) {
+      // A selection is in progress. Sticking to the bottom pulls the text out from under the pointer.
+      if (!followOutputRef.current || isTextSelectionHoldingReveal()) {
         return;
       }
       // ResizeObserver runs before paint. Following in the next frame exposes
@@ -1000,7 +1002,9 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     // Observe those commits too, so the next frame sees the grown content at the
     // bottom instead of waiting for the resize notification after animation frames.
     const contentChanges = new MutationObserver(() => {
-      if (isActiveRef.current && followOutputRef.current) forceStickToBottom();
+      if (isActiveRef.current && followOutputRef.current && !isTextSelectionHoldingReveal()) {
+        forceStickToBottom();
+      }
     });
     if (contentNode)
       contentChanges.observe(contentNode, { childList: true, characterData: true, subtree: true });

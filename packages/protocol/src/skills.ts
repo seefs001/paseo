@@ -4,6 +4,8 @@ export const SkillCatalogEntrySchema = z.object({
   path: z.string(),
   name: z.string(),
   description: z.string(),
+  // True when SKILL.md sets disable-model-invocation. Older daemons omit it.
+  userInvoked: z.boolean().optional(),
   usageCount: z.number().int().nonnegative(),
   lastUsedAt: z.number().nonnegative(),
 });

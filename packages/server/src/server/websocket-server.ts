@@ -1996,6 +1996,14 @@ export class VoiceAssistantWebSocketServer {
         ...(this.advertiseDaemonStatusRpc ? { daemonStatusRpc: true } : {}),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: true,
+        // COMPAT(daemonHostnames): added in v0.13.2, remove gate after 2027-05-01.
+        daemonHostnames: true,
+        // COMPAT(mcpCallLog): added in v0.13.2, remove gate after 2027-05-01.
+        mcpCallLog: true,
+        // COMPAT(mcpToolAllowlist): added in v0.14.0, remove gate after 2027-05-15.
+        mcpToolAllowlist: true,
+        // COMPAT(daemonPassword): added in v0.13.2, remove gate after 2027-05-01.
+        daemonPassword: true,
         // COMPAT(speechSettings): added in v0.12.0, remove gate after 2027-04-18.
         speechSettings: true,
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.

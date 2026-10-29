@@ -7,13 +7,27 @@ import { useCreateFlowStore } from "@/stores/create-flow-store";
 import type { UserMessageImageAttachment } from "@/types/stream";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "./create-flow";
+import {
+  decodeProfileReferences,
+  encodeProfileReferences,
+  type ProfileReference,
+} from "@/composer/profile-reference/model";
+
+const profileReference: ProfileReference = {
+  kind: "profile_reference",
+  id: "reference-1",
+  serverId: "server-1",
+  profile: { id: "profile-1", name: "Code Review", provider: "codex", model: "gpt-5.4" },
+  start: 0,
+  end: 12,
+};
 
 describe("useDraftAgentCreateFlow", () => {
   beforeEach(() => {
     useCreateFlowStore.setState({ pendingByDraftId: {} });
   });
 
-  it("renders a prepared new-workspace submission before continuing it", async () => {
+  it("renders and continues a prepared profile reference without encoding it twice", async () => {
     const image: UserMessageImageAttachment = {
       id: "image-1",
       mimeType: "image/png",
@@ -26,9 +40,13 @@ describe("useDraftAgentCreateFlow", () => {
       cwd: "/repo",
       summary: "Review",
     } as unknown as AgentAttachment;
+    const encodedText = encodeProfileReferences({
+      text: "#Code Review this change",
+      attachments: [profileReference],
+    });
     const attempt: DraftCreateAttempt = {
       clientMessageId: "msg-prepared",
-      text: "build this",
+      text: encodedText,
       timestamp: new Date("2026-05-25T00:00:00.000Z"),
       images: [image],
       attachments: [attachment],
@@ -65,7 +83,7 @@ describe("useDraftAgentCreateFlow", () => {
         kind: "user_message",
         id: "msg-prepared",
         clientMessageId: "msg-prepared",
-        text: "build this",
+        text: encodedText,
         timestamp: attempt.timestamp,
         images: [image],
         attachments: [attachment],
@@ -80,7 +98,7 @@ describe("useDraftAgentCreateFlow", () => {
     expect(createRequest).toHaveBeenCalledTimes(1);
     expect(createRequest).toHaveBeenCalledWith({
       attempt,
-      text: "build this",
+      text: encodedText,
       images: [image],
       attachments: [attachment],
       cwd: "/repo",
@@ -145,6 +163,8 @@ describe("useDraftAgentCreateFlow", () => {
       failRequest = reject;
     });
     let requestCount = 0;
+    let submittedText = "";
+    let submittedAttachments: AgentAttachment[] | undefined;
     const { result, rerender } = renderHook(
       ({ provider }: { provider: string | null }) =>
         useDraftAgentCreateFlow({
@@ -154,7 +174,9 @@ describe("useDraftAgentCreateFlow", () => {
             if (!provider) throw new Error("Select a model");
             return { provider };
           },
-          createRequest: async () => {
+          createRequest: async ({ text, attachments }) => {
+            submittedText = text;
+            submittedAttachments = attachments;
             requestCount++;
             if (requestCount === 1) return await request;
             return { agentId: "agent-1", result: { id: "agent-1" } };
@@ -167,9 +189,29 @@ describe("useDraftAgentCreateFlow", () => {
     const captureError = (error: unknown) => error;
     await act(async () => {
       submission = result.current
-        .handleCreateFromInput({ text: "build this", attachments: [], cwd: "/repo" })
+        .handleCreateFromInput({
+          text: "  #Code Review now  ",
+          attachments: [{ ...profileReference, start: 2, end: 14 }],
+          cwd: "/repo",
+        })
         .catch(captureError);
     });
+    expect(submittedAttachments).toEqual([
+      expect.objectContaining({ contextKind: "agent_profile" }),
+    ]);
+    const decoded = decodeProfileReferences(submittedText);
+    expect(decoded.text).toBe("#Code Review now");
+    expect(decoded.references).toHaveLength(1);
+    expect(decoded.references[0]).toMatchObject({
+      serverId: profileReference.serverId,
+      profile: profileReference.profile,
+      start: 0,
+      end: 12,
+    });
+    expect(useCreateFlowStore.getState().pendingByDraftId["draft-manual"]?.text).toBe(
+      submittedText,
+    );
+    expect(result.current.submittedStreamItems[0]).toMatchObject({ text: submittedText });
     rerender({ provider: null });
     expect(result.current.draftAgent).toEqual({ provider: "codex" });
     await act(async () => {

@@ -9,7 +9,10 @@ import { writeJsonFileAtomic } from "../atomic-file.js";
 const MetadataSchema = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(16_384).default(""),
+  // The failsafe YAML schema reads every scalar as a string.
+  "disable-model-invocation": z.unknown().optional(),
 });
+
 const UsageSchema = z.object({
   skills: z.record(
     z.string(),
@@ -36,7 +39,15 @@ async function readSkill(skillPath: string): Promise<SkillCatalogEntry | null> {
     if (document.errors.length > 0) return null;
     const metadata = MetadataSchema.safeParse(document.toJS({ maxAliasCount: 0 }));
     if (!metadata.success) return null;
-    return { path: skillPath, ...metadata.data, usageCount: 0, lastUsedAt: 0 };
+    return {
+      path: skillPath,
+      name: metadata.data.name,
+      description: metadata.data.description,
+      // Only a person can start a skill that sets disable-model-invocation.
+      userInvoked: metadata.data["disable-model-invocation"] === "true",
+      usageCount: 0,
+      lastUsedAt: 0,
+    };
   } finally {
     await file.close();
   }
@@ -102,6 +113,7 @@ export class SkillCatalog {
     }
     skills.sort(
       (a, b) =>
+        Number(b.userInvoked) - Number(a.userInvoked) ||
         b.usageCount - a.usageCount ||
         b.lastUsedAt - a.lastUsedAt ||
         a.name.localeCompare(b.name) ||

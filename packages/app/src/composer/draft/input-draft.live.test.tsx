@@ -8,6 +8,10 @@ import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 import { useDraftAgentFeatures } from "@/hooks/use-draft-agent-features";
 import { materializeAgentProfile } from "@/agent-profiles/internal/materialize-profile";
+import {
+  encodeProfileReferences,
+  insertProfileReference,
+} from "@/composer/profile-reference/model";
 
 const { asyncStorage } = vi.hoisted(() => ({
   asyncStorage: new Map<string, string>(),
@@ -504,6 +508,90 @@ describe("useAgentInputDraft live contract", () => {
       attachments: [githubIssue],
       cwd: "/persisted",
     });
+  });
+
+  it("keeps profile references in their draft and restores linked history without exposing metadata", async () => {
+    let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+    function getLatest(): ReturnType<typeof useAgentInputDraft> {
+      if (!latest) throw new Error("Expected hook result");
+      return latest;
+    }
+    function Probe({ draftKey }: { draftKey: string }) {
+      latest = useAgentInputDraft({ draftKey });
+      return null;
+    }
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing root container");
+    const root = createTestRoot(container);
+    const client = new QueryClient();
+    const renderDraft = async (draftKey: string) => {
+      await act(async () => {
+        root.render(
+          <QueryClientProvider client={client}>
+            <Probe draftKey={draftKey} />
+          </QueryClientProvider>,
+        );
+      });
+    };
+    await renderDraft("draft:profile-a");
+    const selected = insertProfileReference({
+      text: "#g",
+      attachments: [],
+      mention: { start: 0, end: 2 },
+      serverId: "host-a",
+      profile: {
+        id: "grok",
+        name: "Grok 4.7",
+        provider: "pi",
+        model: "responses/grok-4.7",
+        featureValues: { fast_mode: true },
+      },
+    });
+    await act(async () => {
+      getLatest().replaceInput(selected);
+    });
+    expect(getLatest().textSource.getSnapshot()).toBe(selected.text);
+    expect(getLatest().attachments).toEqual(selected.attachments);
+    expect(getLatest().textReplacement.selection).toEqual(selected.selection);
+
+    await renderDraft("draft:profile-b");
+    expect(getLatest().attachments).toEqual([]);
+    expect(getLatest().textSource.getSnapshot()).toBe("");
+    await renderDraft("draft:profile-a");
+    expect(getLatest().attachments).toEqual(selected.attachments);
+
+    await act(async () => {
+      getLatest().editText("#Grok 4. ");
+    });
+    expect(getLatest().textSource.getSnapshot()).toBe(" ");
+    expect(getLatest().attachments).toEqual([]);
+    expect(getLatest().textReplacement.selection).toEqual({ start: 0, end: 0 });
+
+    await act(async () => {
+      getLatest().replaceText(encodeProfileReferences(selected));
+    });
+    expect(getLatest().textSource.getSnapshot()).toBe(selected.text);
+    expect(getLatest().attachments[0]).toMatchObject({
+      kind: "profile_reference",
+      profile: { id: "grok", featureValues: { fast_mode: true } },
+    });
+    expect(getLatest().textReplacement.text).not.toContain("paseo-profile:");
+
+    const repeated = insertProfileReference({
+      text: "#a #A",
+      attachments: [],
+      mention: { start: 0, end: 2 },
+      serverId: "host-a",
+      profile: { id: "a", name: "A", provider: "pi" },
+    });
+    await act(async () => {
+      getLatest().replaceInput(repeated);
+    });
+    await act(async () => {
+      getLatest().editText("#A", { start: 0, end: 3 });
+    });
+    expect(getLatest().textSource.getSnapshot()).toBe("#A");
+    expect(getLatest().attachments).toEqual([]);
   });
 
   it("updates and persists attachments through setAttachments", async () => {

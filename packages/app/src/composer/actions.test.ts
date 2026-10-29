@@ -7,6 +7,11 @@ import type {
   WorkspaceComposerAttachment,
 } from "@/attachments/types";
 import {
+  prepareComposerMessageForSubmit,
+  splitComposerAttachmentsForSubmit,
+} from "@/composer/attachments/submit";
+import { decodeProfileReferences, type ProfileReference } from "@/composer/profile-reference/model";
+import {
   appendSubmittedUserMessage,
   removeSubmittedUserMessage,
   type StreamItem,
@@ -72,6 +77,26 @@ const prItem: ForgeSearchItem = {
   baseRefName: "main",
   headRefName: "composer-attachments",
 };
+
+function profileReference(start = 0): ProfileReference {
+  return {
+    kind: "profile_reference",
+    id: "reference-1",
+    serverId: "host-1",
+    profile: {
+      id: "profile-1",
+      name: "Code Review",
+      provider: "codex",
+      model: "gpt-5.4",
+      modeId: "full-access",
+      thinkingOptionId: "high",
+      featureValues: { fast_mode: true },
+      notes: "Review the change without editing files.",
+    },
+    start,
+    end: start + "#Code Review".length,
+  };
+}
 
 function imageWithId(id: string): AttachmentMetadata {
   return { ...imageMetadata, id, storageKey: id, fileName: `${id}.png` };
@@ -418,7 +443,93 @@ describe("pickAndPersistImages", () => {
   });
 });
 
+describe("prepareComposerMessageForSubmit", () => {
+  it("keeps attachment splitting compatible while encoding only the bound occurrence", () => {
+    const reference = profileReference();
+    const text = "#Code Review then plain #Code Review";
+    const attachments: ComposerAttachment[] = [
+      reference,
+      { kind: "image", metadata: imageMetadata },
+      { kind: "forge_change_request", item: prItem },
+    ];
+    const split = splitComposerAttachmentsForSubmit(attachments);
+    expect(split.images).toEqual([imageMetadata]);
+    expect(split.attachments[0]).toMatchObject({
+      type: "text",
+      contextKind: "agent_profile",
+      title: reference.profile.name,
+    });
+    const prepared = prepareComposerMessageForSubmit({ text, attachments });
+    expect(prepared.images).toEqual(split.images);
+    expect(prepared.attachments).toEqual(split.attachments);
+    const decoded = decodeProfileReferences(prepared.text);
+    expect(decoded.text).toBe(text);
+    expect(decoded.references).toHaveLength(1);
+    expect(decoded.references[0]).toMatchObject({
+      serverId: reference.serverId,
+      profile: reference.profile,
+      start: reference.start,
+      end: reference.end,
+    });
+    expect(prepared.text).toContain("](paseo-profile:");
+    expect(text).toBe("#Code Review then plain #Code Review");
+    expect(attachments[0]).toBe(reference);
+  });
+
+  it.each([
+    { start: -1, end: 11 },
+    { start: 0, end: 100 },
+    { start: 2, end: 1 },
+    { start: 1, end: 12 },
+  ])("omits invalid range $start:$end from both wire text and cards", (range) => {
+    const prepared = prepareComposerMessageForSubmit({
+      text: "#Code Review",
+      attachments: [{ ...profileReference(), ...range }],
+    });
+    expect(prepared).toEqual({ text: "#Code Review", images: [], attachments: [] });
+  });
+
+  it("does not send a stale card after the bound text has changed", () => {
+    expect(
+      prepareComposerMessageForSubmit({
+        text: "#Code Revise",
+        attachments: [profileReference()],
+      }),
+    ).toEqual({ text: "#Code Revise", images: [], attachments: [] });
+  });
+});
+
 describe("dispatchComposerAgentMessage", () => {
+  it.each(["interrupt", "steer"] as const)(
+    "sends the same profile snapshot in the %s request and optimistic message",
+    async (activeTurnBehavior) => {
+      const client = createFakeSendClient();
+      const stream = createFakeStream();
+      const reference = profileReference();
+      await dispatchComposerAgentMessage({
+        client,
+        agentId: "agent",
+        text: "#Code Review this change",
+        attachments: [reference],
+        encodeImages: passthroughEncodeImages,
+        submission: stream,
+        activeTurnBehavior,
+      });
+      const [call] = client.calls;
+      expect(decodeProfileReferences(call.text)).toMatchObject({
+        text: "#Code Review this change",
+        references: [{ serverId: reference.serverId, profile: reference.profile }],
+      });
+      expect(call.options.attachments).toEqual([
+        expect.objectContaining({ type: "text", contextKind: "agent_profile" }),
+      ]);
+      expect(stream.tail.get("agent")?.[0]).toMatchObject({
+        kind: "user_message",
+        text: call.text,
+        attachments: call.options.attachments,
+      });
+    },
+  );
   it("forwards the configured active-turn intent without provider capability checks", async () => {
     const client = createFakeSendClient();
     const stream = createFakeStream();
@@ -708,6 +819,32 @@ describe("dispatchComposerAgentMessage", () => {
 });
 
 describe("queueComposerMessage", () => {
+  it("adjusts reference ranges for both-side trimming and restores them when editing", () => {
+    const queue = createFakeQueue();
+    const reference = profileReference(2);
+    const { queued } = queueComposerMessage({
+      agentId: "agent",
+      text: "  #Code Review  ",
+      attachments: [reference],
+      queue,
+    });
+    expect(queued).toMatchObject({
+      text: "#Code Review",
+      attachments: [{ ...reference, start: 0, end: 12 }],
+    });
+    expect(reference.start).toBe(2);
+    if (!queued) throw new Error("Expected a queued message");
+    const restored = editQueuedComposerMessage({
+      agentId: "agent",
+      messageId: queued.id,
+      queue,
+    });
+    expect(restored).toEqual({
+      text: "#Code Review",
+      attachments: [{ ...reference, start: 0, end: 12 }],
+    });
+  });
+
   it("queues a trimmed message under the agent id and returns the new entry", () => {
     const queue = createFakeQueue();
     const result = queueComposerMessage({
@@ -791,6 +928,39 @@ describe("editQueuedComposerMessage", () => {
 });
 
 describe("sendQueuedComposerMessageNow", () => {
+  it("restores display text and the reference snapshot after a failed send", async () => {
+    const reference = profileReference();
+    const item: QueuedComposerMessage = {
+      id: "profile-message",
+      text: "#Code Review this change",
+      attachments: [reference],
+    };
+    const queue = createFakeQueue(new Map([["agent", [item]]]));
+    const client = createFakeSendClient({ rejection: new Error("Offline") });
+    const stream = createFakeStream();
+    const result = await sendQueuedComposerMessageNow({
+      agentId: "agent",
+      messageId: item.id,
+      queue,
+      submitMessage: (message) =>
+        dispatchComposerAgentMessage({
+          ...message,
+          agentId: "agent",
+          client,
+          submission: stream,
+          encodeImages: passthroughEncodeImages,
+        }),
+    });
+    expect(result).toEqual({ status: "failed", errorMessage: "Offline" });
+    expect(queue.read("agent")).toEqual([item]);
+    expect(queue.read("agent")[0].text).not.toContain("paseo-profile:");
+    expect(decodeProfileReferences(client.calls[0].text).references[0]).toMatchObject({
+      serverId: reference.serverId,
+      profile: reference.profile,
+    });
+    expect(stream.tail.get("agent") ?? []).toEqual([]);
+  });
+
   it("returns missing without submitting when the message id is gone", async () => {
     const queue = createFakeQueue();
     const submitted: Array<{ text: string; attachments: ComposerAttachment[] }> = [];
@@ -880,6 +1050,21 @@ describe("removeComposerAttachmentAtIndex", () => {
 });
 
 describe("openComposerAttachment", () => {
+  it("does not try to open an inline profile reference as a forge attachment", () => {
+    const openExternalUrl = vi.fn();
+    const openWorkspaceAttachment = vi.fn();
+    const setLightboxMetadata = vi.fn();
+    openComposerAttachment({
+      attachment: profileReference(),
+      openExternalUrl,
+      openWorkspaceAttachment,
+      setLightboxMetadata,
+    });
+    expect(openExternalUrl).not.toHaveBeenCalled();
+    expect(openWorkspaceAttachment).not.toHaveBeenCalled();
+    expect(setLightboxMetadata).not.toHaveBeenCalled();
+  });
+
   it("opens the lightbox for image attachments", () => {
     const image = imageWithId("img-body");
     const lightboxCalls: AttachmentMetadata[] = [];

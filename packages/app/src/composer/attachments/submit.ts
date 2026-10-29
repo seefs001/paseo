@@ -11,6 +11,12 @@ import {
 } from "@/utils/review-attachments";
 import { workspaceFileAttachmentToAgentAttachment } from "@/attachments/workspace-file";
 import { pluginResourceAttachmentToAgentAttachment } from "@/plugins/attachments";
+import {
+  encodeProfileReferences,
+  isTextReference,
+  isValidTextReference,
+  textReferenceToAgentAttachment,
+} from "@/composer/profile-reference/model";
 
 export type ComposerAttachmentSubmitFormat = "forge" | "legacy-github";
 
@@ -50,6 +56,11 @@ export function splitComposerAttachmentsForSubmit(
       continue;
     }
 
+    if (isTextReference(attachment)) {
+      agentAttachments.push(textReferenceToAgentAttachment(attachment));
+      continue;
+    }
+
     if (attachment.kind === "file") {
       agentAttachments.push(attachment.attachment);
       continue;
@@ -85,5 +96,22 @@ export function splitComposerAttachmentsForSubmit(
   return {
     images,
     attachments: agentAttachments,
+  };
+}
+
+interface PrepareComposerMessageInput extends SplitComposerAttachmentsOptions {
+  text: string;
+  attachments: readonly ComposerAttachment[];
+}
+
+export function prepareComposerMessageForSubmit(input: PrepareComposerMessageInput) {
+  const attachments = input.attachments.filter(
+    (attachment) =>
+      !isTextReference(attachment) ||
+      isValidTextReference({ text: input.text, reference: attachment }),
+  );
+  return {
+    text: encodeProfileReferences({ text: input.text, attachments }),
+    ...splitComposerAttachmentsForSubmit(attachments, { format: input.format }),
   };
 }

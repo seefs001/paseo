@@ -26,6 +26,8 @@ export function rankSkills(
     })
     .sort(
       (a, b) =>
+        // User-invoked skills first: the model never reaches for them on its own.
+        Number(b.userInvoked ?? false) - Number(a.userInvoked ?? false) ||
         b.usageCount - a.usageCount ||
         b.lastUsedAt - a.lastUsedAt ||
         a.name.localeCompare(b.name) ||

@@ -17,4 +17,5 @@ export interface TextReplacement {
   kind: "initial" | "hydrated" | "replace";
   key: string;
   text: string;
+  selection?: { start: number; end: number };
 }

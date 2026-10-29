@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { insertProfileReference } from "@/composer/profile-reference/model";
 import {
   applyClearDraftRecord,
   pruneFinalizedDraftRecords,
@@ -97,6 +98,31 @@ describe("draft-store lifecycle", () => {
 });
 
 describe("draft-store normalization", () => {
+  it("persists selected profile snapshots and updates only their exact text ranges", () => {
+    const selected = insertProfileReference({
+      text: "#g",
+      attachments: [],
+      mention: { start: 0, end: 2 },
+      serverId: "host-a",
+      profile: { id: "grok", name: "Grok 4.7", provider: "pi", featureValues: { fast_mode: true } },
+    });
+    const record: DraftRecord = {
+      input: { text: selected.text, attachments: selected.attachments },
+      lifecycle: "active",
+      updatedAt: 1,
+      version: 1,
+    };
+    const restored = toDraftInputIfReady(JSON.parse(JSON.stringify(record)));
+    expect(restored).toEqual({ text: selected.text, attachments: selected.attachments });
+    const edited = editDraftRecordText(record, `先 ${selected.text}`, 2);
+    expect(edited.input.attachments[0]).toMatchObject({
+      start: 2,
+      end: 11,
+      profile: { id: "grok" },
+    });
+    const removed = editDraftRecordText(edited, "先 普通文字", 3);
+    expect(removed.input.attachments).toEqual([]);
+  });
   it("preserves plugin resources when hydrating a draft", () => {
     const attachment = {
       kind: "plugin_resource" as const,

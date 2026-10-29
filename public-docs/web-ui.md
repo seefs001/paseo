@@ -208,7 +208,7 @@ If you don't want to manage a reverse proxy or open ports, a tunnel gives you an
   cloudflared tunnel --url http://localhost:6767
   ```
 
-  Cloudflare terminates TLS and sets `X-Forwarded-Proto: https`, so auto-connect works. Because the URL is public, **set a daemon password.**
+  Cloudflare terminates TLS and sets `X-Forwarded-Proto: https`, so auto-connect works. Add that public hostname under Host settings → Hostnames, and set the daemon password on the same page. The password applies after a daemon restart. Recent MCP calls are on the [MCP calls](/docs/mcp#label-mcp-calls) page.
 
 ## Security
 
@@ -227,7 +227,7 @@ For the full threat model, relay encryption, and DNS-rebinding details, see [Sec
 - **Page loads but never connects.** The proxy isn't forwarding the WebSocket upgrade, or it's stripping the `Host` header. Check the upgrade headers in your proxy config.
 - **Connects, then output freezes.** Response buffering is on, or read timeouts are too short. Disable buffering and raise the timeouts.
 - **"Mixed content" / connection blocked over HTTPS.** The app fell back to `ws://`. Either the proxy isn't sending `X-Forwarded-Proto: https`, or the daemon doesn't trust the proxy address. Forward the header and configure `daemon.trustedProxies` if the proxy is not loopback.
-- **`403 Invalid Host header`.** Your domain isn't in the allowlist. Add it with `--hostnames` or `daemon.hostnames`, see [DNS rebinding protection](/docs/security#dns-rebinding-protection).
+- **`403 Invalid Host header`.** Your domain isn't in the allowlist. Add it under Host settings → Hostnames, or with `--hostnames` / `daemon.hostnames`. See [DNS rebinding protection](/docs/security#dns-rebinding-protection).
 - **Large prompts or uploads fail.** Raise the proxy's max body size (`client_max_body_size` in Nginx).
 
 ## See also

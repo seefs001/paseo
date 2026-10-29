@@ -44,6 +44,8 @@ function makeSubsystem(overrides: {
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   hubRelationships?: HubRelationshipManagement;
   reloadConfig?: () => Promise<DaemonConfigReloadResult>;
+  saveDaemonPassword?: (password: string) => void;
+  setPasswordConfigured?: (passwordSet: boolean) => void;
 }) {
   const emitted: SessionOutboundMessage[] = [];
   const restartIntents: Parameters<DaemonSessionHost["emitLifecycleIntent"]>[0][] = [];
@@ -72,6 +74,8 @@ function makeSubsystem(overrides: {
         restartRequiredPaths: [],
         overrideControlledPaths: [],
       })),
+    saveDaemonPassword: overrides.saveDaemonPassword ?? (() => {}),
+    setPasswordConfigured: overrides.setPasswordConfigured ?? (() => {}),
     logger: pino({ level: "silent" }),
   });
   return { subsystem, emitted, paseoHome, restartIntents };

@@ -8,7 +8,7 @@ export type SidebarSection = PluginSidebarSection;
  * (Add project and the Hosts, Help and support, Settings icons) is fixed.
  */
 export const BUILTIN_SIDEBAR_ITEM_IDS = {
-  header: ["new-workspace", "history", "search", "schedules"],
+  header: ["new-workspace", "history", "search", "schedules", "mcp-calls"],
   footer: ["usage"],
 } as const satisfies Record<SidebarSection, readonly string[]>;
 
@@ -45,6 +45,7 @@ const BUILTIN_LABEL_KEYS: Record<BuiltinSidebarItemId, string> = {
   history: "sidebar.sections.sessions",
   search: "sidebar.sections.search",
   schedules: "sidebar.sections.schedules",
+  "mcp-calls": "sidebar.sections.mcpCalls",
   usage: "sidebar.footer.usage",
 };
 
@@ -62,6 +63,7 @@ const BUILTIN_SHORTCUT_ACTIONS: Record<BuiltinSidebarItemId, string | null> = {
   history: null,
   search: "toggle-command-center",
   schedules: null,
+  "mcp-calls": null,
   usage: null,
 };
 
@@ -133,7 +135,26 @@ export function resolveSidebarNavItems<Section extends SidebarSection>(input: {
     if (placed.has(key)) continue;
     items.push({ kind: "plugin", key, group, visible: true });
   }
+  if (
+    input.section === "header" &&
+    !input.preferences.some((preference) => preference.key === "mcp-calls")
+  ) {
+    placeBuiltinAfter(items, "mcp-calls", "schedules");
+  }
   return items;
+}
+
+function placeBuiltinAfter(
+  items: SidebarNavItem[],
+  id: BuiltinSidebarItemId,
+  afterId: BuiltinSidebarItemId,
+): void {
+  const from = items.findIndex((item) => item.kind === "builtin" && item.id === id);
+  const after = items.findIndex((item) => item.kind === "builtin" && item.id === afterId);
+  if (from === -1 || after === -1 || from === after + 1) return;
+  const [item] = items.splice(from, 1);
+  const target = items.findIndex((entry) => entry.kind === "builtin" && entry.id === afterId);
+  if (item && target !== -1) items.splice(target + 1, 0, item);
 }
 
 /**

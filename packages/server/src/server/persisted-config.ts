@@ -256,6 +256,7 @@ export const PersistedConfigSchema = z
           .object({
             enabled: z.boolean().optional(),
             injectIntoAgents: z.boolean().optional(),
+            disabledTools: z.array(z.string().min(1)).optional(),
           })
           .passthrough()
           .optional(),

@@ -69,4 +69,16 @@ describe("runtime-paths", () => {
       "/Applications/Paseo.app/Contents/Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper",
     );
   });
+
+  it("uses the macOS Helper executable for development daemon node launches", () => {
+    mocks.app.isPackaged = false;
+    setProcessRuntime({
+      platform: "darwin",
+      execPath: "/checkout/.dev/Paseo.app/Contents/MacOS/Electron",
+    });
+
+    expect(resolveNodeExecPath()).toBe(
+      "/checkout/.dev/Paseo.app/Contents/Frameworks/Electron Helper.app/Contents/MacOS/Electron Helper",
+    );
+  });
 });

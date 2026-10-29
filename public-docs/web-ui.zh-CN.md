@@ -206,7 +206,7 @@ PASEO_TRUSTED_PROXIES=loopback,172.16.0.0/12 PASEO_WEB_UI_ENABLED=true paseo dae
   cloudflared tunnel --url http://localhost:6767
   ```
 
-  Cloudflare 会终止 TLS 并设置 `X-Forwarded-Proto: https`，因此自动连接可以正常工作。由于 URL 是公开的，**请设置 daemon 密码**。
+  Cloudflare 会终止 TLS 并设置 `X-Forwarded-Proto: https`，因此自动连接可以正常工作。把这个公网域名加到 Host 设置的「主机名」里，并在同一页设置 daemon 密码。密码要重启 daemon 后才生效。最近的 MCP 调用在 [MCP 调用](/docs/mcp#label-mcp-calls) 页面。
 
 ## 安全 {#security}
 
@@ -225,7 +225,7 @@ PASEO_TRUSTED_PROXIES=loopback,172.16.0.0/12 PASEO_WEB_UI_ENABLED=true paseo dae
 - **页面加载了但一直连不上。** 代理没有转发 WebSocket 升级，或者剥离了 `Host` 请求头。检查代理配置中的升级请求头。
 - **连上之后输出卡住。** 开启了响应缓冲，或者读取超时太短。关闭缓冲并提高超时时间。
 - **HTTPS 下出现“Mixed content”或连接被拦截。** 应用退回到了 `ws://`。要么代理没有发送 `X-Forwarded-Proto: https`，要么 daemon 不信任代理的地址。转发该请求头；如果代理不在回环地址上，再配置 `daemon.trustedProxies`。
-- **`403 Invalid Host header`。** 你的域名不在白名单中。用 `--hostnames` 或 `daemon.hostnames` 添加它，见 [DNS 重绑定防护](/docs/security#dns-rebinding-protection)。
+- **`403 Invalid Host header`。** 你的域名不在白名单中。在 Host 设置的「主机名」里添加，或用 `--hostnames` / `daemon.hostnames`。见 [DNS 重绑定防护](/docs/security#dns-rebinding-protection)。
 - **较大的提示词或上传失败。** 调高代理的最大请求体大小（Nginx 中的 `client_max_body_size`）。
 
 ## 另请参阅 {#see-also}

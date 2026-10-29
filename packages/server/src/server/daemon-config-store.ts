@@ -11,6 +11,7 @@ import {
 } from "@getpaseo/protocol/messages";
 import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
 import type { SpeechSettingsPatch } from "@getpaseo/protocol/speech/rpc-schemas";
+import { normalizeHostnameAllowlist } from "./hostnames.js";
 import { mergeSpeechSettingsPatch, type SpeechSettingsOwner } from "./speech/speech-settings.js";
 
 export type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
@@ -21,7 +22,8 @@ type ProviderOverride = import("./agent/provider-launch-config.js").ProviderOver
 
 interface SupportedMutableConfigPatch {
   relay?: { enabled?: boolean; requireProtectedSecurity?: boolean };
-  mcp?: { injectIntoAgents?: boolean };
+  mcp?: { injectIntoAgents?: boolean; disabledTools?: string[] };
+  hostnames?: true | string[];
   browserTools?: { enabled?: boolean };
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
@@ -180,6 +182,7 @@ const RELOADABLE_PATHS = [
   "daemon.relay.requireProtectedSecurity",
   "daemon.mcp.enabled",
   "daemon.mcp.injectIntoAgents",
+  "daemon.mcp.disabledTools",
   "daemon.browserTools.enabled",
   "daemon.hostnames",
   "daemon.cors.allowedOrigins",
@@ -205,6 +208,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.relay.requireProtectedSecurity", "relay.requireProtectedSecurity"],
   ["daemon.mcp.enabled", "mcp.enabled"],
   ["daemon.mcp.injectIntoAgents", "mcp.injectIntoAgents"],
+  ["daemon.mcp.disabledTools", "mcp.disabledTools"],
   ["daemon.browserTools.enabled", "browserTools.enabled"],
   ["daemon.hostnames", "hostnames"],
   ["daemon.cors.allowedOrigins", "cors.allowedOrigins"],
@@ -272,11 +276,23 @@ function pickRelayPatch(
   return Object.keys(picked).length > 0 ? { relay: picked } : {};
 }
 
+function pickMcpPatch(
+  mcp: MutableDaemonConfigPatch["mcp"],
+): Pick<SupportedMutableConfigPatch, "mcp"> {
+  if (!mcp) return {};
+  const picked: NonNullable<SupportedMutableConfigPatch["mcp"]> = {
+    ...(mcp.injectIntoAgents !== undefined ? { injectIntoAgents: mcp.injectIntoAgents } : {}),
+    ...(mcp.disabledTools !== undefined ? { disabledTools: mcp.disabledTools } : {}),
+  };
+  return Object.keys(picked).length > 0 ? { mcp: picked } : {};
+}
+
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
     ...pickRelayPatch(patch.relay),
-    ...(patch.mcp?.injectIntoAgents !== undefined
-      ? { mcp: { injectIntoAgents: patch.mcp.injectIntoAgents } }
+    ...pickMcpPatch(patch.mcp),
+    ...(patch.hostnames !== undefined
+      ? { hostnames: normalizeHostnameAllowlist(patch.hostnames) }
       : {}),
     ...(patch.browserTools?.enabled !== undefined
       ? { browserTools: { enabled: patch.browserTools.enabled } }
@@ -392,6 +408,12 @@ export class DaemonConfigStore {
         ),
       ),
     );
+  }
+
+  public setPasswordConfigured(passwordSet: boolean): MutableDaemonConfig {
+    const next = MutableDaemonConfigSchema.parse({ ...this.current, passwordSet });
+    this.applyReplacement(next, { removedProviders: [] });
+    return this.current;
   }
 
   public setAgentSkillSelection(selection: AgentSkillSelection): Promise<MutableDaemonConfig> {
@@ -756,6 +778,12 @@ function mergeMutableDaemonPatch(
   }
   if (patch.mcp?.injectIntoAgents !== undefined) {
     next.mcp = { ...next.mcp, injectIntoAgents: patch.mcp.injectIntoAgents };
+  }
+  if (patch.mcp?.disabledTools !== undefined) {
+    next.mcp = { ...next.mcp, disabledTools: patch.mcp.disabledTools };
+  }
+  if (patch.hostnames !== undefined) {
+    next.hostnames = patch.hostnames;
   }
   if (patch.browserTools?.enabled !== undefined) {
     next.browserTools = { ...next.browserTools, enabled: patch.browserTools.enabled };

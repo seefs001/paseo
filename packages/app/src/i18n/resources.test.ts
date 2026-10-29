@@ -837,7 +837,7 @@ describe("translation resources", () => {
     expect(en.agentAutocomplete.noCommands).toBe("No commands found");
     expect(en.agentAutocomplete.noSessions).toBe("No agent sessions found");
     expect(en.agentAutocomplete.noProfiles).toBe("No agent profiles found");
-    expect(en.agentAutocomplete.noMentions).toBe("No agent sessions, profiles, or files found");
+    expect(en.agentAutocomplete.noMentions).toBe("No agent sessions or files found");
     expect(en.agentAutocomplete.failedToLoad).toBe("Failed to load");
     expect(en.message.attachments.agentSession).toBe("Agent session");
     expect(en.message.attachments.agentProfile).toBe("Agent profile");

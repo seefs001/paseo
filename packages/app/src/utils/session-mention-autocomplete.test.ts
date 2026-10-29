@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  applySessionMentionReplacement,
   buildAgentProfileAddressCard,
   buildAgentSessionAddressCard,
-  formatAgentMentionToken,
+  findActiveProfileMention,
   isPathMentionQuery,
   rankAgentProfileMentions,
   rankSessionMentionCandidates,
@@ -57,7 +56,7 @@ describe("resolveComposerMention", () => {
     );
   });
 
-  it("scopes the mention list to chat, agent, or file prefixes", () => {
+  it("scopes the mention list to chat or file prefixes", () => {
     expect(resolveComposerMention({ mentionQuery: "chat", canAttachSessionMention: true })).toEqual(
       {
         kind: "chat",
@@ -68,17 +67,20 @@ describe("resolveComposerMention", () => {
       resolveComposerMention({ mentionQuery: "chat auth", canAttachSessionMention: true }),
     ).toEqual({ kind: "chat", filter: "auth" });
     expect(
-      resolveComposerMention({ mentionQuery: "agent k3", canAttachSessionMention: true }),
-    ).toEqual({ kind: "agent", filter: "k3" });
-    expect(
       resolveComposerMention({ mentionQuery: "file package.json", canAttachSessionMention: true }),
     ).toEqual({ kind: "file", filter: "package.json" });
     expect(
       resolveComposerMention({ mentionQuery: "file/src/foo", canAttachSessionMention: true }),
     ).toEqual({ kind: "file", filter: "src/foo" });
+  });
+
+  it("leaves agent profiles to # so @agent is an ordinary name or path query", () => {
     expect(
-      resolveComposerMention({ mentionQuery: "Agent K3", canAttachSessionMention: true }),
-    ).toEqual({ kind: "agent", filter: "K3" });
+      resolveComposerMention({ mentionQuery: "agent", canAttachSessionMention: true }),
+    ).toEqual({ kind: "all", filter: "agent" });
+    expect(
+      resolveComposerMention({ mentionQuery: "agent/k3", canAttachSessionMention: true }),
+    ).toEqual({ kind: "file", filter: "agent/k3" });
   });
 
   it("does not treat longer words as kind prefixes", () => {
@@ -101,30 +103,30 @@ describe("resolveComposerMention", () => {
   });
 });
 
-describe("formatAgentMentionToken", () => {
-  it("keeps a readable @name in the composer and quotes names with spaces", () => {
-    expect(formatAgentMentionToken("K3")).toBe("@K3");
-    expect(formatAgentMentionToken("Auth fix")).toBe('@"Auth fix"');
-    expect(formatAgentMentionToken("")).toBe("");
+describe("findActiveProfileMention", () => {
+  it("opens # at a word boundary and after Chinese punctuation", () => {
+    expect(findActiveProfileMention({ text: "#", cursorIndex: 1 })).toEqual({
+      start: 0,
+      end: 1,
+      query: "",
+    });
+    expect(findActiveProfileMention({ text: "请用 #grok", cursorIndex: 8 })).toEqual({
+      start: 3,
+      end: 8,
+      query: "grok",
+    });
+    expect(findActiveProfileMention({ text: "交给，#grok4.7", cursorIndex: 11 })).toEqual({
+      start: 3,
+      end: 11,
+      query: "grok4.7",
+    });
   });
-});
 
-describe("applySessionMentionReplacement", () => {
-  it("leaves the selected profile or session name in the text", () => {
-    expect(
-      applySessionMentionReplacement({
-        text: "handoff to @auth",
-        mention: { start: 11, end: 16, query: "auth" },
-        label: "Auth fix",
-      }),
-    ).toBe('handoff to @"Auth fix" ');
-    expect(
-      applySessionMentionReplacement({
-        text: "@agent k3 please",
-        mention: { start: 0, end: 9, query: "agent k3" },
-        label: "K3",
-      }),
-    ).toBe("@K3 please");
+  it("ignores issue numbers, mid-word hashes, headings and finished queries", () => {
+    for (const text of ["fix #123", "C#", "a#b", "# heading", "#grok fast"]) {
+      expect(findActiveProfileMention({ text, cursorIndex: text.length })).toBeNull();
+    }
+    expect(findActiveProfileMention({ text: "#grok fast", cursorIndex: 5 })?.query).toBe("grok");
   });
 });
 

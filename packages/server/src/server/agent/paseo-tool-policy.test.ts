@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 
-import { isPaseoToolEnabled, resolvePaseoToolPolicy } from "./paseo-tool-policy.js";
+import {
+  isPaseoToolEnabled,
+  mergeHostDisabledTools,
+  resolvePaseoToolPolicy,
+} from "./paseo-tool-policy.js";
 
 describe("Paseo tool policy", () => {
   test("defaults to all Paseo tools and resolves only the exact provider ID", () => {
@@ -31,5 +35,23 @@ describe("Paseo tool policy", () => {
     expect(
       isPaseoToolEnabled({ enabled: true, disabledTools: ["list_agents"] }, "create_agent"),
     ).toBe(true);
+  });
+
+  test("host settings disable tools without turning the provider policy off", () => {
+    expect(mergeHostDisabledTools(undefined, undefined)).toBeUndefined();
+    expect(mergeHostDisabledTools({ enabled: true }, [])).toEqual({ enabled: true });
+    expect(
+      mergeHostDisabledTools({ enabled: true, disabledTools: ["list_agents"] }, [
+        "kill_agent",
+        "list_agents",
+      ]),
+    ).toEqual({
+      enabled: true,
+      disabledTools: ["list_agents", "kill_agent"],
+    });
+    expect(
+      isPaseoToolEnabled(mergeHostDisabledTools(undefined, ["kill_agent"]), "kill_agent"),
+    ).toBe(false);
+    expect(isPaseoToolEnabled(mergeHostDisabledTools(undefined, ["speak"]), "speak")).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
+import { getMcpCallLog } from "../../agent/mcp-call-log.js";
 
 export interface DaemonRuntimeConfig {
   listen: string | null;
@@ -54,6 +55,8 @@ export interface DaemonSessionOptions {
   logger: pino.Logger;
   hubRelationships?: HubRelationshipManagement;
   reloadConfig: () => Promise<DaemonConfigReloadResult>;
+  saveDaemonPassword: (password: string) => void;
+  setPasswordConfigured: (passwordSet: boolean) => void;
 }
 
 /**
@@ -80,6 +83,8 @@ export class DaemonSession {
   private readonly selfUpdate: DaemonSelfUpdateSessionController;
   private readonly hubRelationships: HubRelationshipManagement | null;
   private readonly reloadConfig: () => Promise<DaemonConfigReloadResult>;
+  private readonly saveDaemonPassword: (password: string) => void;
+  private readonly setPasswordConfigured: (passwordSet: boolean) => void;
 
   constructor(options: DaemonSessionOptions) {
     this.host = options.host;
@@ -97,6 +102,8 @@ export class DaemonSession {
     this.logger = options.logger;
     this.hubRelationships = options.hubRelationships ?? null;
     this.reloadConfig = options.reloadConfig;
+    this.saveDaemonPassword = options.saveDaemonPassword;
+    this.setPasswordConfigured = options.setPasswordConfigured;
     this.selfUpdate = new DaemonSelfUpdateSessionController({
       clientId: this.clientId,
       daemonVersion: this.daemonVersion ?? null,
@@ -316,5 +323,43 @@ export class DaemonSession {
     msg: Extract<SessionInboundMessage, { type: "daemon.update.request" }>,
   ): Promise<void> {
     await this.selfUpdate.dispatch(msg);
+  }
+
+  handleListMcpCallsRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.mcp.list_calls.request" }>,
+  ): void {
+    void this.emitMcpCalls(msg);
+  }
+
+  private async emitMcpCalls(
+    msg: Extract<SessionInboundMessage, { type: "daemon.mcp.list_calls.request" }>,
+  ): Promise<void> {
+    try {
+      const calls = await getMcpCallLog(this.paseoHome, this.logger).list(msg.limit ?? 50);
+      this.host.emit({
+        type: "daemon.mcp.list_calls.response",
+        payload: {
+          requestId: msg.requestId,
+          calls,
+        },
+      });
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to list Agent MCP calls");
+    }
+  }
+
+  handleSetPasswordRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.password.set.request" }>,
+  ): void {
+    this.saveDaemonPassword(msg.password);
+    this.setPasswordConfigured(true);
+    this.host.emit({
+      type: "daemon.password.set.response",
+      payload: {
+        requestId: msg.requestId,
+        passwordSet: true,
+        restartRequired: true,
+      },
+    });
   }
 }

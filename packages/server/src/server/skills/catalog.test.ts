@@ -76,6 +76,34 @@ it("serializes concurrent usage, deduplicates submissions and repeated reference
   expect(Object.keys(stored.skills).sort()).toEqual([alpha, beta].sort());
 });
 
+it("marks skills that set disable-model-invocation as user-invoked and lists them first", async () => {
+  const { directory, catalog } = await fixture();
+  await writeSkill(directory, "tdd", "---\nname: tdd\ndescription: Write tests first\n---\n");
+  await writeSkill(
+    directory,
+    "to-spec",
+    "---\nname: to-spec\ndescription: Spec from thread\ndisable-model-invocation: true\n---\n",
+  );
+  await writeSkill(
+    directory,
+    "wizard",
+    '---\nname: wizard\ndescription: Human steps\ndisable-model-invocation: "true"\n---\n',
+  );
+  await writeSkill(
+    directory,
+    "explicit",
+    "---\nname: explicit\ndescription: Model may call\ndisable-model-invocation: false\n---\n",
+  );
+  const result = await catalog.list();
+  expect(result.skipped).toBe(0);
+  expect(result.skills.map((skill) => [skill.name, skill.userInvoked, skill.description])).toEqual([
+    ["to-spec", true, "Spec from thread"],
+    ["wizard", true, "Human steps"],
+    ["explicit", false, "Model may call"],
+    ["tdd", false, "Write tests first"],
+  ]);
+});
+
 it("returns an explicit empty catalog for a missing directory and sees newly installed skills on the next list", async () => {
   const { directory, home } = await fixture();
   const absent = path.join(directory, "absent");

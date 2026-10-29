@@ -101,6 +101,33 @@ describe("DaemonConfigStore", () => {
     }
   });
 
+  test("patch persists hostnames and emits the field change", async () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+    const changes: unknown[] = [];
+    store.onFieldChange("hostnames", (value) => changes.push(value));
+
+    await store.patch({ hostnames: ["Paseo.Example.com", ".Example.com"] });
+
+    expect(changes).toEqual([["paseo.example.com", ".example.com"]]);
+    expect(store.get().hostnames).toEqual(["paseo.example.com", ".example.com"]);
+    expect(loadPersistedConfig(paseoHome).daemon?.hostnames).toEqual([
+      "paseo.example.com",
+      ".example.com",
+    ]);
+    await expect(store.patch({ hostnames: ["not a host"] })).rejects.toThrow(/Invalid hostname/);
+  });
+
   test("patch persists relay state and emits its field change", async () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);
@@ -366,10 +393,11 @@ describe("DaemonConfigStore", () => {
       appendSystemPrompt: "Only this field",
       // Reload-only runtime state is accepted as unknown wire data for forward
       // compatibility but is not part of the patch capability.
-      hostnames: ["attempted-patch.example.test"],
+      trustedProxies: ["10.0.0.1"],
     } as Parameters<typeof store.patch>[0]);
 
     expect(store.get().hostnames).toEqual(["launch.example.test"]);
+    expect(store.get().trustedProxies).toBe(true);
     expect(loadPersistedConfig(paseoHome)).toEqual({
       ...before,
       daemon: { ...before.daemon, appendSystemPrompt: "Only this field" },

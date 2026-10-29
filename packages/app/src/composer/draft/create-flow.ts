@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ComposerAttachment } from "@/attachments/types";
 import {
   resolveComposerAttachmentSubmitFormat,
-  splitComposerAttachmentsForSubmit,
+  prepareComposerMessageForSubmit,
 } from "@/composer/attachments/submit";
 import { isActiveCreateFlowForDraft, useCreateFlowStore } from "@/stores/create-flow-store";
 import { handoffCreatedAgentMessageSubmission } from "@/composer/submission/writer";
@@ -15,6 +15,7 @@ import {
 } from "@/types/stream";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
+import { updateProfileReferences } from "@/composer/profile-reference/model";
 
 const EMPTY_STREAM_ITEMS: StreamItem[] = [];
 
@@ -278,6 +279,11 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
 
       dispatch({ type: "DRAFT_SET_ERROR", message: "" });
       const trimmedPrompt = text.trim();
+      const trimmedAttachments = updateProfileReferences({
+        previousText: text,
+        text: trimmedPrompt,
+        attachments,
+      });
       const pendingServerId = getPendingServerId();
       if (!pendingServerId) {
         const error = new Error(t("composer.errors.noHostSelected"));
@@ -287,7 +293,9 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
       const supportsForgeSearch =
         useSessionStore.getState().sessions[pendingServerId]?.serverInfo?.features?.forgeSearch ===
         true;
-      const wirePayload = splitComposerAttachmentsForSubmit(attachments, {
+      const wirePayload = prepareComposerMessageForSubmit({
+        text: trimmedPrompt,
+        attachments: trimmedAttachments,
         format: resolveComposerAttachmentSubmitFormat({
           supportsForgeAttachments: supportsForgeSearch,
         }),
@@ -303,7 +311,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
 
       const validationError = validateBeforeSubmit?.({
         text: trimmedPrompt,
-        attachments,
+        attachments: trimmedAttachments,
         cwd,
       });
       if (validationError) {
@@ -314,7 +322,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
 
       const attempt: CreateAttempt = {
         clientMessageId: `${draftId}:initial-message`,
-        text: trimmedPrompt,
+        text: wirePayload.text,
         timestamp: new Date(),
         ...(images.length > 0 ? { images } : {}),
         ...(wirePayload.attachments.length > 0 ? { attachments: wirePayload.attachments } : {}),

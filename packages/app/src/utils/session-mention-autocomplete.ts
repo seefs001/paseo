@@ -24,24 +24,18 @@ export interface RankSessionMentionCandidatesInput {
   query: string;
 }
 
-interface ApplySessionMentionReplacementInput {
-  text: string;
-  mention: SessionMentionRange;
-  label: string;
-}
-
 export function isPathMentionQuery(query: string): boolean {
   return query.includes("/");
 }
 
-export type ComposerMentionKind = "all" | "chat" | "agent" | "file";
+export type ComposerMentionKind = "all" | "chat" | "file";
 
 export interface ResolvedComposerMention {
   kind: ComposerMentionKind;
   filter: string;
 }
 
-const MENTION_KIND_PREFIX = /^(chat|agent|file)(?:\s+|\/|$)(.*)$/i;
+const MENTION_KIND_PREFIX = /^(chat|file)(?:\s+|\/|$)(.*)$/i;
 
 export function resolveComposerMention(input: {
   mentionQuery: string | null;
@@ -69,7 +63,7 @@ function parseMentionKindPrefix(query: string): ResolvedComposerMention | null {
     return null;
   }
   const kind = match[1].toLowerCase();
-  if (kind !== "chat" && kind !== "agent" && kind !== "file") {
+  if (kind !== "chat" && kind !== "file") {
     return null;
   }
   return { kind, filter: match[2] ?? "" };
@@ -77,38 +71,25 @@ function parseMentionKindPrefix(query: string): ResolvedComposerMention | null {
 
 export function mentionOptionGroups(kind: ComposerMentionKind): {
   sessions: boolean;
-  profiles: boolean;
   files: boolean;
 } {
   return {
     sessions: kind === "chat" || kind === "all",
-    profiles: kind === "agent" || kind === "all",
     files: kind === "file" || kind === "all",
   };
 }
 
-const MENTION_TOKEN_SPECIAL = /[\s"/@]/;
+// `#` opens agent profiles only at a word boundary, and never for `#123` issue references.
+const PROFILE_MENTION = /(?:^|[\s(（，。：；！？])#([^\s#/\\()[\]{}'"`<>]*)$/u;
 
-export function formatAgentMentionToken(label: string): string {
-  const trimmed = label.trim();
-  if (!trimmed) {
-    return "";
-  }
-  if (MENTION_TOKEN_SPECIAL.test(trimmed)) {
-    return `@"${trimmed.replace(/"/g, '\\"')}"`;
-  }
-  return `@${trimmed}`;
-}
-
-export function applySessionMentionReplacement(input: ApplySessionMentionReplacementInput): string {
-  const token = formatAgentMentionToken(input.label);
-  const before = input.text.slice(0, input.mention.start);
-  const after = input.text.slice(input.mention.end);
-  if (!token) {
-    return `${before}${after}`;
-  }
-  const needsSpace = after.length === 0 || !/^\s/.test(after);
-  return `${before}${token}${needsSpace ? " " : ""}${after}`;
+export function findActiveProfileMention(input: {
+  text: string;
+  cursorIndex: number;
+}): SessionMentionRange | null {
+  const cursor = Math.max(0, Math.min(input.cursorIndex, input.text.length));
+  const match = PROFILE_MENTION.exec(input.text.slice(0, cursor));
+  if (!match || /^\d/.test(match[1])) return null;
+  return { start: cursor - match[1].length - 1, end: cursor, query: match[1] };
 }
 
 export function rankSessionMentionCandidates(

@@ -27,3 +27,13 @@ export function isPaseoToolEnabled(
 export function isPaseoToolPolicyEnabled(policy: ProviderPaseoToolsPolicy | undefined): boolean {
   return policy?.enabled !== false;
 }
+
+/** Host settings add to the provider denylist. An empty host list leaves the provider policy unchanged. */
+export function mergeHostDisabledTools(
+  policy: ProviderPaseoToolsPolicy | undefined,
+  hostDisabled: readonly string[] | undefined,
+): ProviderPaseoToolsPolicy | undefined {
+  if (!hostDisabled || hostDisabled.length === 0) return policy;
+  const disabledTools = [...new Set([...(policy?.disabledTools ?? []), ...hostDisabled])];
+  return { ...policy, disabledTools };
+}

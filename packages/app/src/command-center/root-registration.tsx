@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { router, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import {
+  Cable,
   CalendarClock,
   CircleDashed,
   Folder,
@@ -27,6 +28,7 @@ import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { clearCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
 import {
+  buildMcpCallsRoute,
   buildOpenProjectRoute,
   buildSchedulesRoute,
   buildSessionsRoute,
@@ -45,6 +47,9 @@ const ThemedHistory = withUnistyles(History, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedCalendarClock = withUnistyles(CalendarClock, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedCable = withUnistyles(Cable, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedKeyboard = withUnistyles(Keyboard, (theme) => ({
@@ -83,6 +88,10 @@ function SchedulesIcon({ size }: CommandCenterIconProps) {
   return <ThemedCalendarClock size={size} strokeWidth={2.2} />;
 }
 
+function McpCallsIcon({ size }: CommandCenterIconProps) {
+  return <ThemedCable size={size} strokeWidth={2.2} />;
+}
+
 function KeyboardIcon({ size }: CommandCenterIconProps) {
   return <ThemedKeyboard size={size} strokeWidth={2.2} />;
 }
@@ -118,6 +127,7 @@ export function CommandCenterRootActions() {
   const homeRoute = useMemo<Href>(() => buildOpenProjectRoute(), []);
   const sessionsRoute = useMemo<Href>(() => buildSessionsRoute(), []);
   const schedulesRoute = useMemo<Href>(() => buildSchedulesRoute(), []);
+  const mcpCallsRoute = useMemo<Href>(() => buildMcpCallsRoute(), []);
   const setShortcutsDialogOpen = useKeyboardShortcutsStore((state) => state.setShortcutsDialogOpen);
   // Narrow selector on purpose: a whole-store subscription would re-register every root action
   // each time host filters are reconciled.
@@ -246,6 +256,24 @@ export function CommandCenterRootActions() {
         },
       },
       {
+        id: "mcp-calls",
+        group: "actions",
+        groupRank: 0,
+        rank: 6,
+        keywords: ["mcp", "mcp calls", "tool calls"],
+        visibility: "always",
+        run: () => {
+          clearCommandCenterFocusRestoreElement();
+          router.push(mcpCallsRoute);
+        },
+        presentation: {
+          kind: "action",
+          title: t("sidebar.sections.mcpCalls"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: McpCallsIcon,
+        },
+      },
+      {
         id: "settings",
         group: "actions",
         groupRank: 0,
@@ -337,6 +365,7 @@ export function CommandCenterRootActions() {
     openAddProject,
     openImportSession,
     overrides,
+    mcpCallsRoute,
     schedulesRoute,
     sessionsRoute,
     setGroupMode,

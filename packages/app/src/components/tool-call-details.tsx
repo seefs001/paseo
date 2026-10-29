@@ -1,9 +1,10 @@
-import { useMemo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import {
   View,
   Text,
   ScrollView as RNScrollView,
   type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { ScrollView as GHScrollView } from "react-native-gesture-handler";
@@ -24,7 +25,9 @@ import { extensionFromPath, highlightToKeyedLines } from "@/utils/highlight-cach
 import { HighlightedLines } from "./highlighted-content";
 import { DiffViewer } from "./diff-viewer";
 import { getCodeInsets } from "./code-insets";
-import { isWeb } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
+import { splitLivePlainText } from "@/agent-stream/streaming-plain-text";
+import { useTextStableDuringSelection } from "@/agent-stream/text-selection-hold";
 
 const ScrollView = isWeb ? RNScrollView : GHScrollView;
 
@@ -37,6 +40,8 @@ interface ToolCallDetailsContentProps {
   maxHeight?: number;
   fillAvailableHeight?: boolean;
   showLoadingSkeleton?: boolean;
+  /** The detail text is still growing. Native keeps completed lines in their own text view. */
+  live?: boolean;
 }
 
 interface DetailStyles {
@@ -156,7 +161,8 @@ interface ShellDetailProps {
 function ShellDetailSection({ command, output, ds }: ShellDetailProps) {
   const normalizedCommand = command.replace(/\n+$/, "");
   const commandOutput = (output ?? "").replace(/^\n+/, "");
-  const hasOutput = commandOutput.length > 0;
+  const shownOutput = useTextStableDuringSelection(commandOutput);
+  const hasOutput = shownOutput.length > 0;
   return (
     <View style={ds.sectionFillStyle}>
       <View style={ds.codeBlockFillStyle}>
@@ -176,7 +182,7 @@ function ShellDetailSection({ command, output, ds }: ShellDetailProps) {
               <Text selectable style={styles.scrollText}>
                 <Text style={styles.shellPrompt}>$ </Text>
                 {normalizedCommand}
-                {hasOutput ? `\n\n${commandOutput}` : ""}
+                {hasOutput ? `\n\n${shownOutput}` : ""}
               </Text>
             </View>
           </ScrollView>
@@ -385,6 +391,51 @@ function EditDetailSection({ diffLines, ds }: EditDetailProps) {
   );
 }
 
+const StableStreamingText = memo(function StableStreamingText({
+  text,
+  style,
+}: {
+  text: string;
+  style: StyleProp<TextStyle>;
+}) {
+  return (
+    <Text selectable style={style}>
+      {text}
+    </Text>
+  );
+});
+
+function SelectableStreamingText({
+  text,
+  live,
+  style,
+}: {
+  text: string;
+  live: boolean;
+  style: StyleProp<TextStyle>;
+}) {
+  const shown = useTextStableDuringSelection(text);
+  const split = isNative && live ? splitLivePlainText(shown) : null;
+  if (!split) {
+    return (
+      <Text selectable style={style}>
+        {shown}
+      </Text>
+    );
+  }
+  // Sibling text views, not nested: updating the open line must not rebuild the completed lines.
+  return (
+    <View>
+      {split.head ? <StableStreamingText text={split.head} style={style} /> : null}
+      {split.tail ? (
+        <Text selectable style={style}>
+          {split.tail}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 interface ScrollableContentProps {
   content: string;
   ds: DetailStyles;
@@ -452,7 +503,15 @@ function FetchDetailSection({ url, result, ds }: FetchDetailProps) {
   );
 }
 
-function ScrollablePlainTextSection({ text, ds }: { text: string; ds: DetailStyles }) {
+function ScrollablePlainTextSection({
+  text,
+  ds,
+  live = false,
+}: {
+  text: string;
+  ds: DetailStyles;
+  live?: boolean;
+}) {
   return (
     <View style={styles.section}>
       <ScrollView
@@ -461,9 +520,7 @@ function ScrollablePlainTextSection({ text, ds }: { text: string; ds: DetailStyl
         nestedScrollEnabled
         showsVerticalScrollIndicator
       >
-        <Text selectable style={styles.plainText}>
-          {text}
-        </Text>
+        <SelectableStreamingText text={text} live={live} style={styles.plainText} />
       </ScrollView>
     </View>
   );
@@ -574,12 +631,24 @@ interface UnknownDetail {
   output: unknown;
 }
 
-function buildUnknownSections(detail: UnknownDetail, ds: DetailStyles, t: TFunction): ReactNode[] {
+function buildUnknownSections(
+  detail: UnknownDetail,
+  ds: DetailStyles,
+  t: TFunction,
+  live: boolean,
+): ReactNode[] {
   const plainInputText =
     typeof detail.input === "string" && detail.output === null ? detail.input : null;
 
   if (plainInputText !== null) {
-    return [<ScrollablePlainTextSection key="unknown-plain-text" text={plainInputText} ds={ds} />];
+    return [
+      <ScrollablePlainTextSection
+        key="unknown-plain-text"
+        text={plainInputText}
+        ds={ds}
+        live={live}
+      />,
+    ];
   }
 
   const sectionsFromTopLevel = [
@@ -663,6 +732,7 @@ function buildDetailSections(
   diffLines: DiffLine[] | undefined,
   ds: DetailStyles,
   t: TFunction,
+  live: boolean,
 ): ReactNode[] {
   if (!detail) return [];
   if (detail.type === "shell") {
@@ -720,14 +790,21 @@ function buildDetailSections(
   }
   if (detail.type === "plain_text") {
     if (!detail.text) return [];
-    return [<ScrollablePlainTextSection key="plain-text" text={detail.text} ds={ds} />];
+    return [<ScrollablePlainTextSection key="plain-text" text={detail.text} ds={ds} live={live} />];
   }
   if (detail.type === "unknown") {
     const searchToolsText = readSearchToolsResult(toolName, detail);
     if (searchToolsText) {
-      return [<ScrollablePlainTextSection key="search-tools" text={searchToolsText} ds={ds} />];
+      return [
+        <ScrollablePlainTextSection
+          key="search-tools"
+          text={searchToolsText}
+          ds={ds}
+          live={live}
+        />,
+      ];
     }
-    return buildPaseoUnknownSections(toolName, detail) ?? buildUnknownSections(detail, ds, t);
+    return buildPaseoUnknownSections(toolName, detail) ?? buildUnknownSections(detail, ds, t, live);
   }
   return [];
 }
@@ -773,13 +850,14 @@ export function ToolCallDetailsContent({
   maxHeight,
   fillAvailableHeight = false,
   showLoadingSkeleton = false,
+  live = false,
 }: ToolCallDetailsContentProps) {
   const { t } = useTranslation();
   const resolvedMaxHeight = fillAvailableHeight ? undefined : (maxHeight ?? 300);
   const ds = useDetailStyles(detail, resolvedMaxHeight, fillAvailableHeight);
   const diffLines = useDiffLines(detail);
 
-  const sections: ReactNode[] = buildDetailSections(toolName, detail, diffLines, ds, t);
+  const sections: ReactNode[] = buildDetailSections(toolName, detail, diffLines, ds, t, live);
 
   if (errorText) {
     sections.push(<ErrorSection key="error" errorText={errorText} ds={ds} />);

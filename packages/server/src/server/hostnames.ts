@@ -85,6 +85,38 @@ export function mergeHostnames(values: Array<HostnamesConfig>): HostnamesConfig 
   return deduped;
 }
 
+const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+export function normalizeHostnameAllowlist(value: true | readonly string[]): true | string[] {
+  if (value === true) return true;
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const pattern = normalizeHostnamePattern(entry);
+    if (seen.has(pattern)) continue;
+    seen.add(pattern);
+    normalized.push(pattern);
+  }
+  return normalized;
+}
+
+export function normalizeHostnamePattern(input: string): string {
+  const value = input.trim().toLowerCase();
+  const suffix = value.startsWith(".");
+  const body = suffix ? value.slice(1) : value;
+  const labels = body.length > 0 ? body.split(".") : [];
+  const valid =
+    body.length > 0 &&
+    body.length <= 253 &&
+    !body.startsWith(".") &&
+    !body.endsWith(".") &&
+    labels.every((label) => HOSTNAME_LABEL.test(label));
+  if (!valid) {
+    throw new Error(`Invalid hostname: ${input}`);
+  }
+  return suffix ? `.${body}` : body;
+}
+
 export function parseHostnamesEnv(raw: string | undefined): HostnamesConfig {
   if (!raw) return undefined;
   const trimmed = raw.trim();

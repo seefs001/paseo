@@ -5,6 +5,12 @@ import {
 } from "@/attachments/types";
 import { PluginResourceComposerAttachmentSchema } from "@/plugins/attachments";
 import { z } from "zod";
+import {
+  isTextReference,
+  ProfileReferenceSchema,
+  SessionReferenceSchema,
+  updateProfileReferences,
+} from "@/composer/profile-reference/model";
 
 export const DRAFT_STORE_VERSION = 5;
 export const FINALIZED_DRAFT_TTL_MS = 5 * 60 * 1000;
@@ -38,7 +44,12 @@ export function editDraftRecordText(
   now: number,
 ): DraftRecord {
   if (record?.lifecycle === "active" && record.input.text === text) return record;
-  const attachments = record?.lifecycle === "active" ? record.input.attachments : [];
+  const previousText = record?.lifecycle === "active" ? record.input.text : "";
+  const previousAttachments = record?.lifecycle === "active" ? record.input.attachments : [];
+  const hasTextReferences = previousAttachments.some(isTextReference);
+  const attachments = hasTextReferences
+    ? updateProfileReferences({ previousText, text, attachments: previousAttachments })
+    : previousAttachments;
   return {
     input: { text, attachments },
     lifecycle: text.length > 0 || attachments.length > 0 ? "active" : "abandoned",
@@ -94,6 +105,8 @@ const ChangeRequestItemSchema = z.strictObject({
 export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z.discriminatedUnion(
   "kind",
   [
+    ProfileReferenceSchema,
+    SessionReferenceSchema,
     z.strictObject({ kind: z.literal("image"), metadata: AttachmentMetadataSchema }),
     z.strictObject({ kind: z.literal("file"), attachment: UploadedFileSchema }),
     z.strictObject({

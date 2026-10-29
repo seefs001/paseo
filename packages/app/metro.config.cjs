@@ -1,5 +1,6 @@
 const { getDefaultConfig } = require("expo/metro-config");
 const { resolve } = require("metro-resolver");
+const fs = require("fs");
 const path = require("path");
 
 const projectRoot = __dirname;
@@ -51,6 +52,24 @@ function isLocalModuleImport(moduleName) {
   );
 }
 
+function preferTypeScriptSource(origin, moduleName) {
+  if (!origin || origin.includes(`${path.sep}node_modules${path.sep}`)) return moduleName;
+  if (!isLocalModuleImport(moduleName)) return moduleName;
+  let extension;
+  if (moduleName.endsWith(".mjs")) extension = ".mjs";
+  else if (moduleName.endsWith(".js")) extension = ".js";
+  else return moduleName;
+  const baseName = moduleName.slice(0, -extension.length);
+  const basePath = path.resolve(path.dirname(origin), baseName);
+  const replacements = extension === ".mjs" ? [".mts"] : [".ts", ".tsx"];
+  for (const replacement of replacements) {
+    if (fs.existsSync(basePath + replacement)) {
+      return `${baseName}${replacement}`;
+    }
+  }
+  return moduleName;
+}
+
 function resolveWithCustomWebOverlay(context, moduleName, platform) {
   const shouldResolveCustomWebVariant =
     platform === "web" &&
@@ -89,7 +108,8 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return resolveWithCustomWebOverlay(context, fdroidModuleOverrides[moduleName], platform);
   }
 
-  return resolveWithCustomWebOverlay(context, moduleName, platform);
+  const resolvedName = preferTypeScriptSource(context.originModulePath, moduleName);
+  return resolveWithCustomWebOverlay(context, resolvedName, platform);
 };
 
 if (process.env.PASEO_SERVE_SIM_PREVIEW === "1") {

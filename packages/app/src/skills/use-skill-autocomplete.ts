@@ -44,7 +44,9 @@ export function useSkillAutocomplete(input: UseAgentAutocompleteInput) {
         id: skill.path,
         label: `$${skill.name}`,
         description: skill.description || t("skillPicker.noDescription"),
-        detail: t("skillPicker.usage", { count: skill.usageCount }),
+        detail: skill.userInvoked
+          ? `${t("skillPicker.userInvoked")} · ${t("skillPicker.usage", { count: skill.usageCount })}`
+          : t("skillPicker.usage", { count: skill.usageCount }),
         kind: "skill",
       })),
     [query.data, search, t],

@@ -27,6 +27,12 @@ import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { useShallow } from "zustand/shallow";
 import type { ComposerTextSource } from "@/composer/text-source";
 import { isWeb } from "@/constants/platform";
+import {
+  applyProfileReferenceEdit,
+  decodeProfileReferences,
+  isTextReference,
+  type ProfileReferenceRange,
+} from "@/composer/profile-reference/model";
 
 type AttachmentUpdater =
   | UserComposerAttachment[]
@@ -57,8 +63,13 @@ type DraftComposerState = UseAgentFormStateResult & {
 
 export interface AgentInputDraft {
   textSource: ComposerTextSource;
-  editText: (text: string) => void;
+  editText: (text: string, selectionBefore?: ProfileReferenceRange) => void;
   replaceText: (text: string) => void;
+  replaceInput: (input: {
+    text: string;
+    attachments: UserComposerAttachment[];
+    selection?: ProfileReferenceRange;
+  }) => void;
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
   setAttachments: (updater: AttachmentUpdater) => void;
@@ -127,12 +138,13 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   }));
 
   const publishTextReplacement = useCallback(
-    (kind: "hydrated" | "replace", nextText: string) => {
+    (kind: "hydrated" | "replace", nextText: string, selection?: ProfileReferenceRange) => {
       textReplacementRevisionRef.current += 1;
       setTextReplacement({
         kind,
         key: `${draftKey}:${textReplacementRevisionRef.current}`,
         text: nextText,
+        ...(selection ? { selection } : {}),
       });
     },
     [draftKey],
@@ -165,24 +177,68 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     [draftKey],
   );
 
+  const replaceInput = useCallback(
+    (next: {
+      text: string;
+      attachments: UserComposerAttachment[];
+      selection?: ProfileReferenceRange;
+    }) => {
+      textPublication.cancel();
+      saveDraft(() => ({ text: next.text, attachments: next.attachments }));
+      publishTextReplacement("replace", next.text, next.selection);
+    },
+    [publishTextReplacement, saveDraft, textPublication],
+  );
+
   const editText = useCallback(
-    (nextText: string) => {
+    (nextText: string, selectionBefore?: ProfileReferenceRange) => {
+      const store = useDraftStore.getState();
+      const record = store.drafts[draftKey];
+      const current = record?.lifecycle === "active" ? record.input : undefined;
+      const hasReferences = current?.attachments.some(isTextReference);
+      if (current && hasReferences) {
+        textPublication.cancel();
+        const next = applyProfileReferenceEdit({
+          previousText: current.text,
+          text: nextText,
+          attachments: current.attachments,
+          selectionBefore,
+        });
+        store.saveDraftInput({
+          draftKey,
+          draft: { text: next.text, attachments: next.attachments },
+        });
+        if (next.selection) publishTextReplacement("replace", next.text, next.selection);
+        return;
+      }
       if (isWeb) {
         textPublication.stage(nextText);
       } else {
-        useDraftStore.getState().editDraftText({ draftKey, text: nextText });
+        store.editDraftText({ draftKey, text: nextText });
       }
     },
-    [draftKey, textPublication],
+    [draftKey, publishTextReplacement, textPublication],
   );
 
   const replaceText = useCallback(
     (nextText: string) => {
+      const decoded = decodeProfileReferences(nextText);
+      if (decoded.references.length > 0) {
+        const current = useDraftStore.getState().getDraftInput(draftKey);
+        const otherAttachments = (current?.attachments ?? []).filter(
+          (attachment) => !isTextReference(attachment),
+        );
+        replaceInput({
+          text: decoded.text,
+          attachments: [...otherAttachments, ...decoded.references],
+        });
+        return;
+      }
       textPublication.cancel();
       useDraftStore.getState().editDraftText({ draftKey, text: nextText });
       publishTextReplacement("replace", nextText);
     },
-    [draftKey, publishTextReplacement, textPublication],
+    [draftKey, publishTextReplacement, replaceInput, textPublication],
   );
 
   const setAttachments = useCallback(
@@ -356,6 +412,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     textSource,
     editText,
     replaceText,
+    replaceInput,
     textReplacement,
     attachments,
     setAttachments,
