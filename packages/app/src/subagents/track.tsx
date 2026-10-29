@@ -18,6 +18,8 @@ import {
 import type { Theme } from "@/styles/theme";
 import { useAgentFactsLine } from "@/panels/agent-facts-line";
 import { getPanelManifest } from "@/panels/panel-manifest";
+import { useSheetPanePage } from "@/screens/workspace/sheet-pane";
+import type { SheetTab } from "@/stores/workspace-layout-store";
 import type { SubagentRow } from "./select";
 import type { ArchiveFinishedStatus } from "./use-archive-finished";
 import { countStoppableSubagents } from "./stop-subagents";
@@ -51,10 +53,10 @@ export interface SubagentsTrackProps {
   onOpenSubagent: (address: AgentAddress) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   /**
-   * Whether opening this row shows it in a sheet. A sheet stacks over the list and uncovers it on
-   * close, so the list stays open; a tab replaces the list's pane, so choosing it ends the list.
+   * The sheet a row opens, or null when it opens as a tab. A sheet replaces the list in place and
+   * Back returns to it; a tab replaces the list's pane, so choosing it ends the list.
    */
-  opensInSheet: (row: SubagentRow) => boolean;
+  sheetTabFor: (row: SubagentRow) => SheetTab | null;
   onArchiveSubagent: (address: AgentAddress) => void;
   onArchiveFinished?: () => void;
   archiveFinishedStatus?: ArchiveFinishedStatus;
@@ -82,7 +84,7 @@ export function SubagentsTrack({
   rows,
   onOpenSubagent,
   onOpenProviderSubagent,
-  opensInSheet,
+  sheetTabFor,
   onArchiveSubagent,
   onArchiveFinished,
   archiveFinishedStatus = IDLE_ARCHIVE_FINISHED_STATUS,
@@ -95,6 +97,7 @@ export function SubagentsTrack({
   const handleStopAll = useCallback(() => {
     void stopAllSubagents();
   }, [stopAllSubagents]);
+  const sheetPanePage = useSheetPanePage();
 
   const isArchivingFinished = archiveFinishedStatus.kind === "archiving";
   const isArchiveFinishedFailed = archiveFinishedStatus.kind === "failed";
@@ -115,9 +118,12 @@ export function SubagentsTrack({
   const showArchiveFinished = finishedCount > 0 || isArchivingFinished || isArchiveFinishedFailed;
   const showStopAll = countStoppableSubagents(rows) > 0 || isStoppingAll || isStopAllFailed;
   const showBulkActions = showStopAll || showArchiveFinished;
+  const sheets = rows.map(sheetTabFor);
+  const pages = sheets.flatMap((sheet) => (sheet ? [sheetPanePage(sheet)] : []));
 
   return (
     <ComposerTrackPill
+      pages={pages}
       testID="subagents-track-header"
       segments={pill.segments}
       accessibilityLabel={pill.accessibilityLabel}
@@ -137,14 +143,14 @@ export function SubagentsTrack({
           ) : null}
         </ComposerTrackActions>
       ) : null}
-      {rows.map((row) => (
+      {rows.map((row, index) => (
         <SubagentsTrackRow
           key={row.kind === "paseo" ? `${row.address.serverId}:${row.id}` : row.id}
           row={row}
           serverId={serverId}
           onOpenSubagent={onOpenSubagent}
           onOpenProviderSubagent={onOpenProviderSubagent}
-          opensInSheet={opensInSheet(row)}
+          sheetTabId={sheets[index]?.tab.tabId ?? null}
           onArchiveSubagent={onArchiveSubagent}
           onDetachSubagent={onDetachSubagent}
           onStopSubagent={stopSubagent}
@@ -270,7 +276,8 @@ interface SubagentsTrackRowProps {
   row: SubagentRow;
   onOpenSubagent: (address: AgentAddress) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
-  opensInSheet: boolean;
+  /** The sheet page the row opens in place of the list, when it opens in a sheet. */
+  sheetTabId: string | null;
   onArchiveSubagent: (address: AgentAddress) => void;
   onDetachSubagent?: (address: AgentAddress) => void;
   onStopSubagent: (address: AgentAddress) => void;
@@ -281,7 +288,7 @@ function SubagentsTrackRow({
   row,
   onOpenSubagent,
   onOpenProviderSubagent,
-  opensInSheet,
+  sheetTabId,
   onArchiveSubagent,
   onDetachSubagent,
   onStopSubagent,
@@ -367,7 +374,7 @@ function SubagentsTrackRow({
     <ComposerTrackRow
       accessibilityLabel={displayLabel}
       testID={`subagents-track-row-${row.id}`}
-      closeOnSelect={!opensInSheet}
+      opensPage={sheetTabId ?? undefined}
       onPress={handlePress}
     >
       {renderRow}

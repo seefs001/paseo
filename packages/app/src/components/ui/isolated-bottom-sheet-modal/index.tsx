@@ -129,16 +129,21 @@ export function useIsolatedBottomSheetVisibility({
   isEnabled,
   dismissible = true,
   onClose,
+  onBack,
 }: {
   visible: boolean;
   isEnabled?: boolean;
   dismissible?: boolean;
   onClose: () => void;
+  /** Offered Android Back before it closes the sheet; returns true when it handled the press. */
+  onBack?: () => boolean;
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const dismissibleRef = useRef(dismissible);
   dismissibleRef.current = dismissible;
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
 
   const tracker = useMemo(
     () =>
@@ -146,6 +151,7 @@ export function useIsolatedBottomSheetVisibility({
         onClose: () => onCloseRef.current(),
         canDismiss: () => dismissibleRef.current,
         backPress: systemBackPress,
+        onBack: () => onBackRef.current?.() ?? false,
       }),
     [],
   );
