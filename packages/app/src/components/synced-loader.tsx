@@ -28,15 +28,8 @@ const activeLoaderCount = makeMutable(0);
 const clockRunning = makeMutable(false);
 let nextStepListenerId = 1;
 
-function scheduleNextLoaderStep(nowMs: number): void {
-  "worklet";
-  if (LOADER_CLOCK_IS_COARSE) {
-    setTimeout(advanceSharedStep, msUntilNextSyncedLoaderStep(nowMs));
-    return;
-  }
-  requestAnimationFrame(advanceSharedStep);
-}
-
+// Keep rescheduling inside this worklet: mutually capturing worklets read each
+// other before initialization after the Worklets Babel transform.
 function advanceSharedStep(): void {
   "worklet";
   if (activeLoaderCount.value === 0) {
@@ -49,7 +42,11 @@ function advanceSharedStep(): void {
   if (sharedStep.value !== nextStep) {
     sharedStep.value = nextStep;
   }
-  scheduleNextLoaderStep(now);
+  if (LOADER_CLOCK_IS_COARSE) {
+    setTimeout(advanceSharedStep, msUntilNextSyncedLoaderStep(now));
+    return;
+  }
+  requestAnimationFrame(advanceSharedStep);
 }
 
 function registerStepListener(
@@ -72,7 +69,7 @@ function registerStepListener(
   if (!clockRunning.value) {
     clockRunning.value = true;
     sharedStep.value = step.value;
-    scheduleNextLoaderStep(Date.now());
+    advanceSharedStep();
   }
 }
 
