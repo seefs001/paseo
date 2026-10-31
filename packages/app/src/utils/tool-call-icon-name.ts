@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type { ToolCallDetail, ToolCallIconName } from "@getpaseo/protocol/agent-types";
 import { isPaseoToolName } from "@getpaseo/protocol/tool-name-normalization";
+import { getNmemCall } from "@/tool-calls/nmem/model";
 
 export type ToolCallIcon = ToolCallIconName | "paseo";
 
@@ -27,6 +28,7 @@ export function resolveToolCallIconName(
   if (agentMessage) {
     return "paseo";
   }
+  if (getNmemCall(detail)) return "brain";
   const lowerName = toolName.trim().toLowerCase();
 
   if (detail?.type === "plain_text" && detail.icon) {

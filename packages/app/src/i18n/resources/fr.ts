@@ -2165,6 +2165,17 @@ export const fr: TranslationResources = {
       capabilityMissing: "Mettez à jour l’hôte pour afficher le diff des commits.",
     },
   },
+  nmem: {
+    command: "Commande",
+    returnedData: "Données renvoyées",
+    pending: "En attente des données de nmem…",
+    unavailable: "Cet enregistrement ne contient pas de résultat distinct pour cet appel.",
+    empty: "Cet appel n’a renvoyé aucun texte.",
+    sharedOutput: "Sortie partagée de codemode",
+    sharedOutputHint:
+      "Cette sortie provient du script englobant et peut inclure d’autres appels d’outils. Ce n’est pas un résultat distinct de nmem.",
+    openFullOutput: "Ouvrir la sortie complète du script",
+  },
   toolCallDetails: {
     error: "Erreur",
     empty: "Aucun détail supplémentaire disponible",

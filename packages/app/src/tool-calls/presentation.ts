@@ -2,6 +2,7 @@ import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import { buildAgentMessageDisplay } from "@getpaseo/protocol/paseo-tool-presentation/index";
 import type { PlanOutcome } from "@/components/plan-card";
 import { getSkillReadName } from "./skill-read";
+import { getNmemCall } from "./nmem/model";
 import type { ComponentType } from "react";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import type { ToolCallDisplayInput } from "@/utils/tool-call-display";
@@ -79,8 +80,10 @@ export function buildToolCallPresentation(
   });
   const hasDetails = Boolean(input.error) || hasMeaningfulToolCallDetail(detail);
   const skillName = getSkillReadName(detail);
-  const displayName = skillName ? "Read skill" : displayModel.displayName;
-  const summary = skillName ?? displayModel.summary;
+  const nmemCall = getNmemCall(detail);
+  const toolDisplayName = skillName ? "Read skill" : displayModel.displayName;
+  const displayName = nmemCall ? "nmem" : toolDisplayName;
+  const summary = nmemCall?.summary ?? skillName ?? displayModel.summary;
 
   return {
     detail,

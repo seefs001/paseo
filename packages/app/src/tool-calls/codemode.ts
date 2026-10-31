@@ -2,6 +2,7 @@ import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation";
 import { z } from "zod";
 import { getSkillReadName } from "./skill-read";
+import { getNmemCall } from "./nmem/model";
 import {
   isAgentToolCallItem,
   type AgentToolCallItem,
@@ -36,7 +37,8 @@ function recordedCalls(parent: AgentToolCallItem): AgentToolCallItem[] {
   if (cached) return cached;
   const { data } = parent.payload;
   if (data.detail.type !== "unknown") return [];
-  const result = ResultSchema.safeParse(data.detail.output);
+  const output = data.detail.output;
+  const result = ResultSchema.safeParse(output);
   if (!result.success) return [];
 
   const calls = result.data.details.calls.flatMap((raw, index): AgentToolCallItem[] => {
@@ -47,6 +49,11 @@ function recordedCalls(parent: AgentToolCallItem): AgentToolCallItem[] {
     // execution events carry the real id and parent; don't duplicate those rows.
     if (call.id === `${data.callId}/?` && data.status === "running") return [];
     const restored = detailForRecordedCall(call.name, call.args);
+    // Persisted children have no individual output. Keep the enclosing output separate
+    // so the memory popup never presents other tools\' results as nmem\'s response.
+    const sharedOutput = getNmemCall(restored.detail)
+      ? { codemodeOutput: scriptOutputText(parent), codemodeFullOutputPath: fullOutputPath(output) }
+      : {};
     return [
       {
         kind: "tool_call",
@@ -65,6 +72,7 @@ function recordedCalls(parent: AgentToolCallItem): AgentToolCallItem[] {
               parentToolCallId: data.callId,
               ...restored.metadata,
               ...(restored.summary ? { summary: restored.summary } : {}),
+              ...sharedOutput,
             },
           },
         },
@@ -340,15 +348,16 @@ function indexChildrenByParent(calls: AgentToolCallItem[]) {
   return childrenByParent;
 }
 
-function splitSkillReads(children: AgentToolCallItem[]) {
-  const skillReads: ToolCallItem[] = [];
+function splitStandaloneCalls(children: AgentToolCallItem[]) {
+  const standaloneCalls: ToolCallItem[] = [];
   const nestedCalls: ToolCallItem[] = [];
   for (const child of children) {
-    const isSkillRead = getSkillReadName(child.payload.data.detail) !== undefined;
-    const destination = isSkillRead ? skillReads : nestedCalls;
+    const detail = child.payload.data.detail;
+    const isStandalone = getSkillReadName(detail) !== undefined || getNmemCall(detail) !== null;
+    const destination = isStandalone ? standaloneCalls : nestedCalls;
     destination.push(child);
   }
-  return { skillReads, nestedCalls };
+  return { standaloneCalls, nestedCalls };
 }
 
 function foldCalls(items: ToolCallItem[], previous: CodemodeRows): CodemodeRows {
@@ -381,13 +390,13 @@ function foldCalls(items: ToolCallItem[], previous: CodemodeRows): CodemodeRows 
       hidden.add(child);
     }
     if (children.length === 0 && !scriptOutputText(parent)) continue;
-    const { skillReads, nestedCalls } = splitSkillReads(children);
+    const { standaloneCalls, nestedCalls } = splitStandaloneCalls(children);
     const existing = previous.replacements.get(parent)?.[0];
     const unchanged =
       existing?.kind === "tool_call" && sameItems(existing.nestedCalls ?? [], nestedCalls);
     const row = unchanged ? existing : presentCodemodeParent(parent, nestedCalls);
     // Promote the resolved child so live events and persisted calls share one row.
-    replacements.set(parent, [row, ...skillReads]);
+    replacements.set(parent, [row, ...standaloneCalls]);
   }
   return { replacements, hidden };
 }

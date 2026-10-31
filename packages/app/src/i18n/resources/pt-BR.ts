@@ -2150,6 +2150,17 @@ export const ptBR: TranslationResources = {
       capabilityMissing: "Atualize o host para ver diffs de commits.",
     },
   },
+  nmem: {
+    command: "Comando",
+    returnedData: "Dados retornados",
+    pending: "Aguardando dados do nmem…",
+    unavailable: "Este registro não salvou um resultado separado para esta chamada.",
+    empty: "Esta chamada não retornou texto.",
+    sharedOutput: "Saída compartilhada do codemode",
+    sharedOutputHint:
+      "Esta saída pertence ao script externo e pode incluir chamadas a outras ferramentas. Não é um resultado separado do nmem.",
+    openFullOutput: "Abrir a saída completa do script",
+  },
   toolCallDetails: {
     error: "Erro",
     empty: "Nenhum detalhe adicional disponível",

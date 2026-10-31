@@ -2166,6 +2166,17 @@ export const es: TranslationResources = {
       capabilityMissing: "Actualiza el host para ver las diferencias de los commits.",
     },
   },
+  nmem: {
+    command: "Comando",
+    returnedData: "Datos devueltos",
+    pending: "Esperando los datos de nmem…",
+    unavailable: "Este registro no guardó un resultado separado para esta llamada.",
+    empty: "Esta llamada no devolvió texto.",
+    sharedOutput: "Salida compartida de codemode",
+    sharedOutputHint:
+      "Esta salida pertenece al script contenedor y puede incluir otras llamadas a herramientas. No es un resultado separado de nmem.",
+    openFullOutput: "Abrir la salida completa del script",
+  },
   toolCallDetails: {
     error: "Error",
     empty: "No hay detalles adicionales disponibles",

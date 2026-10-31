@@ -2,6 +2,7 @@ import { isTurnTrigger, isTurnBoundary } from "@/agent-stream/turn-membership";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import type { StreamItem, ToolCallItem, ThoughtItem } from "@/types/stream";
 import { getSkillReadName } from "../skill-read";
+import { getNmemCall } from "../nmem/model";
 
 export interface ToolCallDescriptor {
   detail: ToolCallDetail;
@@ -78,7 +79,8 @@ export function isGroupableToolCall(
   const isStandalone =
     descriptor.detail.type === "plan" ||
     descriptor.name.trim().toLowerCase() === "speak" ||
-    getSkillReadName(descriptor.detail) !== undefined;
+    getSkillReadName(descriptor.detail) !== undefined ||
+    getNmemCall(descriptor.detail) !== null;
   return !isStandalone;
 }
 

@@ -2126,6 +2126,17 @@ export const ko: TranslationResources = {
       capabilityMissing: "커밋 diff를 보려면 호스트를 업데이트하세요.",
     },
   },
+  nmem: {
+    command: "명령",
+    returnedData: "반환된 데이터",
+    pending: "nmem의 응답을 기다리는 중…",
+    unavailable: "이 기록에는 이 호출의 개별 결과가 저장되지 않았습니다.",
+    empty: "이 호출에서 반환된 텍스트가 없습니다.",
+    sharedOutput: "codemode 통합 출력",
+    sharedOutputHint:
+      "상위 스크립트의 출력으로, 다른 도구의 결과가 포함될 수 있습니다. nmem의 개별 결과가 아닙니다.",
+    openFullOutput: "스크립트 전체 출력 열기",
+  },
   toolCallDetails: {
     error: "오류",
     empty: "추가 세부 정보가 없습니다",

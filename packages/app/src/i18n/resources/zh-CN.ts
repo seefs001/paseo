@@ -2092,6 +2092,16 @@ export const zhCN: TranslationResources = {
       capabilityMissing: "请更新主机以查看提交差异。",
     },
   },
+  nmem: {
+    command: "命令",
+    returnedData: "返回的数据",
+    pending: "正在等待 nmem 返回数据…",
+    unavailable: "这条记录没有单独保存本次调用的返回内容。",
+    empty: "本次调用没有返回文本。",
+    sharedOutput: "codemode 合并输出",
+    sharedOutputHint: "以下是外层脚本的输出，可能包含其他工具的结果，不是 nmem 的独立返回内容。",
+    openFullOutput: "打开脚本完整输出",
+  },
   toolCallDetails: {
     error: "错误",
     empty: "没有可用的更多详情",

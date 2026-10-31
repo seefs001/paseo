@@ -2116,6 +2116,17 @@ export const ar: TranslationResources = {
       capabilityMissing: "حدّث المضيف لعرض فروقات الالتزامات.",
     },
   },
+  nmem: {
+    command: "الأمر",
+    returnedData: "البيانات المُعادة",
+    pending: "في انتظار بيانات nmem…",
+    unavailable: "لم يحفظ هذا السجل نتيجة منفصلة لهذا الاستدعاء.",
+    empty: "لم يُرجع هذا الاستدعاء أي نص.",
+    sharedOutput: "مخرجات codemode المشتركة",
+    sharedOutputHint:
+      "هذه مخرجات البرنامج النصي المحيط وقد تتضمن استدعاءات أدوات أخرى. ليست نتيجة منفصلة من nmem.",
+    openFullOutput: "فتح المخرجات الكاملة للبرنامج النصي",
+  },
   toolCallDetails: {
     error: "خطأ",
     empty: "لا توجد تفاصيل إضافية متاحة",

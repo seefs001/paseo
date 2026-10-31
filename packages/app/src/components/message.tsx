@@ -27,6 +27,8 @@ import { useRevealedText, type MarkdownPhase } from "@/hooks/use-revealed-text";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { buildToolCallPresentation } from "@/tool-calls/presentation";
+import { getNmemCall } from "@/tool-calls/nmem/model";
+import { NmemDetails } from "@/tool-calls/nmem/details";
 import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/types/stream";
 import { setAssistantMessageHeight } from "@/utils/assistant-message-height-estimate";
 import { isRenderProfileEnabled } from "@/utils/render-profiler";
@@ -2354,7 +2356,8 @@ export const ToolCall = memo(function ToolCall({
   });
 
   const isMobile = useIsCompactFormFactor();
-  const shouldRenderInline = !isMobile || forceInline;
+  const [nmemDetailsOpen, setNmemDetailsOpen] = useState(false);
+  const closeNmemDetails = useCallback(() => setNmemDetailsOpen(false), []);
 
   const effectiveDetail = useMemo<ToolCallDetail | undefined>(() => {
     if (detail) {
@@ -2370,6 +2373,8 @@ export const ToolCall = memo(function ToolCall({
     return undefined;
   }, [detail, args, result]);
 
+  const nmemCall = getNmemCall(effectiveDetail);
+  const shouldRenderInline = !nmemCall && (!isMobile || forceInline);
   const targetAgentTitle = useTargetAgentTitle({ serverId, toolName, detail: effectiveDetail });
   const presentation = useMemo(
     () =>
@@ -2395,7 +2400,9 @@ export const ToolCall = memo(function ToolCall({
   }, [presentation.openFilePath, onOpenFilePath]);
 
   const handleToggle = useCallback(() => {
-    if (!shouldRenderInline) {
+    if (nmemCall) {
+      setNmemDetailsOpen(true);
+    } else if (!shouldRenderInline) {
       openToolCall({
         toolName,
         displayName: presentation.displayName,
@@ -2409,6 +2416,7 @@ export const ToolCall = memo(function ToolCall({
       toggleExpanded();
     }
   }, [
+    nmemCall,
     shouldRenderInline,
     toggleExpanded,
     openToolCall,
@@ -2483,21 +2491,37 @@ export const ToolCall = memo(function ToolCall({
   }
 
   return (
-    <ExpandableBadge
-      testID="tool-call-badge"
-      label={presentation.displayName}
-      secondaryLabel={presentation.summary}
-      icon={presentation.icon}
-      isExpanded={shouldRenderInline && isExpanded}
-      onToggle={presentation.canOpenDetails ? handleToggle : undefined}
-      onOpenFile={handleOpenFile}
-      renderDetails={presentation.canOpenDetails && shouldRenderInline ? renderDetails : undefined}
-      isLoading={status === "running" || status === "executing"}
-      isError={status === "failed"}
-      isLastInSequence={isLastInSequence}
-      disableOuterSpacing={disableOuterSpacing}
-      onDetailHoverChange={onInlineDetailsHoverChange}
-    />
+    <>
+      {nmemCall && effectiveDetail?.type === "shell" ? (
+        <NmemDetails
+          call={nmemCall}
+          detail={effectiveDetail}
+          metadata={metadata}
+          errorText={presentation.errorText}
+          running={status === "running" || status === "executing"}
+          visible={nmemDetailsOpen}
+          onClose={closeNmemDetails}
+          onOpenFilePath={onOpenFilePath}
+        />
+      ) : null}
+      <ExpandableBadge
+        testID="tool-call-badge"
+        label={presentation.displayName}
+        secondaryLabel={presentation.summary}
+        icon={presentation.icon}
+        isExpanded={shouldRenderInline && isExpanded}
+        onToggle={presentation.canOpenDetails ? handleToggle : undefined}
+        onOpenFile={handleOpenFile}
+        renderDetails={
+          presentation.canOpenDetails && shouldRenderInline ? renderDetails : undefined
+        }
+        isLoading={status === "running" || status === "executing"}
+        isError={status === "failed"}
+        isLastInSequence={isLastInSequence}
+        disableOuterSpacing={disableOuterSpacing}
+        onDetailHoverChange={onInlineDetailsHoverChange}
+      />
+    </>
   );
 }, areToolCallPropsEqual);
 

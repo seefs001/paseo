@@ -2142,6 +2142,17 @@ export const en = {
       capabilityMissing: "Update the host to view commit diffs.",
     },
   },
+  nmem: {
+    command: "Command",
+    returnedData: "Returned data",
+    pending: "Waiting for nmem to return data…",
+    unavailable: "This record did not save a separate result for this call.",
+    empty: "This call returned no text.",
+    sharedOutput: "Shared codemode output",
+    sharedOutputHint:
+      "This output belongs to the enclosing script and can include other tool calls. It is not a separate nmem result.",
+    openFullOutput: "Open full script output",
+  },
   toolCallDetails: {
     error: "Error",
     empty: "No additional details available",

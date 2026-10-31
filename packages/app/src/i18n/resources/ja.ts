@@ -2137,6 +2137,17 @@ export const ja: TranslationResources = {
       capabilityMissing: "コミット差分を表示するにはホストを更新してください。",
     },
   },
+  nmem: {
+    command: "コマンド",
+    returnedData: "返されたデータ",
+    pending: "nmem の応答を待っています…",
+    unavailable: "この呼び出しの個別の結果は記録されていません。",
+    empty: "この呼び出しはテキストを返しませんでした。",
+    sharedOutput: "codemode の共有出力",
+    sharedOutputHint:
+      "外側のスクリプトの出力です。他のツールの結果を含む場合があり、nmem 単独の結果ではありません。",
+    openFullOutput: "スクリプトの全出力を開く",
+  },
   toolCallDetails: {
     error: "エラー",
     empty: "追加の詳細はありません",
