@@ -523,6 +523,10 @@ function resolveAppendSystemPrompt(persisted: ReturnType<typeof loadPersistedCon
   return persisted.daemon?.appendSystemPrompt ?? "";
 }
 
+function resolveUsageEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
+  return persisted.daemon?.usage?.enabled !== false;
+}
+
 function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
@@ -558,6 +562,7 @@ function resolveStaticLoadConfigSettings(
 ) {
   return {
     ...resolveMcpSettings(cli, persisted),
+    usageEnabled: resolveUsageEnabled(persisted),
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
@@ -587,6 +592,7 @@ export type ResolvedDaemonSettings = Pick<
   | "mcpEnabled"
   | "mcpInjectIntoAgents"
   | "mcpDisabledTools"
+  | "usageEnabled"
   | "browserToolsEnabled"
   | "git"
   | "autoArchiveAfterMerge"

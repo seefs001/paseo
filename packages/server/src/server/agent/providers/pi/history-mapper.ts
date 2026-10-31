@@ -3,6 +3,10 @@ import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation
 import { mapCustomMessageToToolCall } from "../custom-message.js";
 import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
 import {
+  materializeProviderImage,
+  renderProviderImageOutputAsAssistantMarkdown,
+} from "../provider-image-output.js";
+import {
   createPiExtensionHost,
   type PiExtensionEventOutput,
   type PiExtensionHost,
@@ -13,6 +17,7 @@ import {
   mapToolDetail,
   parseToolArgs,
   parseToolResult,
+  splitPiToolResultImages,
   type PiToolResult,
   type PiTrackedToolCall,
 } from "./tool-call-mapper.js";
@@ -127,20 +132,23 @@ export class PiHistoryMapper {
     private readonly extensionHost: PiExtensionHost = createPiExtensionHost(),
   ) {}
 
-  mapMessages(
+  async mapMessages(
     messages: readonly PiAgentMessage[],
     markers: readonly PiHistoryMarker[] = [],
-  ): AgentStreamEvent[] {
-    if (!historyMarkersMatch(messages, markers)) {
-      return messages.flatMap((message) => this.mapMessage(message));
-    }
+  ): Promise<AgentStreamEvent[]> {
     const events: AgentStreamEvent[] = [];
+    if (!historyMarkersMatch(messages, markers)) {
+      for (const message of messages) {
+        events.push(...(await this.mapMessage(message)));
+      }
+      return events;
+    }
     let messageIndex = 0;
     for (const marker of markers) {
       if (marker.kind === "message") {
         const message = messages[messageIndex];
         messageIndex += 1;
-        if (message) events.push(...this.mapMessage(message));
+        if (message) events.push(...(await this.mapMessage(message)));
         continue;
       }
       events.push(...webHistoryEvents(this.provider, marker));
@@ -148,7 +156,7 @@ export class PiHistoryMapper {
     return events;
   }
 
-  private mapMessage(message: PiAgentMessage): AgentStreamEvent[] {
+  private async mapMessage(message: PiAgentMessage): Promise<AgentStreamEvent[]> {
     switch (message.role) {
       case "user":
         return this.mapUserMessage(message);
@@ -279,23 +287,34 @@ export class PiHistoryMapper {
     return events;
   }
 
-  private mapToolResultMessage(
+  private async mapToolResultMessage(
     message: Extract<PiAgentMessage, { role: "toolResult" }>,
-  ): AgentStreamEvent[] {
+  ): Promise<AgentStreamEvent[]> {
     const tracked =
       this.pendingToolCalls.get(message.toolCallId) ?? parseToolArgs(message.toolName, null);
     this.pendingToolCalls.delete(message.toolCallId);
     const result = parseToolResult({ content: message.content, details: message.details });
+    // Pull image blocks out of the result so base64 never reaches the tool output, then render
+    // each one as an assistant_message markdown image after the tool_call (mirroring the live
+    // path and the Claude provider, upstream #1717).
+    const { images, result: splitResult } = splitPiToolResultImages(result);
     const mapping = this.extensionHost.mapToolCall({
       callId: message.toolCallId,
       toolName: tracked.toolName,
       args: tracked.args,
       status: message.isError ? "failed" : "completed",
-      result,
+      result: splitResult,
     });
-    const detail = this.mapToolDetail(message.toolCallId, tracked, result, mapping?.detail);
+    const detail = this.mapToolDetail(message.toolCallId, tracked, splitResult, mapping?.detail);
     if (!detail) {
       return [];
+    }
+    const imageEvents: AgentStreamEvent[] = [];
+    for (const image of images) {
+      const item = await renderProviderImageOutputAsAssistantMarkdown(image, {
+        materialize: materializeProviderImage,
+      });
+      if (item) imageEvents.push({ type: "timeline", provider: this.provider, item });
     }
     return [
       {
@@ -306,10 +325,11 @@ export class PiHistoryMapper {
           name: mapping?.name ?? tracked.toolName,
           isError: Boolean(message.isError),
           detail,
-          errorText: extractTextFromToolResult(result) ?? "Tool call failed",
+          errorText: extractTextFromToolResult(splitResult) ?? "Tool call failed",
           metadata: buildPiToolCallMetadata(tracked.toolName, tracked.args),
         }),
       },
+      ...imageEvents,
       ...this.extensionEvents(mapping),
     ];
   }
@@ -403,9 +423,24 @@ export async function* streamPiHistory(
   signal?: AbortSignal,
 ): AsyncGenerator<AgentStreamEvent> {
   const mapper = new PiHistoryMapper(provider, userEntries, hooks, extensionHost);
-  for (const event of mapper.mapMessages(messages, markers)) {
+  const replayMarkers = historyMarkersMatch(messages, markers)
+    ? markers
+    : messages.map(() => ({ kind: "message" as const }));
+  let messageIndex = 0;
+  for (const marker of replayMarkers) {
     if (signal?.aborted) return;
-    if (event) {
+    if (marker.kind === "web") {
+      for (const event of webHistoryEvents(provider, marker)) {
+        if (signal?.aborted) return;
+        yield event;
+      }
+      continue;
+    }
+    const message = messages[messageIndex];
+    messageIndex += 1;
+    if (!message) continue;
+    for (const event of await mapper.mapMessages([message])) {
+      if (signal?.aborted) return;
       yield event;
     }
   }

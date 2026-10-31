@@ -24,6 +24,7 @@ interface SupportedMutableConfigPatch {
   relay?: { enabled?: boolean; requireProtectedSecurity?: boolean };
   mcp?: { injectIntoAgents?: boolean; disabledTools?: string[] };
   hostnames?: true | string[];
+  usage?: { enabled: boolean };
   browserTools?: { enabled?: boolean };
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
@@ -185,6 +186,7 @@ const RELOADABLE_PATHS = [
   "daemon.mcp.enabled",
   "daemon.mcp.injectIntoAgents",
   "daemon.mcp.disabledTools",
+  "daemon.usage.enabled",
   "daemon.browserTools.enabled",
   "daemon.hostnames",
   "daemon.cors.allowedOrigins",
@@ -213,6 +215,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.mcp.enabled", "mcp.enabled"],
   ["daemon.mcp.injectIntoAgents", "mcp.injectIntoAgents"],
   ["daemon.mcp.disabledTools", "mcp.disabledTools"],
+  ["daemon.usage.enabled", "usage.enabled"],
   ["daemon.browserTools.enabled", "browserTools.enabled"],
   ["daemon.hostnames", "hostnames"],
   ["daemon.cors.allowedOrigins", "cors.allowedOrigins"],
@@ -296,6 +299,7 @@ function pickMcpPatch(
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
     ...pickRelayPatch(patch.relay),
+    usage: patch.usage,
     ...pickMcpPatch(patch.mcp),
     ...(patch.hostnames !== undefined
       ? { hostnames: normalizeHostnameAllowlist(patch.hostnames) }
@@ -795,6 +799,7 @@ function mergeMutableDaemonPatch(
   if (patch.hostnames !== undefined) {
     next.hostnames = patch.hostnames;
   }
+  if (patch.usage) next.usage = patch.usage;
   if (patch.browserTools?.enabled !== undefined) {
     next.browserTools = { ...next.browserTools, enabled: patch.browserTools.enabled };
   }

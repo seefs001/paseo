@@ -1,6 +1,10 @@
 import type { SkillCatalogEntry } from "@getpaseo/protocol/skills";
 import { expect, test, type Page } from "../support/fixtures";
-import { composerLocator, expectComposerVisible } from "../support/helpers/composer";
+import {
+  attachFileFromMenu,
+  composerLocator,
+  expectComposerVisible,
+} from "../support/helpers/composer";
 import {
   openAgentRoute,
   seedMockAgentWorkspace,
@@ -369,6 +373,10 @@ function isSkillUsageRequest(request: Record<string, unknown>): boolean {
   return request.type === "skills.usage.record.request";
 }
 
+function isCommandListRequest(request: Record<string, unknown>): boolean {
+  return request.type === "list_commands_request";
+}
+
 async function installSkillCatalogStub(
   page: Page,
   skills: readonly SkillCatalogEntry[],
@@ -432,6 +440,9 @@ test.describe("Composer autocomplete", () => {
     await installSkillCatalogStub(page, skills, requests);
     const session = await openReadyMockAgent(page);
     try {
+      // Suggested-command links prefetch once; skill selection must not request commands.
+      await expect.poll(() => requests.filter(isCommandListRequest).length).toBe(1);
+      const commandRequestsBeforeSkills = requests.filter(isCommandListRequest).length;
       const input = composerLocator(page);
       const popup = page.getByTestId("composer-autocomplete-popover");
       await input.fill("$");
@@ -480,10 +491,60 @@ test.describe("Composer autocomplete", () => {
       await page.screenshot({ path: test.info().outputPath("skills-compact.png") });
       await popup.getByRole("button").first().click();
       await expect(draft).toHaveValue("[$zebra-debug](/skills/zebra/SKILL.md) ");
-      expect(requests.filter((r) => r.type === "list_commands_request")).toEqual([]);
+      expect(requests.filter(isCommandListRequest)).toHaveLength(commandRequestsBeforeSkills);
       for (const request of requests.filter((r) => r.type === "skills.list.request")) {
         expect(request).not.toHaveProperty("agentId");
       }
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  test("inserts suggested commands from assistant messages without sending", async ({ page }) => {
+    const requests = recordCommandRequestsByAgentId(page);
+    const session = await seedMockAgentWorkspace({
+      repoPrefix: "suggested-command-",
+      title: "Suggested commands",
+      initialPrompt: "Suggest `/mock` without running it",
+      featureValues: { mockAssistantResponse: "Try `/mock` or [Run mock](/mock)." },
+    });
+    try {
+      await openAgentRoute(page, session);
+      const message = page.getByTestId("assistant-message").filter({ hasText: "Run mock" });
+      await expect(message).toBeVisible();
+      await expect(page.getByTestId("user-message").getByRole("link")).toHaveCount(0);
+      await expect.poll(() => requests.length).toBe(1);
+      await attachFileFromMenu(page, {
+        name: "note.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("attachment"),
+      });
+      await expect(page.getByTestId("composer-file-attachment-pill")).toContainText("note.txt");
+      await message.getByRole("link", { name: "/mock", exact: true }).click();
+      await expect(composerLocator(page)).toHaveValue("/mock ");
+      await expect(
+        page.getByTestId("composer-autocomplete-popover").filter({ visible: true }),
+      ).toHaveCount(0);
+      await expect(composerLocator(page)).toBeFocused();
+      await message.getByRole("link", { name: "Run mock" }).click();
+      await expect(composerLocator(page)).toHaveValue("/mock /mock ");
+      await expect(
+        page.getByTestId("composer-autocomplete-popover").filter({ visible: true }),
+      ).toHaveCount(0);
+      await expect(composerLocator(page)).toBeFocused();
+      await expect(page.getByTestId("composer-file-attachment-pill")).toContainText("note.txt");
+      await composerLocator(page).fill("draft");
+      await composerLocator(page).evaluate((element: HTMLTextAreaElement) =>
+        element.setSelectionRange(0, 0),
+      );
+      await message.getByRole("link", { name: "/mock", exact: true }).click();
+      await composerLocator(page).pressSequentially("argument");
+      await expect(composerLocator(page)).toHaveValue("draft /mock argument");
+      await composerLocator(page).fill("/");
+      await expect(
+        page.getByTestId("composer-autocomplete-popover").filter({ visible: true }),
+      ).toContainText("/mock");
+      expect(requests).toHaveLength(1);
     } finally {
       await session.cleanup();
     }
