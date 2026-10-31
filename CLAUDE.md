@@ -141,7 +141,7 @@ release builds in a short-lived release workspace from `origin/main` or a releas
   - `npm run build:server` — rebuild highlight, relay, protocol, client, server, and CLI when server/CLI types may be stale.
   - Do not patch inferred callback parameters or add local duplicate types just to silence stale declaration errors.
 - **Run `npm run format` before committing.** This repo uses Biome for formatting. Do not manually fix formatting — let the formatter handle it.
-- **Always use npm scripts for linting and formatting.** Do not run tools directly with `npx eslint`, `npx oxfmt`, `npx oxlint`, or package-local binaries. For targeted checks, pass file paths through the npm script:
+- **Use `npm run` for repository scripts, including builds, typecheck, lint, and formatting.** This repository-level script-runner rule overrides a general preference for Bun or pnpm; it does not authorize dependency installation. `bun run` rewrites nested `npm run` calls and can recurse into root scripts. `pnpm run` can trigger implicit installs and fetch local workspace packages from the registry. For one workspace, use `npm run <script> --workspace=<package>` from the repository root. Use the lint/format scripts below rather than `npx eslint`, `npx oxfmt`, `npx oxlint`, or package-local binaries:
   - `npm run lint -- packages/app/src/components/message.tsx`
   - `npm run format:files -- CLAUDE.md packages/app/src/components/message.tsx`
 - **The protocol stays backward-compatible. Features don't have to.** Read [docs/protocol-compatibility.md](docs/protocol-compatibility.md) before touching `packages/protocol`. The short version:
