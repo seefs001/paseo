@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { parseMarkdownPreviewDocument } from "./document";
+import { MarkdownReferenceSelection } from "./selection";
 
 export function FileMarkdownPreview({
   source,
@@ -55,13 +56,15 @@ export function FileMarkdownPreview({
           {...environment}
           relativePathBase={relativePathBase ?? undefined}
         >
-          <MarkdownRenderer
-            text={document.body}
-            filePath={filePath}
-            workspaceRoot={workspaceRoot}
-            client={client}
-            serverId={serverId}
-          />
+          <MarkdownReferenceSelection source={source} body={document.body} filePath={filePath}>
+            <MarkdownRenderer
+              text={document.body}
+              filePath={filePath}
+              workspaceRoot={workspaceRoot}
+              client={client}
+              serverId={serverId}
+            />
+          </MarkdownReferenceSelection>
         </AssistantFileLinkResolverProvider>
       </View>
     </View>

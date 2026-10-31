@@ -17,6 +17,7 @@ import {
   Text,
   View,
   type NativeSyntheticEvent,
+  type GestureResponderEvent,
   type PressableStateCallbackType,
   type StyleProp,
   type TextInputKeyPressEventData,
@@ -266,13 +267,23 @@ function TreeRowItem({
     path: entry.path,
   });
 
-  const handlePress = useCallback(() => {
-    const selection = isWeb ? window.getSelection() : null;
-    if (selection && !selection.isCollapsed && selection.toString().length > 0) {
-      return;
-    }
-    onEntryPress(entry);
-  }, [onEntryPress, entry]);
+  const handlePress = useCallback(
+    (event: GestureResponderEvent) => {
+      if (isWeb) {
+        const selection = window.getSelection();
+        const row = event.currentTarget;
+        const selectingRow =
+          selection &&
+          !selection.isCollapsed &&
+          row instanceof Node &&
+          (row.contains(selection.anchorNode) || row.contains(selection.focusNode));
+        // A selection retained in the document must not block opening another file.
+        if (selectingRow) return;
+      }
+      onEntryPress(entry);
+    },
+    [onEntryPress, entry],
+  );
 
   const handleSelect = useCallback(() => {
     onSelectEntry(entry);

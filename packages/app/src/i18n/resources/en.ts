@@ -165,6 +165,11 @@ export const en = {
       interruptBeforeVoice: "Interrupt the agent before starting voice mode",
     },
     attachments: {
+      chatQuote: "Quoted message",
+      chatQuoteSource: "Source",
+      openChatQuote: "Preview quote from {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
+      removeChatQuote: "Remove quote",
+      openChatQuoteSource: "Open source conversation",
       addImage: "Add image",
       pasteImage: "Paste image",
       addFile: "Upload file",
@@ -333,6 +338,15 @@ export const en = {
     },
   },
   message: {
+    selection: {
+      actions: "Selected text actions",
+      addToChat: "Add to conversation",
+      askInSideConversation: "Ask in side conversation",
+      updateHost: "Update the host to start a side conversation.",
+      unavailable: "Cannot open a side conversation in this workspace.",
+      sourceUnavailable:
+        "This message is not available in saved history yet. Try again in a moment.",
+    },
     turnInfo: {
       title: "Turn information",
       provider: "Provider",
@@ -2050,6 +2064,12 @@ export const en = {
       creatingAgent: "Creating agent",
     },
     file: {
+      selection: {
+        actions: "File selection actions",
+        copyReference: "Copy reference",
+        referenceCopied: "Reference copied",
+        copyFailed: "Could not copy the file reference.",
+      },
       filePanels: {
         pickerTitleExtension: "Open .{{extension}} files with",
         pickerTitleFilename: "Open {{filename}} with",

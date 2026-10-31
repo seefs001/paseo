@@ -8,6 +8,8 @@ export const PASEO_AGENT_TOOL_NAMES = [
   "create_agent",
   "send_agent_prompt",
   "get_agent_status",
+  "read_agent_context",
+  "read_agent_history",
   "list_agents",
   "cancel_agent",
   "archive_agent",

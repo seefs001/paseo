@@ -45,6 +45,7 @@ import {
 import type { ComposerAttachment } from "@/attachments/types";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "@/composer/types";
 import { focusWithRetries } from "@/utils/web-focus";
+import { isChatTextSelectionActive } from "@/agent-stream/text-selection-hold";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import {
@@ -531,6 +532,8 @@ function useAutoFocusOnWebEffect(
   useEffect(() => {
     if (!isWeb || !autoFocus) return;
     return focusWithRetries({
+      // Activating a pane by selecting its chat text must not clear the selection.
+      shouldFocus: () => !isChatTextSelectionActive(),
       focus: () => textInputRef.current?.focus(),
       isFocused: () => {
         const element = getTextInputNativeElement(textInputRef.current);
@@ -1346,7 +1349,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         // Hiding a retained tab only blurs its editor after the browser renders.
         // A quick return before that frame would otherwise keep touch focus.
         textInputRef.current?.blur();
-      } else if (isPaneFocused && focusIntentRef.current && finePointer) {
+      } else if (
+        isPaneFocused &&
+        focusIntentRef.current &&
+        finePointer &&
+        !isChatTextSelectionActive()
+      ) {
         textInputRef.current?.focus();
       }
     }, [isPaneFocused]);

@@ -92,6 +92,17 @@ export interface ChatHistoryContextAttachment {
   };
 }
 
+export interface ChatQuoteContextAttachment {
+  kind: "chat_quote";
+  id: string;
+  selectedText: string;
+  source: {
+    serverId: string;
+    agentId: string;
+    messageId: string;
+  };
+}
+
 export interface AgentSessionContextAttachment {
   kind: "agent_session";
   id: string;
@@ -127,6 +138,7 @@ export interface WorkspaceFileComposerAttachment {
 export type UserComposerAttachment =
   | ProfileReference
   | SessionReference
+  | ChatQuoteContextAttachment
   | { kind: "image"; metadata: AttachmentMetadata }
   | { kind: "file"; attachment: UploadedFileAttachment }
   | WorkspaceFileComposerAttachment

@@ -49,6 +49,9 @@ function getTextAttachmentSubtitle(
   attachment: Extract<AgentAttachment, { type: "text" }>,
   t: TFunction,
 ): string {
+  if (attachment.contextKind === "chat_quote") {
+    return t("composer.attachments.chatQuote");
+  }
   if (attachment.contextKind === "chat_history") {
     return "Previous conversation";
   }

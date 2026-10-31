@@ -359,6 +359,7 @@ export function openComposerAttachment(input: OpenComposerAttachmentInput): void
   if (
     input.attachment.kind === "file" ||
     input.attachment.kind === "workspace_file" ||
+    input.attachment.kind === "chat_quote" ||
     input.attachment.kind === "profile_reference" ||
     input.attachment.kind === "session_reference"
   ) {

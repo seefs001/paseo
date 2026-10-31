@@ -1,6 +1,7 @@
 interface FocusWithRetriesOptions {
   focus: () => void;
   isFocused: () => boolean;
+  shouldFocus?: () => boolean;
   deferInitialAttempt?: boolean;
   timeoutMs?: number;
   onSuccess?: () => void;
@@ -10,6 +11,7 @@ interface FocusWithRetriesOptions {
 export function focusWithRetries({
   focus,
   isFocused,
+  shouldFocus,
   deferInitialAttempt = false,
   timeoutMs = 1500,
   onSuccess,
@@ -19,7 +21,7 @@ export function focusWithRetries({
   const deadlineMs = Date.now() + timeoutMs;
 
   const tick = () => {
-    if (cancelled) return;
+    if (cancelled || shouldFocus?.() === false) return;
 
     try {
       focus();

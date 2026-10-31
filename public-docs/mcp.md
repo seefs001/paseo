@@ -107,6 +107,8 @@ MCP does not expose an agent-detach tool. Detaching is a manual user action in t
 | `create_agent`       | Create an agent, optionally placing it in an existing workspace with `workspaceId`. Use `initialPrompt` to start work; returns without waiting for completion. |
 | `send_agent_prompt`  | Send a prompt using `agentId` and `prompt`; returns without waiting for completion.                                                                            |
 | `get_agent_status`   | Return the latest snapshot for an agent.                                                                                                                       |
+| `read_agent_context` | Read an agent's source metadata without loading its transcript; defaults to the calling agent.                                                                 |
+| `read_agent_history` | Read a bounded history page, anchored by message ID or cursor.                                                                                                 |
 | `list_agents`        | List recent agents as compact metadata; `includeBackground: true` includes background work.                                                                    |
 | `cancel_agent`       | Abort an agent's current run but keep the agent alive.                                                                                                         |
 | `archive_agent`      | Soft-delete an agent and remove it from the active list.                                                                                                       |

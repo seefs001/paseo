@@ -1,8 +1,10 @@
+import type { AgentMetadata } from "@getpaseo/protocol/messages";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceFileTabTarget } from "@/workspace/file-open";
 
 export interface WorkspaceDraftTabSetup {
+  metadata?: AgentMetadata;
   provider: AgentProvider;
   cwd: string;
   modeId: string | null;

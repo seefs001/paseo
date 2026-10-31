@@ -8,6 +8,7 @@ import invariant from "tiny-invariant";
 import { Composer } from "@/composer";
 import { useComposerEditingSession, useComposerFullscreen } from "@/composer/editing-session";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
+import { ChatQuotePreview } from "@/attachments/chat-quote-pill";
 import { ComposerImportPill } from "@/composer/draft/import-pill";
 import { COMPOSER_PILL_CLEARANCE } from "@/composer/pill-styles";
 import { AgentStreamView } from "@/agent-stream/view";
@@ -22,7 +23,10 @@ import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
-import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
+import {
+  useWorkspaceDraftSubmissionStore,
+  type PendingWorkspaceDraftSubmission,
+} from "@/stores/workspace-draft-submission-store";
 import { useAgentControlCommandCenterActions } from "@/command-center/agent-control-registration";
 import { encodeImages } from "@/utils/encode-images";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
@@ -32,7 +36,7 @@ import {
   validateDraftSubmission,
 } from "@/composer/draft/workspace-tab-core";
 import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
-import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import type { AgentMetadata, AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
 import {
@@ -116,6 +120,7 @@ function resolveDraftModeId(input: {
 }
 
 async function submitDraftCreateRequest(input: {
+  metadata?: AgentMetadata;
   draftId: string;
   attempt: { clientMessageId: string };
   text: string;
@@ -181,6 +186,7 @@ async function submitDraftCreateRequest(input: {
     workspaceId,
     initialPrompt: text,
     clientMessageId: attempt.clientMessageId,
+    ...(input.metadata ? { metadata: input.metadata } : {}),
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
     ...(attachmentsArray && attachmentsArray.length > 0 ? { attachments: attachmentsArray } : {}),
   };
@@ -292,6 +298,35 @@ function resolveImportPillPress(
   return onOpenImportSheet ?? null;
 }
 
+function resolveDraftMetadata(
+  pending: PendingWorkspaceDraftSubmission | null,
+  setup: WorkspaceDraftTabSetup | null,
+): AgentMetadata | undefined {
+  return pending?.metadata ?? setup?.metadata;
+}
+
+interface DraftSideConversationReferenceProps {
+  serverId: string;
+  metadata: AgentMetadata | undefined;
+}
+
+function DraftSideConversationReference({
+  serverId,
+  metadata,
+}: DraftSideConversationReferenceProps) {
+  const sideConversation = metadata?.sideConversation;
+  const source = useMemo(() => {
+    if (!sideConversation) return null;
+    return {
+      serverId,
+      agentId: sideConversation.sourceAgentId,
+      messageId: sideConversation.sourceMessageId,
+    };
+  }, [serverId, sideConversation]);
+  if (!sideConversation || !source) return null;
+  return <ChatQuotePreview text={sideConversation.selectedText} source={source} />;
+}
+
 export function WorkspaceDraftAgentTab({
   serverId,
   workspaceId,
@@ -369,6 +404,7 @@ export function WorkspaceDraftAgentTab({
     (state) => state.consumePending,
   );
   const autoSubmitConfig = resolveAutoSubmitConfig(pendingAutoSubmit);
+  const draftMetadata = resolveDraftMetadata(pendingAutoSubmit, draftSetup);
   const initialCreateAttempt = useMemo<DraftCreateAttempt | null>(() => {
     if (!pendingCreateAttempt) {
       return null;
@@ -471,6 +507,7 @@ export function WorkspaceDraftAgentTab({
         return { agentId: result.id, result };
       }
       return submitDraftCreateRequest({
+        metadata: draftMetadata,
         draftId,
         attempt,
         text,
@@ -618,6 +655,7 @@ export function WorkspaceDraftAgentTab({
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.configScrollContent}>
           <View style={styles.configSection}>
+            <DraftSideConversationReference serverId={serverId} metadata={draftMetadata} />
             {formErrorMessage ? (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{formErrorMessage}</Text>

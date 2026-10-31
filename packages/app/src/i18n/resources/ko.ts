@@ -169,6 +169,11 @@ export const ko: TranslationResources = {
       interruptBeforeVoice: "음성 모드를 시작하기 전에 에이전트를 중단하세요",
     },
     attachments: {
+      chatQuote: "인용 메시지",
+      chatQuoteSource: "출처",
+      openChatQuote: "{{serverId}} / {{agentId}} / {{messageId}}의 인용 미리 보기: {{text}}",
+      removeChatQuote: "인용 제거",
+      openChatQuoteSource: "원본 대화 열기",
       addImage: "이미지 추가",
       pasteImage: "이미지 붙여넣기",
       addFile: "파일 업로드",
@@ -337,6 +342,14 @@ export const ko: TranslationResources = {
     },
   },
   message: {
+    selection: {
+      actions: "선택한 텍스트 작업",
+      addToChat: "대화에 추가",
+      askInSideConversation: "옆 대화에서 질문",
+      updateHost: "옆 대화를 시작하려면 호스트를 업데이트하세요.",
+      unavailable: "이 작업 공간에서 옆 대화를 열 수 없습니다.",
+      sourceUnavailable: "이 메시지가 아직 기록에 저장되지 않았습니다. 잠시 후 다시 시도하세요.",
+    },
     turnInfo: {
       title: "턴 정보",
       provider: "제공업체",
@@ -2035,6 +2048,12 @@ export const ko: TranslationResources = {
       creatingAgent: "에이전트 생성 중",
     },
     file: {
+      selection: {
+        actions: "파일 선택 작업",
+        copyReference: "참조 복사",
+        referenceCopied: "참조를 복사했습니다",
+        copyFailed: "파일 참조를 복사할 수 없습니다.",
+      },
       filePanels: {
         pickerTitleExtension: ".{{extension}} 파일 열기 방식",
         pickerTitleFilename: "{{filename}} 열기 방식",

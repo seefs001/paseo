@@ -511,7 +511,26 @@ const ToolPolicySchema = z
   })
   .strict();
 
+export const AgentTimelineCursorSchema = z.object({
+  epoch: z.string(),
+  seq: z.number().int().nonnegative(),
+});
+
+export const AgentMetadataSchema = z.object({
+  sideConversation: z
+    .object({
+      sourceAgentId: z.string(),
+      sourceMessageId: z.string(),
+      sourceCursor: AgentTimelineCursorSchema.optional(),
+      selectedText: z.string(),
+    })
+    .optional(),
+});
+
+export type AgentMetadata = z.infer<typeof AgentMetadataSchema>;
+
 const AgentSessionConfigSchema = z.object({
+  metadata: AgentMetadataSchema.optional(),
   provider: AgentProviderSchema,
   cwd: z.string(),
   modeId: z.string().optional(),
@@ -895,6 +914,7 @@ const AgentActiveTurnPayloadSchema = z.object({
 });
 
 export const AgentSnapshotPayloadSchema = z.object({
+  metadata: AgentMetadataSchema.optional(),
   id: z.string(),
   provider: AgentProviderSchema,
   cwd: z.string(),
@@ -1209,7 +1229,8 @@ export const TextAttachmentSchema = z
     ...attachment,
     ...(contextKind === "chat_history" ||
     contextKind === "agent_session" ||
-    contextKind === "agent_profile"
+    contextKind === "agent_profile" ||
+    contextKind === "chat_quote"
       ? { contextKind }
       : {}),
   }));
@@ -1991,11 +2012,6 @@ export const ShutdownServerRequestMessageSchema = z.object({
 export const DaemonUpdateRequestMessageSchema = z.object({
   type: z.literal("daemon.update.request"),
   requestId: z.string(),
-});
-
-export const AgentTimelineCursorSchema = z.object({
-  epoch: z.string(),
-  seq: z.number().int().nonnegative(),
 });
 
 export const FetchAgentTimelineRequestMessageSchema = z.object({
@@ -3768,6 +3784,7 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceRequestReceipts: z.boolean().optional(),
         creationLifecycle: z.boolean().optional(),
         agentSessionShare: z.boolean().optional(),
+        agentSideConversation: z.boolean().optional(),
         // COMPAT(hubAgentRpc): added in v0.8.0; remove gate after 2027-03-05.
         hubAgentRpc: z.boolean().optional(),
         // COMPAT(internalAgents): added in v0.9.0; remove gate after 2027-03-17.

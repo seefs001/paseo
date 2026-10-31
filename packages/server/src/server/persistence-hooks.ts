@@ -67,6 +67,7 @@ export function buildConfigOverrides(record: StoredAgentRecord): Partial<AgentSe
   return stripInternalPaseoMcpServer({
     provider: record.provider,
     cwd: record.cwd,
+    metadata: record.metadata,
     // lastModeId is the last live mode — it also covers provider-side switches
     // (ACP current_mode_update, in-session commands) that never reach
     // record.config.modeId.
@@ -92,6 +93,7 @@ export function buildSessionConfig(
   return stripInternalPaseoMcpServer({
     provider: record.provider,
     cwd: record.cwd,
+    metadata: overrides.metadata,
     modeId: overrides.modeId,
     model: overrides.model,
     thinkingOptionId: overrides.thinkingOptionId,

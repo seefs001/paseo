@@ -1,4 +1,4 @@
-import type { ComposerAttachment } from "@/attachments/types";
+import type { ChatQuoteContextAttachment, ComposerAttachment } from "@/attachments/types";
 import type { ImageAttachment } from "@/composer/types";
 import {
   isWorkspaceAttachment,
@@ -61,6 +61,11 @@ export function splitComposerAttachmentsForSubmit(
       continue;
     }
 
+    if (attachment.kind === "chat_quote") {
+      agentAttachments.push(chatQuoteToAgentAttachment(attachment));
+      continue;
+    }
+
     if (attachment.kind === "file") {
       agentAttachments.push(attachment.attachment);
       continue;
@@ -96,6 +101,26 @@ export function splitComposerAttachmentsForSubmit(
   return {
     images,
     attachments: agentAttachments,
+  };
+}
+
+function chatQuoteToAgentAttachment(
+  attachment: ChatQuoteContextAttachment,
+): Extract<AgentAttachment, { type: "text" }> {
+  const quotedLines = attachment.selectedText.split("\n").map((line) => `> ${line}`);
+  return {
+    type: "text",
+    mimeType: "text/plain",
+    contextKind: "chat_quote",
+    title: `“${attachment.selectedText.replace(/\s+/g, " ").trim()}”`,
+    text: [
+      "Quoted conversation excerpt:",
+      `Source host: ${attachment.source.serverId}`,
+      `Source agent: ${attachment.source.agentId}`,
+      `Source message: ${attachment.source.messageId}`,
+      "",
+      ...quotedLines,
+    ].join("\n"),
   };
 }
 

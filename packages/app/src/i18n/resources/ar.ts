@@ -169,6 +169,11 @@ export const ar: TranslationResources = {
       interruptBeforeVoice: "قم بمقاطعة الوكيل قبل بدء الوضع الصوتي",
     },
     attachments: {
+      chatQuote: "رسالة مقتبسة",
+      chatQuoteSource: "المصدر",
+      openChatQuote: "معاينة اقتباس من {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
+      removeChatQuote: "إزالة الاقتباس",
+      openChatQuoteSource: "فتح المحادثة المصدر",
       addImage: "أضف صورة",
       pasteImage: "لصق صورة",
       addFile: "Upload file",
@@ -336,6 +341,14 @@ export const ar: TranslationResources = {
     },
   },
   message: {
+    selection: {
+      actions: "إجراءات النص المحدد",
+      addToChat: "إضافة إلى المحادثة",
+      askInSideConversation: "السؤال في محادثة جانبية",
+      updateHost: "حدّث المضيف لبدء محادثة جانبية.",
+      unavailable: "تعذر فتح محادثة جانبية في مساحة العمل هذه.",
+      sourceUnavailable: "لم تُحفظ هذه الرسالة في السجل بعد. حاول مجددًا بعد قليل.",
+    },
     turnInfo: {
       title: "معلومات الجولة",
       provider: "المزوّد",
@@ -2025,6 +2038,12 @@ export const ar: TranslationResources = {
       creatingAgent: "وكيل الخلق",
     },
     file: {
+      selection: {
+        actions: "إجراءات تحديد الملف",
+        copyReference: "نسخ المرجع",
+        referenceCopied: "تم نسخ المرجع",
+        copyFailed: "تعذّر نسخ مرجع الملف.",
+      },
       filePanels: {
         pickerTitleExtension: "فتح ملفات .{{extension}} باستخدام",
         pickerTitleFilename: "فتح {{filename}} باستخدام",

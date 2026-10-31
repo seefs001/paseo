@@ -165,6 +165,18 @@ export const PASEO_TOOL_CATALOG = {
     context: targetAgent(),
     detail: { inputOrder: ["agentId"] },
   },
+  read_agent_context: {
+    label: "Read agent context",
+    completedLabel: "Read agent context",
+    context: targetAgent(),
+    detail: { inputOrder: ["agentId"], outputFields: ["metadata"] },
+  },
+  read_agent_history: {
+    label: "Read agent history",
+    completedLabel: "Read agent history",
+    context: targetAgent(),
+    detail: { inputOrder: ["agentId", "messageId", "cursor", "direction", "limit"] },
+  },
   get_agent_activity: {
     label: "Read agent activity",
     completedLabel: "Read agent activity",

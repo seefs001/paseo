@@ -105,6 +105,9 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `internal`           | `boolean?`                               | Whether this is a system-internal agent                                                                                                                                                                                                                                                                                                                                             |
 | `archivedAt`         | `string?` (ISO 8601)                     | Soft-delete timestamp                                                                                                                                                                                                                                                                                                                                                               |
 
+Agent records also accept optional `metadata`, separate from the provider persistence handle.
+Its side-conversation contract is described in [Agent lifecycle](agent-lifecycle.md#side-conversations).
+
 ### Nested: SerializableConfig
 
 | Field              | Type                       | Description                  |

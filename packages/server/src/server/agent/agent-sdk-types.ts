@@ -10,7 +10,11 @@ import type {
   ToolPolicy,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
-import type { AgentAttachment, AgentSessionShareResult } from "@getpaseo/protocol/messages";
+import type {
+  AgentAttachment,
+  AgentMetadata as AgentSessionMetadata,
+  AgentSessionShareResult,
+} from "@getpaseo/protocol/messages";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
 export type {
@@ -592,6 +596,7 @@ export interface ImportedProviderSession {
 }
 
 export interface AgentSessionConfig {
+  metadata?: AgentSessionMetadata;
   provider: AgentProvider;
   cwd: string;
   /**

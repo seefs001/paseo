@@ -262,6 +262,33 @@ Provider session connection owns every process it spawns until the session is re
 `connect()` must dispose that process before rethrowing; the manager cannot clean up a session it never
 received.
 
+## Side conversations
+
+On web and desktop, select text within one assistant message to add a quote to that agent's
+composer or start a side conversation on the same host. Adding a quote preserves the current
+draft and never sends it. Native clients retain their system text-selection menu.
+
+A side conversation is an independent agent session in the source workspace, with source metadata rather than a copied
+transcript. It has no parent relationship, completion callback, or automatic message to the
+source agent. Returning text to the source conversation requires a user action.
+
+Source metadata survives reload and archive. The daemon adds a short runtime instruction only
+to side conversations: read metadata with `read_agent_context`, then request the referenced
+message and earlier context with `read_agent_history` as needed. The selection stays in metadata;
+the daemon does not inject the source transcript into the new prompt.
+
+`read_agent_context` returns metadata without loading a provider session. Omit `agentId` inside
+an agent-scoped session to read the caller; external callers must supply it.
+`read_agent_history` reads the same canonical timeline as the app, including older messages
+outside the mounted UI. Reads return 20 items by default and at most 100. An `around` read
+includes the anchor and earlier items; `before` and `after` support pagination. Entries carry
+message identities and cursors. Cursors belong to a timeline epoch; after an epoch change,
+use a stable provider or client message ID. A cursor-only reference cannot be recovered by
+silently reading a different message.
+
+Clients gate creation on `server_info.features.agentSideConversation`. Optional metadata does
+not change the existing create or snapshot contract for older clients and daemons.
+
 ## Tabs vs archive
 
 These are two distinct concepts that used to be conflated:

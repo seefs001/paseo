@@ -242,6 +242,7 @@ export interface PaseoAgentConfig {
   /** JSON-safe provider-native settings, validated by the selected provider. */
   options?: PaseoAgentSessionConfig["providerOptions"];
   systemPrompt?: PaseoAgentSessionConfig["systemPrompt"];
+  metadata?: PaseoAgentSessionConfig["metadata"];
   toolPolicy?: PaseoAgentSessionConfig["toolPolicy"];
   mcpServers?: PaseoAgentSessionConfig["mcpServers"];
 }

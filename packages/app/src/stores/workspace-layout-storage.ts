@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { AgentMetadataSchema } from "@getpaseo/protocol/messages";
 import type { SplitNode, WorkspaceLayout } from "./workspace-layout-actions";
 
 const WorkspaceDraftTabSetupStorageSchema = z.strictObject({
+  metadata: AgentMetadataSchema.optional(),
   provider: z.string(),
   cwd: z.string(),
   modeId: z.string().nullable(),

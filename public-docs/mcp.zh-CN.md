@@ -96,6 +96,8 @@ MCP 不提供解除 Agent 父子关系的工具。解除关系是用户在应用
 | `create_agent`       | 创建 Agent，可用 `workspaceId` 把它放到已有的工作区。用 `initialPrompt` 开始工作；不等待完成就返回。 |
 | `send_agent_prompt`  | 用 `agentId` 和 `prompt` 发送提示词；不等待完成就返回。                                              |
 | `get_agent_status`   | 返回 Agent 的最新快照。                                                                              |
+| `read_agent_context` | 读取 Agent 的来源元数据，不加载聊天记录；默认读取调用方自身。                                        |
+| `read_agent_history` | 按消息 ID 或游标定位，读取限定条数的历史记录。                                                       |
 | `list_agents`        | 以精简元数据列出最近的 Agent；`includeBackground: true` 会包含后台工作。                             |
 | `cancel_agent`       | 中止 Agent 当前的运行，但保留该 Agent。                                                              |
 | `archive_agent`      | 软删除 Agent，并把它从活动列表中移除。                                                               |

@@ -14,6 +14,10 @@ Workspace file links use the shared file-link resolver. The workspace supplies i
 
 Resolve workspace image paths over the existing session RPC, then give the library a cached native file URL or web blob URL. HTTP(S) images pass through unchanged. This preserves relay, SSH and local socket connections, which do not expose a daemon HTTP endpoint. Each mounted renderer owns its image acquisition identity, so a later reply reads a rewritten path again while the earlier mounted reply retains its snapshot. Image taps open the attachment lightbox. File previews resolve relative images against the Markdown file's directory. An image alone on its line becomes its own paragraph before the library sees it, so it renders as a block on every platform; the library only treats sole-child paragraph images as blocks, and with hard soft breaks every newline is a break node, which left own-line images inline on iOS and web. Images that share a line with text stay inline.
 
+## File references
+
+Copy reference uses the host's absolute file path and original source line numbers, never visual wrapped lines. Source view cites the selected lines; Markdown Preview cites the enclosing source blocks. Use Source for precise sub-block ranges or when HTML, images or other source adaptation prevents a reliable preview mapping. Repeated paragraphs must keep their own source positions; never locate a selection by the first matching text.
+
 ## Engine constraints
 
 The pinned nightly has the same React Native package and core source trees as upstream commit `73ac5085eb1fdc743973b3473d4dba65abad5261`. Compatibility was checked with React Native 0.81.5. Native dependencies must be rebuilt when changing the highlighting configuration; JavaScript refresh cannot enable compiled grammars.

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FileFind, FileFindModel } from "../find/index.web";
+import { FileReferenceSelectionToolbar } from "../../reference/toolbar.web";
+import { readSourceReferenceSelection } from "../../reference/source-selection.web";
 import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { getLanguageForFile } from "@getpaseo/highlight";
@@ -48,6 +50,7 @@ export function FileEditorView({
   const [find] = useState(() => new FileFindModel());
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const readSelection = useCallback(() => readSourceReferenceSelection(viewRef.current), []);
   const snapshot = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
   const initial = useRef({
     filename,
@@ -167,6 +170,7 @@ export function FileEditorView({
         style={HOST_STYLE}
       />
       <FileFind model={find} editor={viewRef} />
+      <FileReferenceSelectionToolbar filePath={filename} readSelection={readSelection} />
     </div>
   );
 }

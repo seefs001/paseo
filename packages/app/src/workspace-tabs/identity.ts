@@ -1,3 +1,5 @@
+import equal from "fast-deep-equal";
+import { AgentMetadataSchema } from "@getpaseo/protocol/messages";
 import { normalizeWorkspaceFileLocation, workspaceFileLocationsEqual } from "@/workspace/file-open";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
 
@@ -84,7 +86,9 @@ export function normalizeWorkspaceDraftTabSetup(
   if (!provider || !cwd) {
     return undefined;
   }
+  const metadata = AgentMetadataSchema.safeParse(record.metadata);
   return {
+    ...(metadata.success ? { metadata: metadata.data } : {}),
     provider,
     cwd,
     modeId: trimOptionalString(typeof record.modeId === "string" ? record.modeId : null),
@@ -171,6 +175,7 @@ function workspaceDraftTabSetupsEqual(
     left.modeId === right.modeId &&
     left.model === right.model &&
     left.thinkingOptionId === right.thinkingOptionId &&
+    equal(left.metadata, right.metadata) &&
     recordsShallowEqual(left.featureValues, right.featureValues)
   );
 }

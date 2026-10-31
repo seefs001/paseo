@@ -107,6 +107,16 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
   [
     ProfileReferenceSchema,
     SessionReferenceSchema,
+    z.strictObject({
+      kind: z.literal("chat_quote"),
+      id: z.string(),
+      selectedText: z.string(),
+      source: z.strictObject({
+        serverId: z.string(),
+        agentId: z.string(),
+        messageId: z.string(),
+      }),
+    }),
     z.strictObject({ kind: z.literal("image"), metadata: AttachmentMetadataSchema }),
     z.strictObject({ kind: z.literal("file"), attachment: UploadedFileSchema }),
     z.strictObject({

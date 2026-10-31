@@ -54,6 +54,7 @@ const MAX_EDITABLE_BYTES = 1024 * 1024;
 /** A rendered view of the file's text: the panel's Preview, shown instead of its source. */
 export interface TextFilePreviewProps {
   text: string;
+  absolutePath: string;
   params: PluginFilePanelProps["params"];
   workspaceId: string;
   host: PluginFilePanelProps["host"];
@@ -140,11 +141,17 @@ function ReadonlyTextFile({
         onViewChange={Preview ? setView : undefined}
       />
       {showPreview ? (
-        <Preview text={text.text} params={params} workspaceId={workspaceId} host={host} />
+        <Preview
+          text={text.text}
+          absolutePath={file.path}
+          params={params}
+          workspaceId={workspaceId}
+          host={host}
+        />
       ) : (
         <ThemedFileSourceView
           content={text.text}
-          filename={params.path}
+          filename={file.path}
           location={sourceLocation}
           navigationRevision={revision}
           presentation={presentation}
@@ -238,11 +245,17 @@ function EditableTextFile({
         conflict={conflict}
       />
       {showPreview ? (
-        <Preview text={snapshot.content} params={params} workspaceId={workspaceId} host={host} />
+        <Preview
+          text={snapshot.content}
+          absolutePath={file.path}
+          params={params}
+          workspaceId={workspaceId}
+          host={host}
+        />
       ) : (
         <SourceEditor
           model={model}
-          filename={params.path}
+          filename={file.path}
           location={editorLocation}
           navigationRevision={revision}
           vimEnabled={settings.vimKeybindings}

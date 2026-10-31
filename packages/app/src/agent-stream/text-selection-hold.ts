@@ -75,6 +75,12 @@ function ensureInstalled(): void {
   });
 }
 
+// Focus decisions need the live selection: the reveal snapshot can outlast removeAllRanges()
+// until the browser dispatches selectionchange.
+export function isChatTextSelectionActive(): boolean {
+  return canHoldDomSelection() && (pointerIsDown || selectionInsideChat());
+}
+
 export function isTextSelectionHoldingReveal(): boolean {
   return held;
 }

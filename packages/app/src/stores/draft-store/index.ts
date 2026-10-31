@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { AttachmentMetadata, WorkspaceFileComposerAttachment } from "@/attachments/types";
+import type {
+  AttachmentMetadata,
+  ChatQuoteContextAttachment,
+  WorkspaceFileComposerAttachment,
+} from "@/attachments/types";
 import { appendWorkspaceFileAttachment } from "@/attachments/workspace-file";
 import {
   garbageCollectAttachments,
@@ -52,6 +56,10 @@ interface DraftStoreActions {
   attachWorkspaceFile: (input: {
     draftKey: string;
     attachment: WorkspaceFileComposerAttachment;
+  }) => Promise<void>;
+  attachChatQuote: (input: {
+    draftKey: string;
+    attachment: ChatQuoteContextAttachment;
   }) => Promise<void>;
   getCreateModalDraft: () => DraftInput | null;
   saveCreateModalDraft: (draft: DraftInput | null) => void;
@@ -387,6 +395,29 @@ export const useDraftStore = create<DraftStore>()(
                   ...draft,
                   attachments: appendWorkspaceFileAttachment(draft.attachments, attachment),
                 },
+                lifecycle: "active",
+                previousVersion: existing?.version,
+              }),
+            },
+            attachmentFocusRequestByDraftKey: {
+              ...state.attachmentFocusRequestByDraftKey,
+              [draftKey]: (state.attachmentFocusRequestByDraftKey[draftKey] ?? 0) + 1,
+            },
+          };
+        });
+        scheduleAttachmentGc();
+      },
+
+      attachChatQuote: async ({ draftKey, attachment }) => {
+        await get().hydrateDraftInput({ draftKey });
+        set((state) => {
+          const existing = state.drafts[draftKey];
+          const draft = toDraftInputIfReady(existing) ?? { text: "", attachments: [] };
+          return {
+            drafts: {
+              ...state.drafts,
+              [draftKey]: createDraftRecord({
+                draft: { ...draft, attachments: [...draft.attachments, attachment] },
                 lifecycle: "active",
                 previousVersion: existing?.version,
               }),

@@ -170,6 +170,11 @@ export const ja: TranslationResources = {
       interruptBeforeVoice: "音声モードを開始する前にエージェントを中断してください",
     },
     attachments: {
+      chatQuote: "引用メッセージ",
+      chatQuoteSource: "引用元",
+      openChatQuote: "{{serverId}} / {{agentId}} / {{messageId}} からの引用をプレビュー：{{text}}",
+      removeChatQuote: "引用を削除",
+      openChatQuoteSource: "引用元の会話を開く",
       addImage: "画像を追加",
       pasteImage: "画像を貼り付け",
       addFile: "ファイルをアップロード",
@@ -341,6 +346,15 @@ export const ja: TranslationResources = {
     },
   },
   message: {
+    selection: {
+      actions: "選択したテキストの操作",
+      addToChat: "会話に追加",
+      askInSideConversation: "サイドの会話で質問",
+      updateHost: "サイドの会話を開始するにはホストを更新してください。",
+      unavailable: "このワークスペースではサイドの会話を開けません。",
+      sourceUnavailable:
+        "このメッセージはまだ履歴に保存されていません。しばらくしてから再試行してください。",
+    },
     turnInfo: {
       title: "ターン情報",
       provider: "プロバイダー",
@@ -2044,6 +2058,12 @@ export const ja: TranslationResources = {
       creatingAgent: "エージェントを作成中",
     },
     file: {
+      selection: {
+        actions: "ファイル選択操作",
+        copyReference: "参照をコピー",
+        referenceCopied: "参照をコピーしました",
+        copyFailed: "ファイルの参照をコピーできませんでした。",
+      },
       filePanels: {
         pickerTitleExtension: ".{{extension}} ファイルを開くアプリ",
         pickerTitleFilename: "{{filename}} を開くアプリ",

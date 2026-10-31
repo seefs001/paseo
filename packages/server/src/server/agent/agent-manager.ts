@@ -195,6 +195,7 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
   const config: AgentSessionConfig = {
     provider: record.provider,
     cwd: record.cwd,
+    metadata: record.metadata,
   };
   // lastModeId is the last live mode — it also covers provider-side switches
   // that never reach record.config.modeId.
@@ -5671,7 +5672,15 @@ export class AgentManager {
   }
 
   private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
-    const daemonAppendSystemPrompt = this.appendSystemPrompt.trim();
+    const instructions = [this.appendSystemPrompt.trim()];
+    if (config.metadata?.sideConversation) {
+      instructions.push(
+        "This is a side conversation. First call read_agent_context to read its source metadata. " +
+          "Use read_agent_history to read the referenced source message and earlier context as needed. " +
+          "Do not assume the source transcript is in this conversation or notify the source agent automatically.",
+      );
+    }
+    const daemonAppendSystemPrompt = instructions.filter(Boolean).join("\n\n");
     const next = { ...config };
     delete next.daemonAppendSystemPrompt;
 

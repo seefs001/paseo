@@ -170,6 +170,11 @@ export const ptBR: TranslationResources = {
       interruptBeforeVoice: "Interrompa o agente antes de iniciar o modo de voz",
     },
     attachments: {
+      chatQuote: "Mensagem citada",
+      chatQuoteSource: "Origem",
+      openChatQuote: "Visualizar citação de {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
+      removeChatQuote: "Remover citação",
+      openChatQuoteSource: "Abrir conversa de origem",
       addImage: "Adicionar imagem",
       pasteImage: "Colar imagem",
       addFile: "Enviar arquivo",
@@ -340,6 +345,15 @@ export const ptBR: TranslationResources = {
     },
   },
   message: {
+    selection: {
+      actions: "Ações do texto selecionado",
+      addToChat: "Adicionar à conversa",
+      askInSideConversation: "Perguntar em uma conversa lateral",
+      updateHost: "Atualize o host para iniciar uma conversa lateral.",
+      unavailable: "Não é possível abrir uma conversa lateral neste espaço de trabalho.",
+      sourceUnavailable:
+        "Esta mensagem ainda não foi salva no histórico. Tente novamente em instantes.",
+    },
     turnInfo: {
       title: "Informações do turno",
       provider: "Provedor",
@@ -2058,6 +2072,12 @@ export const ptBR: TranslationResources = {
       creatingAgent: "Criando agente",
     },
     file: {
+      selection: {
+        actions: "Ações de seleção do arquivo",
+        copyReference: "Copiar referência",
+        referenceCopied: "Referência copiada",
+        copyFailed: "Não foi possível copiar a referência do arquivo.",
+      },
       filePanels: {
         pickerTitleExtension: "Abrir arquivos .{{extension}} com",
         pickerTitleFilename: "Abrir {{filename}} com",

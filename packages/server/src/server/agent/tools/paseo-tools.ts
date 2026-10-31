@@ -1,4 +1,10 @@
 import { registerPluginTools } from "./plugin-tools.js";
+import {
+  ReadAgentContextInputSchema,
+  ReadAgentHistoryInputSchema,
+  readAgentContext,
+  readAgentHistory,
+} from "./agent-context.js";
 import type { FinishSubscriptions, FinishRegistration } from "../finish-subscriptions/index.js";
 import {
   resolveFinishWebhookTarget,
@@ -2170,6 +2176,48 @@ function createToolCatalog(
         }),
       };
     },
+  );
+
+  registerTool(
+    "read_agent_context",
+    {
+      title: "Read agent context",
+      description:
+        "Read only an agent's source metadata, without loading its transcript. Omit agentId to read the calling agent.",
+      inputSchema: ReadAgentContextInputSchema,
+    },
+    async (input: z.infer<typeof ReadAgentContextInputSchema>) => ({
+      content: [],
+      structuredContent: ensureValidJson(
+        await readAgentContext(input, {
+          agentManager,
+          agentStorage,
+          callerAgentId,
+          logger: childLogger,
+        }),
+      ),
+    }),
+  );
+
+  registerTool(
+    "read_agent_history",
+    {
+      title: "Read agent history",
+      description:
+        "Read a bounded page of canonical agent history on this host. Anchor by messageId or cursor; around includes the anchor and earlier items. Returns message identities and pagination cursors. Default 20 items, maximum 100.",
+      inputSchema: ReadAgentHistoryInputSchema,
+    },
+    async (input: z.infer<typeof ReadAgentHistoryInputSchema>) => ({
+      content: [],
+      structuredContent: ensureValidJson(
+        await readAgentHistory(input, {
+          agentManager,
+          agentStorage,
+          callerAgentId,
+          logger: childLogger,
+        }),
+      ),
+    }),
   );
 
   registerTool(

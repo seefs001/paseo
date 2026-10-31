@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FileFind, FileFindModel } from "../find/index.web";
+import { FileReferenceSelectionToolbar } from "../../reference/toolbar.web";
+import { readSourceReferenceSelection } from "../../reference/source-selection.web";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { getLanguageForFile } from "@getpaseo/highlight";
@@ -33,6 +35,7 @@ export function FileSourceView({
   const [find] = useState(() => new FileFindModel());
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const readSelection = useCallback(() => readSourceReferenceSelection(viewRef.current), []);
   const [ready, setReady] = useState(false);
   const initial = useRef({ content, filename, presentation, theme });
 
@@ -93,6 +96,7 @@ export function FileSourceView({
     <div style={FRAME_STYLE}>
       <div ref={hostRef} data-testid="file-source-editor" style={HOST_STYLE} />
       <FileFind model={find} editor={viewRef} />
+      <FileReferenceSelectionToolbar filePath={filename} readSelection={readSelection} />
       {ready ? null : <FilePanelLoading />}
     </div>
   );

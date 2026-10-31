@@ -167,6 +167,11 @@ export const zhCN: TranslationResources = {
       interruptBeforeVoice: "启动语音模式前请先中断 Agent",
     },
     attachments: {
+      chatQuote: "引用消息",
+      chatQuoteSource: "来源",
+      openChatQuote: "预览来自 {{serverId}} / {{agentId}} / {{messageId}} 的引用：{{text}}",
+      removeChatQuote: "移除引用",
+      openChatQuoteSource: "打开来源对话",
       addImage: "添加图片",
       pasteImage: "粘贴图片",
       addFile: "Upload file",
@@ -334,6 +339,14 @@ export const zhCN: TranslationResources = {
     },
   },
   message: {
+    selection: {
+      actions: "选中文字操作",
+      addToChat: "添加到对话",
+      askInSideConversation: "在侧边对话中提问",
+      updateHost: "请更新主机后再创建侧边对话。",
+      unavailable: "无法在此工作区打开侧边对话。",
+      sourceUnavailable: "这条消息尚未保存到历史记录，请稍后重试。",
+    },
     turnInfo: {
       title: "本轮信息",
       provider: "提供商",
@@ -2001,6 +2014,12 @@ export const zhCN: TranslationResources = {
       creatingAgent: "正在创建 Agent",
     },
     file: {
+      selection: {
+        actions: "文件选区操作",
+        copyReference: "复制引用",
+        referenceCopied: "已复制引用",
+        copyFailed: "无法复制文件引用。",
+      },
       filePanels: {
         pickerTitleExtension: "打开 .{{extension}} 文件的方式",
         pickerTitleFilename: "打开 {{filename}} 的方式",

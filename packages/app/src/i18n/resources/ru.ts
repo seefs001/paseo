@@ -170,6 +170,11 @@ export const ru: TranslationResources = {
       interruptBeforeVoice: "Остановите агента перед запуском голосового режима",
     },
     attachments: {
+      chatQuote: "Цитата сообщения",
+      chatQuoteSource: "Источник",
+      openChatQuote: "Просмотр цитаты из {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
+      removeChatQuote: "Удалить цитату",
+      openChatQuoteSource: "Открыть исходную беседу",
       addImage: "Добавить изображение",
       pasteImage: "Вставить изображение",
       addFile: "Загрузить файл",
@@ -340,6 +345,14 @@ export const ru: TranslationResources = {
     },
   },
   message: {
+    selection: {
+      actions: "Действия с выделенным текстом",
+      addToChat: "Добавить в беседу",
+      askInSideConversation: "Спросить в боковой беседе",
+      updateHost: "Обновите хост, чтобы начать боковую беседу.",
+      unavailable: "Не удалось открыть боковую беседу в этом рабочем пространстве.",
+      sourceUnavailable: "Это сообщение ещё не сохранено в истории. Повторите попытку чуть позже.",
+    },
     turnInfo: {
       title: "Информация о ходе",
       provider: "Провайдер",
@@ -2057,6 +2070,12 @@ export const ru: TranslationResources = {
       creatingAgent: "Создание агента",
     },
     file: {
+      selection: {
+        actions: "Действия с выделением в файле",
+        copyReference: "Копировать ссылку",
+        referenceCopied: "Ссылка скопирована",
+        copyFailed: "Не удалось скопировать ссылку на файл.",
+      },
       filePanels: {
         pickerTitleExtension: "Открывать файлы .{{extension}} с помощью",
         pickerTitleFilename: "Открывать {{filename}} с помощью",
