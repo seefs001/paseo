@@ -18,6 +18,12 @@
 
 ## 当前保留的功能与改进
 
+### MCP 完成 HTTP 回调
+
+- `create_agent` / `send_agent_prompt` 支持可选 `onFinishWebhook` 和 `replyToAgentId`，供 SeefsBot 等外部编排方接收完成通知，不改变 agent-scoped `notifyOnFinish`。
+- 支持 daemon 环境变量默认地址、请求覆盖、按轮次与状态去重、后台有限重试和 URL 日志脱敏。
+- 调用方式、安全限制及重启边界见 [MCP 回调说明](public-docs/mcp.zh-CN.md#http-completion-callbacks)。
+
 ### 输入框引用 Agent 会话与配置
 
 - 在 `@` 自动补全中，除文件外，可以选择当前主机已加载的未归档 Agent 会话和保存的 Agent 配置（Profile）；排除当前会话，不做跨主机搜索。

@@ -104,7 +104,62 @@ MCP 不提供解除 Agent 父子关系的工具。解除关系是用户在应用
 | `get_agent_activity` | 以整理后的摘要返回 Agent 最近的时间线条目。                                                          |
 | `set_agent_mode`     | 切换 Agent 的会话模式。                                                                              |
 
-Paseo Agent 默认会收到完成、错误和权限通知；设置 `notifyOnFinish: false` 可以关闭它们。外部 MCP 客户端使用 `get_agent_status` 和 `get_agent_activity` 查看结果。
+Paseo Agent 默认会收到完成、错误和权限通知；设置 `notifyOnFinish: false` 可以关闭它们。外部 MCP 客户端可以接收 HTTP 完成回调，或使用 `get_agent_status` 和 `get_agent_activity` 查看结果。
+
+#### HTTP 完成回调 {#http-completion-callbacks}
+
+Seefs fork 的 `create_agent` 和 `send_agent_prompt` 支持可选字符串 `onFinishWebhook`。
+在 daemon 环境中设置 `PASEO_ON_FINISH_WEBHOOK` 可提供默认地址，请求参数优先。
+URL 可以包含 query key。可选字符串 `replyToAgentId` 会原样放入回调 body，不会发送 Agent 消息。
+HTTP 回调不要求调用方是 Agent，也不受 `notifyOnFinish` 控制。
+
+```json
+{
+  "agentId": "agent_123",
+  "prompt": "Finish the implementation",
+  "onFinishWebhook": "https://hooks.example.com/paseo?key=YOUR_KEY",
+  "replyToAgentId": "orchestrator_123"
+}
+```
+
+请将 MCP 直接连接到 Agent 所在的 daemon。指定其他 `serverId` 且存在显式或默认回调时，
+请求会在派发前被拒绝。未配置回调时，原有跨主机行为不变。
+
+Paseo 发送 `POST`，请求头为 `Content-Type: application/json`：
+
+```json
+{
+  "event": "agent.finish",
+  "source": "paseo",
+  "agentId": "agent_123",
+  "status": "idle",
+  "runId": "turn_123",
+  "finishedAt": "2026-10-30T12:00:00.000Z",
+  "title": "Finish implementation",
+  "workspaceId": "workspace_123",
+  "serverId": "server_123",
+  "lastResponse": "Implementation complete.",
+  "replyToAgentId": "orchestrator_123"
+}
+```
+
+- 状态包括一轮完成后的 `idle`、`error`、`pendingPermissions` 和 `closed`。
+  初始 idle 状态不算完成。权限通知不会结束订阅。
+- 每个 `(agentId, status, runId)` 只创建一次投递。重试保持 body、`finishedAt`
+  和 `Idempotency-Key` 请求头不变。接收方应按该 key 去重，因为 HTTP 超时可能发生在接收成功之后。
+- `lastResponse` 从实时记录末尾读取该轮次最后的 assistant 文本，最多 4,000 个字符，无法读取时为空字符串。
+  没有值的可选元数据不出现在 body 中。
+- 后台最多尝试三次，间隔为 1 秒、2 秒，每次超时为 10 秒。非 2xx 响应视为失败，不跟随重定向。
+- 只接受 HTTPS。本地 mock 需要显式设置 `PASEO_ON_FINISH_WEBHOOK_ALLOW_HTTP_LOCALHOST=1`，
+  才允许对 `localhost`、`127.0.0.1` 或 `[::1]` 使用 HTTP。不接受 URL 用户名、密码或 fragment。
+  MCP 调用日志隐藏整个回调 URL，投递日志不包含 URL 和响应正文。
+- MCP 提示词成功派发后，用该请求的 URL 或环境默认值替换当前回调。两者都没有时移除旧回调。
+  通过其他入口开始的新轮次保留当前回调，直到替换回调或删除 Agent。
+- 订阅和去重记录由 daemon 内存持有，不依赖 MCP 连接。daemon 重启会丢失订阅和待发送回调。
+  停机不会制造 `closed` 回调。这是尽力通知，不是持久消息队列。
+
+安装此改动或修改环境变量后，需要重建 server 并重启 daemon。MCP 客户端重新连接即可刷新工具 schema，
+不需要单独构建 MCP server。对于 `paseo.seefs.dev`，应更新该站点背后的 daemon，仅更新网页无效。
 
 ### 工作区 {#workspaces}
 

@@ -1,4 +1,5 @@
 import { createRestartRecovery } from "./agent/restart-recovery/index.js";
+import { createFinishWebhooks } from "./agent/finish-webhooks.js";
 import { sendPromptToAgent } from "./agent/agent-prompt.js";
 import { createIdleRuntimeCleanup } from "./agent/idle-runtime-cleanup/index.js";
 import {
@@ -1523,6 +1524,8 @@ export async function createPaseoDaemon(
     }),
   });
 
+  const finishWebhooks = createFinishWebhooks({ agentManager, serverId, logger });
+
   const idleRuntimeCleanup = createIdleRuntimeCleanup({
     enabled: daemonConfigStore.get().idleRuntimeCleanup !== false,
     runtimes: () => agentManager.getRuntimeCleanupCandidates(),
@@ -1541,6 +1544,7 @@ export async function createPaseoDaemon(
     runtime: PaseoToolRuntimeContext,
   ): PaseoToolHostDependencies => ({
     finishSubscriptions: () => finishSubscriptions,
+    finishWebhooks,
     agentMessages: () => {
       if (!wsServer) throw new Error("Daemon is not accepting agent messages");
       return wsServer.agentMessages;
@@ -2094,6 +2098,7 @@ export async function createPaseoDaemon(
     // Freeze both ingress and registration before taking the agent closure snapshot.
     wsServer?.prepareForShutdown();
     await finishSubscriptions.close();
+    finishWebhooks.close();
     await wsServer?.agentMessages.close();
     agentManager.prepareForShutdown();
     await restartRecovery.captureRunningAgents();

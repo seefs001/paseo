@@ -1,5 +1,10 @@
 import { registerPluginTools } from "./plugin-tools.js";
 import type { FinishSubscriptions, FinishRegistration } from "../finish-subscriptions/index.js";
+import {
+  resolveFinishWebhookTarget,
+  type FinishWebhookInput,
+  type FinishWebhooks,
+} from "../finish-webhooks.js";
 import type { AgentMessageDelivery } from "../agent-messages/index.js";
 import {
   createHostResolver,
@@ -119,6 +124,7 @@ import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 export interface PaseoToolHostDependencies {
   agentMessages?: () => AgentMessageDelivery;
   finishSubscriptions?: () => FinishSubscriptions;
+  finishWebhooks?: FinishWebhooks;
   serverId?: string;
   hosts?: () => ToolHosts;
   agentManager: AgentManager;
@@ -660,6 +666,13 @@ function createToolCatalog(
     if (!options.agentMessages) throw new Error("Agent message delivery is not configured");
     return options.agentMessages();
   }
+  function finishWebhookTarget(input: FinishWebhookInput) {
+    const target = resolveFinishWebhookTarget(input);
+    if (target && !options.finishWebhooks) {
+      throw new PaseoToolInputError("Finish webhooks are not configured on this daemon");
+    }
+    return target;
+  }
   function finishSubscriptions(): FinishSubscriptions {
     if (!options.finishSubscriptions) throw new Error("Finish subscriptions are not configured");
     return options.finishSubscriptions();
@@ -764,6 +777,13 @@ function createToolCatalog(
       };
       handler = async ({ serverId, ...input }, context) => {
         const destination = serverId ?? options.serverId;
+        const isAgentDispatch = ["create_agent", "send_agent_prompt"].includes(name);
+        const webhook = isAgentDispatch ? finishWebhookTarget(input) : undefined;
+        if (webhook && destination !== options.serverId) {
+          throw new PaseoToolInputError(
+            "Finish webhooks require a local agent; connect MCP directly to the destination daemon",
+          );
+        }
         const remoteNotification = await prepareRemoteNotification(name, destination, input);
         try {
           const response = await hostResolver.use(serverId, (host) =>
@@ -1172,7 +1192,23 @@ function createToolCatalog(
       .strict()
       .describe("Create a new workspace for the agent."),
   ]);
+  const finishWebhookFields = {
+    onFinishWebhook: z
+      .string()
+      .optional()
+      .describe(
+        "HTTPS completion callback URL (query keys allowed). Overrides PASEO_ON_FINISH_WEBHOOK. Local daemon only; independent of notifyOnFinish.",
+      ),
+    replyToAgentId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional opaque recipient ID echoed in the HTTP completion callback; does not send an agent message.",
+      ),
+  };
   const commonCreateAgentFields = {
+    ...finishWebhookFields,
     title: z
       .string()
       .trim()
@@ -1264,6 +1300,7 @@ function createToolCatalog(
     .object(legacyTopLevelCreateAgentInputSchema)
     .strict();
   const commonSendAgentPromptInputSchema = {
+    ...finishWebhookFields,
     activeTurnBehavior: ActiveTurnBehaviorSchema.optional().describe(
       'How to send into a running turn: "steer" joins it, falling back to interrupt when unavailable; "interrupt" replaces it. Defaults to steer for agent callers and interrupt otherwise.',
     ),
@@ -1606,6 +1643,7 @@ function createToolCatalog(
     async (args: unknown) => {
       const resolvedArgs = await resolveCreateAgentToolArgs(args);
       const { parsedArgs } = resolvedArgs;
+      const webhook = finishWebhookTarget(parsedArgs);
       let notifyOnFinish: boolean;
       if (resolvedArgs.kind === "agent-scoped") {
         notifyOnFinish = parsedArgs.notifyOnFinish;
@@ -1647,6 +1685,7 @@ function createToolCatalog(
           },
           mode: parsedArgs.settings?.modeId,
           promptFailure: "throw",
+          onCreated: ({ agentId }) => options.finishWebhooks?.register(agentId, webhook),
           notifyOnFinish,
           detached: resolvedArgs.detached,
           callerAgentId,
@@ -1656,10 +1695,13 @@ function createToolCatalog(
 
       // Return immediately for async creation.
       const currentSnapshot = agentManager.getAgent(snapshot.id) ?? snapshot;
-      const guidance =
-        callerAgentId && notifyOnFinish && initialPromptStarted
-          ? "You will get notified when the created agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives."
-          : "Creation acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.";
+      let guidance =
+        "Creation acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.";
+      if (webhook) guidance = "Creation acknowledged. HTTP completion callbacks are enabled.";
+      if (callerAgentId && notifyOnFinish && initialPromptStarted) {
+        guidance =
+          "You will get notified when the created agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives.";
+      }
       const response = {
         content: [],
         structuredContent: ensureValidJson({
@@ -1670,7 +1712,7 @@ function createToolCatalog(
           ...(currentSnapshot.workspaceId ? { workspaceId: currentSnapshot.workspaceId } : {}),
           currentModeId: currentSnapshot.currentModeId,
           availableModes: currentSnapshot.availableModes,
-          ...(guidance ? { guidance } : {}),
+          guidance,
         }),
       };
       return response;
@@ -1961,12 +2003,15 @@ function createToolCatalog(
       agentId,
       prompt,
       sessionMode,
+      onFinishWebhook,
+      replyToAgentId,
       notifyOnFinish = Boolean(callerAgentId),
       activeTurnBehavior = callerAgentId ? "steer" : "interrupt",
     }) => {
       if (callerAgentId && !agentManager.getAgent(agentId) && !(await agentStorage.get(agentId))) {
         throw new PaseoToolInputError(`Agent ${agentId} not found`);
       }
+      const webhook = finishWebhookTarget({ onFinishWebhook, replyToAgentId });
       const notifying = Boolean(callerAgentId && notifyOnFinish);
       const notification =
         notifying && callerAgentId
@@ -1979,6 +2024,7 @@ function createToolCatalog(
             })()
           : undefined;
       function confirmDispatch(_disposition: PromptDispatchDisposition): void {
+        options.finishWebhooks?.register(agentId, webhook);
         notification?.accept();
       }
       function rejectNotification(): void {
@@ -2056,13 +2102,15 @@ function createToolCatalog(
       }
       const currentSnapshot = agentManager.getAgent(agentId);
 
+      let guidance =
+        "Dispatch acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.";
+      if (notifying) guidance = PROMPTED_AGENT_NOTIFICATION_GUIDANCE;
+      if (webhook) guidance = "Dispatch acknowledged. HTTP completion callbacks are enabled.";
       const responseData = {
         success: true,
         disposition,
         status: currentSnapshot?.lifecycle ?? "idle",
-        guidance: notifying
-          ? PROMPTED_AGENT_NOTIFICATION_GUIDANCE
-          : "Dispatch acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.",
+        guidance,
       };
       const validJson = ensureValidJson(responseData);
 

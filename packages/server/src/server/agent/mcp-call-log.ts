@@ -241,7 +241,14 @@ function clipArguments(value: string | null): string | null {
 export function formatCallArguments(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   try {
-    const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    const text =
+      typeof value === "string"
+        ? value
+        : JSON.stringify(
+            value,
+            (key, entry) => (key === "onFinishWebhook" ? "[redacted]" : entry),
+            2,
+          );
     return clipArguments(text);
   } catch {
     return null;

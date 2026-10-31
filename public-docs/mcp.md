@@ -115,7 +115,70 @@ MCP does not expose an agent-detach tool. Detaching is a manual user action in t
 | `get_agent_activity` | Return recent agent timeline entries as a curated summary.                                                                                                     |
 | `set_agent_mode`     | Switch an agent's session mode.                                                                                                                                |
 
-Paseo agents receive finish, error, and permission notifications by default; set `notifyOnFinish: false` to disable them. External MCP clients use `get_agent_status` and `get_agent_activity` to check results.
+Paseo agents receive finish, error, and permission notifications by default; set `notifyOnFinish: false` to disable them. External MCP clients can use HTTP completion callbacks or inspect results with `get_agent_status` and `get_agent_activity`.
+
+#### HTTP completion callbacks
+
+In the Seefs fork, `create_agent` and `send_agent_prompt` accept an optional string
+`onFinishWebhook`. Set `PASEO_ON_FINISH_WEBHOOK` in the daemon environment for a default;
+the request URL takes precedence. The URL may contain a query key. An optional string
+`replyToAgentId` is echoed in the body; it does not send an agent message.
+These callbacks work without a caller agent and independently of `notifyOnFinish`.
+
+```json
+{
+  "agentId": "agent_123",
+  "prompt": "Finish the implementation",
+  "onFinishWebhook": "https://hooks.example.com/paseo?key=YOUR_KEY",
+  "replyToAgentId": "orchestrator_123"
+}
+```
+
+Connect MCP directly to the daemon that owns the agent. A different `serverId` with an
+explicit or default callback is rejected before dispatch. Without a callback, existing
+cross-host behavior is unchanged.
+
+Paseo sends `POST` with `Content-Type: application/json`:
+
+```json
+{
+  "event": "agent.finish",
+  "source": "paseo",
+  "agentId": "agent_123",
+  "status": "idle",
+  "runId": "turn_123",
+  "finishedAt": "2026-10-30T12:00:00.000Z",
+  "title": "Finish implementation",
+  "workspaceId": "workspace_123",
+  "serverId": "server_123",
+  "lastResponse": "Implementation complete.",
+  "replyToAgentId": "orchestrator_123"
+}
+```
+
+- Status is `idle` after a turn, `error`, `pendingPermissions`, or `closed`.
+  Initial idle state is not completion. Permission checkpoints do not stop observation.
+- Each `(agentId, status, runId)` produces one delivery. Retries reuse the same body,
+  `finishedAt`, and `Idempotency-Key` header. Deduplicate that key at the receiver:
+  an HTTP timeout can occur after the receiver has accepted a POST.
+- `lastResponse` is the reported turn’s last assistant text from the live timeline tail,
+  limited to 4,000 characters, or an empty string when unavailable. Optional metadata is omitted when absent.
+- Delivery runs in the background, with at most three attempts, 1s/2s backoff, and a 10s
+  timeout per attempt. Non-2xx responses fail. Redirects are not followed.
+- Only HTTPS is accepted. For a local mock, explicitly set
+  `PASEO_ON_FINISH_WEBHOOK_ALLOW_HTTP_LOCALHOST=1` to allow HTTP to `localhost`,
+  `127.0.0.1`, or `[::1]`. URL userinfo and fragments are rejected.
+  MCP call logs redact the whole callback URL; delivery logs omit URLs and response bodies.
+- A successful MCP prompt dispatch replaces the agent's callback with that request's URL
+  or the environment default. Without either, it removes the previous callback.
+  Other agent turns retain the current callback until replacement or agent deletion.
+- Registration and deduplication live in daemon memory, not in the MCP connection.
+  Restarting the daemon loses registrations and pending deliveries. Shutdown does not send
+  synthetic `closed` callbacks. This is best-effort notification, not a durable queue.
+
+Rebuild the server stack and restart the daemon to install this change or change its environment.
+Reconnect the MCP client to refresh its tool schema; no separate MCP server build is needed.
+For `paseo.seefs.dev`, update the daemon serving that origin, not only the web app.
 
 ### Workspaces
 
