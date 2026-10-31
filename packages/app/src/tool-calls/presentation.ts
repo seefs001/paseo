@@ -3,6 +3,7 @@ import { buildAgentMessageDisplay } from "@getpaseo/protocol/paseo-tool-presenta
 import type { PlanOutcome } from "@/components/plan-card";
 import { getSkillReadName } from "./skill-read";
 import { getNmemCall } from "./nmem/model";
+import { getCodemodeMcpCall } from "./mcp";
 import type { ComponentType } from "react";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import type { ToolCallDisplayInput } from "@/utils/tool-call-display";
@@ -82,8 +83,13 @@ export function buildToolCallPresentation(
   const skillName = getSkillReadName(detail);
   const nmemCall = getNmemCall(detail);
   const toolDisplayName = skillName ? "Read skill" : displayModel.displayName;
-  const displayName = nmemCall ? "nmem" : toolDisplayName;
-  const summary = nmemCall?.summary ?? skillName ?? displayModel.summary;
+  let displayName = nmemCall ? "nmem" : toolDisplayName;
+  let summary = nmemCall?.summary ?? skillName ?? displayModel.summary;
+  const mcpCall = getCodemodeMcpCall({ name: input.toolName, metadata: input.metadata });
+  if (mcpCall) {
+    displayName = `MCP ${mcpCall.serverName}`;
+    summary = summary ? `${mcpCall.toolName} · ${summary}` : mcpCall.toolName;
+  }
 
   return {
     detail,

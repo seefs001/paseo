@@ -3,6 +3,7 @@ import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation
 import { z } from "zod";
 import { getSkillReadName } from "./skill-read";
 import { getNmemCall } from "./nmem/model";
+import { getCodemodeMcpCall } from "./mcp";
 import {
   isAgentToolCallItem,
   type AgentToolCallItem,
@@ -353,7 +354,10 @@ function splitStandaloneCalls(children: AgentToolCallItem[]) {
   const nestedCalls: ToolCallItem[] = [];
   for (const child of children) {
     const detail = child.payload.data.detail;
-    const isStandalone = getSkillReadName(detail) !== undefined || getNmemCall(detail) !== null;
+    const isStandalone =
+      getSkillReadName(detail) !== undefined ||
+      getNmemCall(detail) !== null ||
+      getCodemodeMcpCall(child.payload.data) !== null;
     const destination = isStandalone ? standaloneCalls : nestedCalls;
     destination.push(child);
   }
