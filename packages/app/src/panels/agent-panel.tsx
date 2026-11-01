@@ -83,6 +83,7 @@ import {
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
 import { ParentAgentCallout, useParentAgentId } from "@/subagents/parent";
+import { useAgentsAwaitingInput, useWorkspaceBoardCard } from "@/board/chat-desk";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import {
@@ -1115,12 +1116,17 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const parentAgentId = useParentAgentId(serverId, agentId);
   // With a composer the parent is a pill above it; without one, the box takes the composer's place.
   const parentPillAgentId = showsComposer ? parentAgentId : null;
+  // A Desk task rides on its workspace's root agent, as it does on the Desk.
+  const deskTask = useWorkspaceBoardCard(serverId, parentAgentId === null ? workspaceId : null);
+  const awaitingAgents = useAgentsAwaitingInput(serverId, agentId);
   const hasVisibleAgentTracks = hasAgentTracks({
     parentAgentId: parentPillAgentId,
     subagentRows,
     tasks,
     archiveFinishedStatus: archiveFinishedSubagents.status,
     hasPluginComposerPills,
+    deskTask,
+    awaitingAgents,
   });
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
@@ -1224,6 +1230,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           archiveFinishedStatus={archiveFinishedSubagents.status}
           onArchiveFinished={archiveFinishedSubagents.archiveFinished}
           hasPluginComposerPills={hasPluginComposerPills}
+          deskTask={deskTask}
+          awaitingAgents={awaitingAgents}
         />
       ) : null}
     </View>

@@ -43,6 +43,8 @@ import { DesktopWindowControls } from "@/components/desktop/window-controls";
 import { SidebarModelProvider } from "@/components/sidebar/sidebar-model";
 import { WorkspacePinShortcutHandler } from "@/components/workspace-pin-shortcut-handler";
 import { WorkspaceRenameHost } from "@/components/workspace-rename-host";
+import { BoardTaskSheetHostView } from "@/components/board/task-sheet-host";
+import { DeskGoalSheetHost } from "@/components/board/goal-sheet-host";
 import { WorkspaceExplorerOpenGesture } from "@/mobile-panels/explorer-open-gesture";
 import { ProviderSettingsHost } from "@/components/provider-settings-host";
 import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
@@ -493,6 +495,8 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <PluginCommandCenterActions />
         <WorkspacePinShortcutHandler />
         <WorkspaceRenameHost />
+        <BoardTaskSheetHostView />
+        <DeskGoalSheetHost />
         <CommandCenter />
         <AddProjectFlowHost />
         <HostChooserModal />
@@ -774,6 +778,7 @@ function AppWithSidebar({ children }: { children: ReactNode }) {
       pathname === "/sessions" ||
       pathname === "/schedules" ||
       pathname === "/mcp-calls" ||
+      pathname === "/board" ||
       routeHasKnownHost);
 
   return <AppContainer chromeEnabled={shouldShowAppChrome}>{children}</AppContainer>;
@@ -807,6 +812,7 @@ function RootStack() {
         <Stack.Screen name="sessions" />
         <Stack.Screen name="schedules" />
         <Stack.Screen name="mcp-calls" />
+        <Stack.Screen name="board" />
         <Stack.Screen name="pair-scan" />
       </Stack.Protected>
       <Stack.Screen name="h/[serverId]" />

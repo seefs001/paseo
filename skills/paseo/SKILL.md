@@ -1,6 +1,6 @@
 ---
 name: paseo
-description: Paseo reference for managing hosts, projects, workspaces, workspace scripts, agents, schedules, and heartbeats.
+description: Paseo reference for managing hosts, projects, workspaces, Desk goals and tasks, decisions, workspace scripts, agents, schedules, and heartbeats.
 ---
 
 Paseo is a remote daemon that manages coding agents, terminals. Control it through MCP tools or the CLI.
@@ -53,6 +53,40 @@ Choose `baseBranch` explicitly: `origin/main` selects the remote-tracking branch
 **`archive_workspace`** — `{ workspaceId }`. Archives the workspace, its agents, and its terminals. Local directories remain; Paseo removes an owned worktree only after its final active workspace reference is archived.
 
 **`rename_workspace`** — `{ workspaceId, name }`. Rename workspace.
+
+## Desk goals, tasks and decisions
+
+The Desk shows the user's work by whose move it is. These tools manage its goals, tasks and decisions on the calling host; live agents show on the Desk without them.
+
+Push right. Do as much as you can, then bring the user a prepared brief. Do not stop at every step, and do not report status through the Desk.
+
+- Record ideas and follow-ups as fog tasks with `create_board_task`. Do not start them unless the user asks or you own their goal.
+- Ask with `request_decision` only for a real choice: a direction, a trade-off, an approval.
+- When you own a goal, split it into ready, thin, end-to-end tasks with acceptance criteria, dispatch them, and land the goal when its work is done.
+
+**Concepts.** A goal (`G-<number>`) is a long-running aim; tasks serve it through `goalId`. Work without a goal is loose work. A goal's owner agent (`ownerAgentId`) plans it, dispatches subagents and brings decisions back. A task (`T-<number>`) that has not started is in stage `fog` (an idea, not specified; never claimed or started automatically) or `ready` (specified). Any task or goal ID argument also accepts its reference; outputs carry `ref`.
+
+The frontier is the set of tasks an agent may take now: `ready`, not started, unclaimed, `readyFor: "agent"`, and every blocker done. Never work a `readyFor: "human"` task. Before you work a frontier task in your own session, claim it with `claim_board_task`; release it with `release_board_task` if you stop. Goal Autopilot, which people set per goal, starts frontier tasks of the goal in new workspaces, or asks the user first; you cannot change its settings.
+
+**`list_goals`** — optional `all: true` adds landed goals. Each goal includes `ref`, `ownerAgentId`, `tasks` (`total`, `done`), `autopilot`, and `landedAt`.
+
+**`create_goal`** — required: `title`. Optional: `notes` (what done looks like) and `owner` (`"me"`, another agent ID, or `null`). Create one when the user hands you an aim bigger than one task.
+
+**`update_goal`** — required: `goalId` (ID or `G-<number>`). Optional: `title`, `notes`, `owner`, `landed` (`true` when the goal's work is done).
+
+**`request_decision`** — required: `title` (the question), `brief` (Markdown: what happened, what you prepared, what each option leads to, your recommendation), and `options` (2 to 8 labels or `{ id, label }`). Optional `goalId` (defaults to the goal you own) and `taskId`. Returns `decisionId` at once. The user's answer arrives later as a prompt in this conversation, with the chosen label and any note. End your turn or keep working; do not wait or poll.
+
+**`list_board_tasks`** — optional `state` (`ahead`, `started`, `landed`), `stage` (`fog`, `ready`; tasks not started only), `goalId`, `projectId`, and `frontier: true`. Without filters, an owner agent sees its goals' tasks and other agents see their workspace's project. Each task includes `goalId`, `readyFor`, `claimedBy`, `onFrontier`, `openBlockers` (unfinished blockers), and `children` (`total`, `done`).
+
+**`plan_board_tasks`** — record a plan atomically. Required: `tasks`, each with `key` and `title`; optional `notes`, `acceptanceCriteria` (strings), `readyFor`, `stage` (default `ready`), `parentKey` or `parentId`, and `blockedBy` (batch keys, existing task IDs, or `T-<number>`). Optional `projectId` defaults to the caller workspace's project, and `goalId` to the goal you own. The given order becomes the rank order. Slice the work into thin end-to-end vertical slices, each with its own acceptance criteria, and list blockers before the tasks they block.
+
+**`create_board_task`** — required: `title`. Optional: `notes`, `projectId` (defaults to the caller workspace's project), `goalId` (defaults to the goal you own), `acceptanceCriteria` (strings), `parentId`, `blockedBy`, `readyFor` (default `agent`), `stage` (default `fog`). Creates a task without an agent or workspace.
+
+**`update_board_task`** — optional `taskId` defaults to the task linked to your workspace. Change `title`, `notes`, `goalId` (`null` makes it loose work), `parentId` (`null` detaches), `blockedBy` (replaces the list), `readyFor`, `stage`, `summary`, or `completed`. Move a task to `ready` when the user commits to it or when you own its goal and have written its criteria. Tick criteria with `criteriaMet` (zero-based indexes) or replace them with `acceptanceCriteria` (`{ text, met }` items). When marking your task done, tick the criteria you met and write a one-paragraph `summary` of what changed, verification, and anything remaining that addresses each criterion.
+
+**`claim_board_task`** / **`release_board_task`** — `{ taskId }` (ID or `T-<number>`). Claim needs a frontier task; claiming your own claim again is a no-op. Only the claiming agent can release. Starting, linking, or completing the task clears the claim.
+
+**`start_board_task`** — required: `taskId` (ID or `T-<number>`), `isolation` (`local` or `worktree`), and either `profile` (saved profile name or ID) or `provider` with optional `model`, `modeId`, `thinkingOptionId`, `featureValues`. Use `list_profiles` to choose a profile. The task must have a project, be incomplete, have its blockers done, and have no active linked workspace. Its title, notes, and attachments become the first prompt. Returns `task`, `workspaceId`, and `agentId`; an agent-scoped call creates your subagent. Reuse `idempotencyKey` when retrying the same start.
 
 ## Workspace scripts
 

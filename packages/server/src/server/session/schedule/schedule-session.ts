@@ -98,7 +98,12 @@ export class ScheduleSession {
     request: Extract<SessionInboundMessage, { type: "schedule/list" }>,
   ): Promise<void> {
     try {
-      const schedules = await this.scheduleService.list();
+      const allSchedules = await this.scheduleService.list();
+      // COMPAT(boardTaskSchedules): added in v0.14, remove after 2027-05-01.
+      // Older clients reject the new target discriminator, even in a list response.
+      const schedules = allSchedules.filter(
+        (schedule) => request.includeBoardTasks === true || schedule.target.type !== "board-task",
+      );
       this.host.emit({
         type: "schedule/list/response",
         payload: {
@@ -112,11 +117,23 @@ export class ScheduleSession {
     }
   }
 
+  private async requireReadableSchedule(request: {
+    scheduleId: string;
+    includeBoardTasks?: boolean;
+  }) {
+    const schedule = await this.scheduleService.inspect(request.scheduleId);
+    // COMPAT(boardTaskSchedules): added in v0.14, remove after 2027-05-01.
+    if (schedule.target.type === "board-task" && request.includeBoardTasks !== true) {
+      throw new Error("Update the client to manage Board task schedules");
+    }
+    return schedule;
+  }
+
   async handleScheduleInspectRequest(
     request: Extract<SessionInboundMessage, { type: "schedule/inspect" }>,
   ): Promise<void> {
     try {
-      const schedule = await this.scheduleService.inspect(request.scheduleId);
+      const schedule = await this.requireReadableSchedule(request);
       this.host.emit({
         type: "schedule/inspect/response",
         payload: {
@@ -152,6 +169,7 @@ export class ScheduleSession {
     request: Extract<SessionInboundMessage, { type: "schedule/pause" }>,
   ): Promise<void> {
     try {
+      await this.requireReadableSchedule(request);
       const schedule = await this.scheduleService.pause(request.scheduleId);
       this.host.emit({
         type: "schedule/pause/response",
@@ -170,6 +188,7 @@ export class ScheduleSession {
     request: Extract<SessionInboundMessage, { type: "schedule/resume" }>,
   ): Promise<void> {
     try {
+      await this.requireReadableSchedule(request);
       const schedule = await this.scheduleService.resume(request.scheduleId);
       this.host.emit({
         type: "schedule/resume/response",
@@ -206,6 +225,7 @@ export class ScheduleSession {
     request: Extract<SessionInboundMessage, { type: "schedule/run-once" }>,
   ): Promise<void> {
     try {
+      await this.requireReadableSchedule(request);
       const schedule = await this.scheduleService.runOnce(request.scheduleId);
       this.host.emit({
         type: "schedule/run-once/response",
@@ -224,6 +244,7 @@ export class ScheduleSession {
     request: Extract<SessionInboundMessage, { type: "schedule/update" }>,
   ): Promise<void> {
     try {
+      await this.requireReadableSchedule(request);
       const schedule = await this.scheduleService.update({
         id: request.scheduleId,
         ...(request.name !== undefined ? { name: request.name } : {}),

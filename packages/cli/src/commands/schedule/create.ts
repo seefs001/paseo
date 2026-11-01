@@ -16,6 +16,9 @@ export interface ScheduleCreateOptions extends ScheduleCommandOptions {
   timezone?: string;
   name?: string;
   target?: string;
+  boardTask?: boolean;
+  notes?: string;
+  project?: string;
   provider?: string;
   mode?: string;
   thinking?: string;
@@ -39,6 +42,9 @@ export async function runCreateCommand(
     timezone: options.timezone,
     name: options.name,
     target: options.target,
+    boardTask: options.boardTask,
+    notes: options.notes,
+    project: options.project,
     provider: options.provider,
     mode: options.mode,
     thinking: options.thinking,

@@ -14,6 +14,7 @@ import type {
 import { parseDuration } from "../../utils/duration.js";
 import { resolveProviderAndModel } from "../../utils/provider-model.js";
 import { everyMsToFiveFieldCron } from "@getpaseo/protocol/schedule/cadence";
+import { ScheduleTargetSchema } from "@getpaseo/protocol/schedule/types";
 
 export interface ScheduleCommandOptions extends CommandOptions {
   host?: string;
@@ -50,12 +51,12 @@ export function toScheduleCommandError(code: string, action: string, error: unkn
   };
 }
 
-export async function requireNewAgentSchedule(
+export async function requireRecurringSchedule(
   client: ScheduleDaemonClient,
   id: string,
 ): Promise<void> {
   const payload = await client.scheduleInspect({ id });
-  if (payload.error || !payload.schedule || payload.schedule.target.type !== "new-agent") {
+  if (payload.error || !payload.schedule || payload.schedule.target.type === "agent") {
     throw new Error(payload.error ?? `Schedule not found: ${id}`);
   }
 }
@@ -69,6 +70,7 @@ export function formatCadence(cadence: ScheduleCadence): string {
 }
 
 export function formatTarget(target: ScheduleTarget | ScheduleListItem["target"]): string {
+  if (target.type === "board-task") return `board-task:${target.title}`;
   if (target.type === "self") {
     return `self:${target.agentId.slice(0, 7)}`;
   }
@@ -99,12 +101,39 @@ export function formatDurationMs(durationMs: number): string {
   return parts.join("");
 }
 
-function resolveScheduleTarget(args: {
+interface ScheduleTargetOptions {
   targetValue: string | undefined;
   hasExplicitNewAgentOption: boolean;
   createNewAgentTarget: () => ScheduleTarget;
-}): ScheduleTarget {
+  boardTask?: boolean;
+  title: string;
+  notes?: string;
+  project?: string;
+  cwd?: string;
+}
+
+function resolveScheduleTarget(args: ScheduleTargetOptions): ScheduleTarget {
   const { targetValue, hasExplicitNewAgentOption, createNewAgentTarget } = args;
+  if (args.boardTask) {
+    if (hasExplicitNewAgentOption || targetValue || args.cwd !== undefined) {
+      throw {
+        code: "INVALID_TARGET",
+        message: "--board-task cannot be combined with agent options or --cwd",
+      } satisfies CommandError;
+    }
+    return ScheduleTargetSchema.options[2].parse({
+      type: "board-task",
+      title: args.title,
+      notes: args.notes,
+      projectId: args.project,
+    });
+  }
+  if (args.notes !== undefined || args.project !== undefined) {
+    throw {
+      code: "INVALID_TARGET",
+      message: "--notes and --project require --board-task",
+    } satisfies CommandError;
+  }
   if (!targetValue) {
     return createNewAgentTarget();
   }
@@ -144,6 +173,9 @@ export function parseScheduleCreateInput(options: {
   timezone?: string;
   name?: string;
   target?: string;
+  boardTask?: boolean;
+  notes?: string;
+  project?: string;
   provider?: string;
   mode?: string;
   thinking?: string;
@@ -171,7 +203,7 @@ export function parseScheduleCreateInput(options: {
   }
 
   const cwdInput = options.cwd?.trim();
-  if (options.daemonTarget.kind === "endpoint" && !cwdInput) {
+  if (!options.boardTask && options.daemonTarget.kind === "endpoint" && !cwdInput) {
     throw {
       code: "MISSING_CWD",
       message:
@@ -211,6 +243,11 @@ export function parseScheduleCreateInput(options: {
     targetValue,
     hasExplicitNewAgentOption,
     createNewAgentTarget,
+    boardTask: options.boardTask,
+    title: prompt,
+    notes: options.notes,
+    project: options.project,
+    cwd: options.cwd,
   });
 
   const maxRuns =

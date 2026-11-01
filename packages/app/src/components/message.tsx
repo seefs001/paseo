@@ -649,6 +649,14 @@ const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
     fontSize: STREAM_METADATA_FONT_SIZE,
     opacity: 0,
   },
+  // Adds its width to the sizer column without adding a line of height.
+  labelSizerWidthOnly: {
+    height: 0,
+    overflow: "hidden",
+    color: theme.colors.foregroundMuted,
+    fontSize: STREAM_METADATA_FONT_SIZE,
+    opacity: 0,
+  },
   labelOverlay: {
     position: "absolute",
     top: 0,
@@ -740,11 +748,17 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
           accessibilityLabel={canSwap ? `${durationLabel}, ended ${timestampLabel}` : primaryLabel}
         >
           <View style={assistantTurnFooterStylesheet.labelWrapper}>
-            {/* Sizer reserves space for whichever label is longer so the
-                container width is stable across hover transitions. */}
+            {/* Sizers reserve space for the wider label so the container width is stable
+                across hover transitions. Both render: character counts do not predict width, and
+                a CJK duration is wider than a Latin timestamp with more characters. */}
             <Text style={assistantTurnFooterStylesheet.labelSizer} aria-hidden>
-              {primaryLabel.length >= timestampLabel.length ? primaryLabel : timestampLabel}
+              {primaryLabel}
             </Text>
+            {canSwap ? (
+              <Text style={assistantTurnFooterStylesheet.labelSizerWidthOnly} aria-hidden>
+                {timestampLabel}
+              </Text>
+            ) : null}
             <Text style={assistantTurnFooterStylesheet.labelOverlay}>
               {showTimestamp ? timestampLabel : primaryLabel}
             </Text>

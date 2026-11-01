@@ -432,6 +432,10 @@ export function buildMcpCallsRoute() {
   return "/mcp-calls" as const;
 }
 
+export function buildBoardRoute() {
+  return "/board" as const;
+}
+
 export function buildOpenProjectRoute() {
   return "/open-project" as const;
 }
@@ -442,6 +446,8 @@ interface NewWorkspaceRouteOptions {
   displayName?: string;
   projectId?: string;
   draftId?: string;
+  /** Board task to link to the workspace this screen creates, on the same host. */
+  boardTaskId?: string;
 }
 
 function buildNewWorkspaceSearch(options: NewWorkspaceRouteOptions): string {
@@ -461,6 +467,9 @@ function buildNewWorkspaceSearch(options: NewWorkspaceRouteOptions): string {
   }
   if (options.draftId) {
     params.set("draftId", options.draftId);
+  }
+  if (options.boardTaskId) {
+    params.set("task", options.boardTaskId);
   }
   return params.toString();
 }

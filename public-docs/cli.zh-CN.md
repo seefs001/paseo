@@ -321,6 +321,69 @@ paseo wait <id> --timeout 60   # 60 second timeout
 
 适用于脚本中，或一个 Agent 需要等待另一个 Agent 的情况。
 
+## 工作台任务与目标 {#board-tasks}
+
+在工作台上保存工作，不启动 Agent：
+
+```bash
+paseo task ls
+paseo task ls --all --json
+paseo task ls --stage ready --goal G-1
+paseo task add "Fix CI" --notes "Investigate the failing Linux job" --project <project-id>
+paseo task add "Ship the fix" --stage ready --goal G-1 --parent T-3 --blocked-by T-4 --criterion "CI is green" --criterion "Changelog updated"
+paseo task add "Pick the release date" --ready-for human
+paseo task edit T-5 --title "Fix Linux CI" --notes "Include the build logs"
+paseo task edit T-5 --stage ready
+paseo task edit T-5 --goal ""
+paseo task start T-5 --profile <name-or-id> --isolation worktree
+paseo task start T-5 --provider codex/gpt-5.5 --mode full-access --thinking high
+paseo task done T-5 --summary "Fixed the missing dependency"
+paseo task reopen T-5
+paseo task rm T-5
+```
+
+每个任务都有主机内的编号。所有接受任务 ID、`--parent` 或 `--blocked-by` 的命令也接受 `T-<number>`；`--goal` 接受目标 ID 或 `G-<number>`。
+
+新任务进入迷雾（Fog）：还没说清楚的想法，Agent 和 Autopilot 不会接手。在 `add` 时加 `--stage ready`，或之后用 `edit --stage ready`，把任务标为可开工（Ready），Agent 和 Autopilot 才能接手。`edit --stage fog` 把它移回去。`--goal` 指定任务服务的目标；在 `edit` 中，`--goal ""` 让任务不属于任何目标（Loose work）。
+
+`ls` 默认不显示 Done 任务，加入 `--all` 可显示；`--goal` 只列出该目标的任务，`--stage fog|ready` 只列出该阶段中尚未启动的任务。各列展示 `T-<number>` 引用、任务 ID、派生状态（Fog、Ready、Running、Needs you、Review、Done）、前沿任务标记 `*`、任务交给谁处理、标题、目标、项目、工作区、未完成的阻塞任务和认领它的 Agent。前沿任务指可开工、未被认领、交给 Agent 处理，且没有未完成阻塞任务的任务。JSON 增加 `ref`、`goal` 和 `stage`，并保留备注、验收标准、附件、排序值、摘要和时间戳。`paseo task` 只列出工作台任务；工作台中与之并列显示的 Agent 会话仍用 `paseo ls` 查看。
+
+`--parent` 把任务设为子任务；在 `edit` 中，`--parent ""` 解除父任务。`--blocked-by` 接受一个或多个必须先完成的任务 ID 或 `T-<number>` 引用，在 `edit` 中会替换原列表。每条验收标准写一个 `--criterion`；在 `edit` 中，新列表会以未勾选状态替换旧列表。`--ready-for human` 让 Agent 和 Autopilot 不接手该任务，默认值为 `agent`。父任务和阻塞任务必须在同一主机上，系统会拒绝形成循环的依赖。
+
+`start` 必须指定一个 Agent 配置或 Provider，任务必须关联项目，且没有未完成的阻塞任务。`--mode` 和 `--thinking` 只可与 `--provider` 一起使用；Agent 配置使用其已保存的设置。隔离方式默认为 `local`。启动时创建工作区和 Agent，发送任务标题、备注和附件，再关联任务。归档该工作区会把任务标为 Done。`done` 只记录完成，不归档工作区；`reopen` 清除完成状态，不移除工作区关联。可通过标准 `--host` / `--home` 参数选择主机。
+
+### 目标 {#goals}
+
+目标是一个长期的目的，任务为它服务。设置了主理 agent 时，它负责规划目标，把目标拆成可开工的任务，派出子 Agent，并把需要你决定的事项带到你的工作台。
+
+```bash
+paseo goal ls
+paseo goal ls --all
+paseo goal add "Ship the importer" --notes "CSV first, then Excel" --owner <agent-id>
+paseo goal edit G-1 --title "Ship the CSV importer" --owner ""
+paseo goal land G-1
+paseo goal rm G-1
+```
+
+每个目标都有主机内的编号，显示为 `G-<number>`。`ls` 列出尚未落地的目标，`--all` 同时列出已落地的目标。各列展示引用、目标 ID、标题、主理 agent、已完成和全部任务数、Autopilot 设置、是否已落地，以及最近一次 Autopilot 错误。`--owner ""` 移除主理 agent。`land` 把目标标为已落地。`rm` 删除目标，其任务保留并变为不属于任何目标。
+
+### Autopilot {#autopilot}
+
+Autopilot 会替你启动目标中可开工的任务：
+
+```bash
+paseo goal autopilot G-1 --enable --profile <name-or-id> --isolation worktree --max-active 2 --daily-limit 10
+paseo goal autopilot G-1 --confirm-starts
+paseo goal autopilot G-1 --disable
+paseo goal autopilot G-1
+```
+
+启用后，只要目标中已启动但未完成的任务少于 `--max-active`，且今天（按 daemon 本地日期）的自动启动次数少于 `--daily-limit`，daemon 就会启动该目标排在最前的前沿任务。启动时使用所选的 Agent 配置或 `--provider`（可配合 `--mode` 和 `--thinking`）以及隔离方式。加 `--confirm-starts` 后，每次启动前都会先在你的工作台上发起一个决定；`--no-confirm-starts` 关闭确认。不带参数时，命令显示当前设置；带参数时，未指定的设置保持原值。新建的设置默认关闭，使用 `worktree` 隔离、同时 1 个活动任务、每天 10 次启动、不确认；首次设置需要指定 `--profile` 或 `--provider`。
+
+启动失败时，错误显示在 `LAST ERROR` 列，Autopilot 会暂停该目标，直到失败的任务、设置或日期发生变化，因此配置错误的 Agent 配置不会循环重试。Agent 不能修改 Autopilot。
+
+需要重复创建迷雾任务时，使用[创建工作台任务的定时任务](/docs/schedules-cli#file-board-tasks)。
+
 ## 定时任务 {#schedules}
 
 按 cron 定时任务运行 Agent。CLI 也接受简单的节奏预设，并把它们编译为 cron。完整参考见[在 CLI 中使用定时任务](/docs/schedules-cli)。

@@ -1303,6 +1303,283 @@ function normalizeAgentAttachments(input: unknown): AgentAttachment[] {
 
 const AgentAttachmentsSchema = z.unknown().transform(normalizeAgentAttachments).optional();
 
+/** Board tasks carry only forge references: they come from issue import and must stay pure wire data. */
+export const BoardTaskAttachmentSchema = z.discriminatedUnion("type", [
+  ForgeChangeRequestAttachmentSchema,
+  ForgeIssueAttachmentSchema,
+]);
+export type BoardTaskAttachment = z.infer<typeof BoardTaskAttachmentSchema>;
+
+/** One acceptance criterion. The agent ticks `met` when it reports; review checks each one. */
+export const BoardTaskCriterionSchema = z.object({
+  text: z.string(),
+  met: z.boolean(),
+});
+export type BoardTaskCriterion = z.infer<typeof BoardTaskCriterionSchema>;
+
+/** Who should pick the task up: Autopilot and agents take only `agent` tasks from the frontier. */
+export const BoardTaskReadyForSchema = z.enum(["agent", "human"]);
+
+/**
+ * Planning stage of a task that has not started. `fog` is an idea that is not specified yet and
+ * is never claimed or started automatically; `ready` is specified work, the only stage agents and
+ * goal Autopilot take from.
+ */
+export const BoardTaskStageSchema = z.enum(["fog", "ready"]);
+
+/**
+ * A planned piece of work on the Desk. Where it shows is derived, not stored: no workspace means
+ * Ahead (by `stage`), a linked workspace means its agents' state decides, and `completedAt` means
+ * Landed.
+ */
+export const BoardTaskSchema = z.object({
+  id: z.string(),
+  /** Host-local sequence shown as `T-<number>`; agents and the CLI accept it in place of `id`. */
+  number: z.number().int().positive(),
+  title: z.string(),
+  notes: z.string(),
+  projectId: z.string().nullable(),
+  workspaceId: z.string().nullable(),
+  /** The goal this task serves, on the same host. */
+  goalId: z.string().nullable(),
+  /** Attached to the first prompt when the task starts, e.g. the forge issue it came from. */
+  attachments: z.array(BoardTaskAttachmentSchema),
+  /** Order within its Ahead list. Lower ranks sort first. */
+  rank: z.number(),
+  /** What happened, written when the work finishes. */
+  summary: z.string().nullable(),
+  /** What "done" means: given to the agent at start, ticked when it reports, checked in review. */
+  acceptanceCriteria: z.array(BoardTaskCriterionSchema),
+  /** The task this one was split from, on the same host. */
+  parentId: z.string().nullable(),
+  /** Tasks on the same host that must be done before this one starts. */
+  blockedBy: z.array(z.string()),
+  readyFor: BoardTaskReadyForSchema,
+  stage: BoardTaskStageSchema,
+  /** Agent working the task in its own session. Starting, linking or finishing clears it. */
+  claimedBy: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+export type BoardTask = z.infer<typeof BoardTaskSchema>;
+
+export const BoardTaskListRequestSchema = z.object({
+  type: z.literal("board.task.list.request"),
+  requestId: z.string(),
+  subscribe: z.object({ subscriptionId: z.string().optional() }).optional(),
+});
+export const BoardTaskCreateRequestSchema = z.object({
+  type: z.literal("board.task.create.request"),
+  requestId: z.string(),
+  title: z.string(),
+  notes: z.string().optional(),
+  projectId: z.string().nullable().optional(),
+  attachments: z.array(BoardTaskAttachmentSchema).optional(),
+  acceptanceCriteria: z.array(BoardTaskCriterionSchema).optional(),
+  parentId: z.string().nullable().optional(),
+  blockedBy: z.array(z.string()).optional(),
+  readyFor: BoardTaskReadyForSchema.optional(),
+  stage: BoardTaskStageSchema.optional(),
+  goalId: z.string().nullable().optional(),
+});
+/** Omitted fields stay unchanged. `null` clears the project, unlinks the workspace or clears the summary. */
+export const BoardTaskUpdateRequestSchema = z.object({
+  type: z.literal("board.task.update.request"),
+  requestId: z.string(),
+  taskId: z.string(),
+  title: z.string().optional(),
+  notes: z.string().optional(),
+  projectId: z.string().nullable().optional(),
+  workspaceId: z.string().nullable().optional(),
+  attachments: z.array(BoardTaskAttachmentSchema).optional(),
+  rank: z.number().optional(),
+  summary: z.string().nullable().optional(),
+  acceptanceCriteria: z.array(BoardTaskCriterionSchema).optional(),
+  parentId: z.string().nullable().optional(),
+  blockedBy: z.array(z.string()).optional(),
+  readyFor: BoardTaskReadyForSchema.optional(),
+  stage: BoardTaskStageSchema.optional(),
+  goalId: z.string().nullable().optional(),
+  /** Only `null` is accepted here: a person releasing an agent's claim. Agents claim through MCP. */
+  claimedBy: z.null().optional(),
+  completed: z.boolean().optional(),
+});
+export const BoardTaskDeleteRequestSchema = z.object({
+  type: z.literal("board.task.delete.request"),
+  requestId: z.string(),
+  taskId: z.string(),
+});
+/** How a started task launches its agent: a saved Agent profile, or explicit provider settings. */
+export const BoardTaskStartAgentSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("profile"), profileId: z.string() }),
+  z.object({
+    kind: z.literal("config"),
+    provider: z.string(),
+    model: z.string().optional(),
+    modeId: z.string().optional(),
+    thinkingOptionId: z.string().optional(),
+    featureValues: z.record(z.string(), z.unknown()).optional(),
+  }),
+]);
+/**
+ * Creates the task's workspace and agent on the daemon, then links the task. The task's title,
+ * notes and attachments become the first prompt. A retry with the same key returns the same start.
+ */
+export const BoardTaskStartRequestSchema = z.object({
+  type: z.literal("board.task.start.request"),
+  requestId: z.string(),
+  taskId: z.string(),
+  isolation: z.enum(["local", "worktree"]),
+  agent: BoardTaskStartAgentSchema,
+  idempotencyKey: z.string().min(1).max(512).optional(),
+});
+
+/**
+ * A goal's Autopilot. While enabled, the daemon starts the lowest-rank ready task of the goal
+ * whose blockers are done, as long as fewer than `maxActive` of the goal's tasks are started and
+ * unfinished and fewer than `dailyStartLimit` starts happened today (daemon local date). With
+ * `confirmStarts`, it asks through a decision instead of starting.
+ */
+export const BoardGoalAutopilotSchema = z.object({
+  enabled: z.boolean(),
+  agent: BoardTaskStartAgentSchema,
+  isolation: z.enum(["local", "worktree"]),
+  maxActive: z.number().int().min(1).max(20),
+  dailyStartLimit: z.number().int().min(1).max(200),
+  confirmStarts: z.boolean(),
+});
+export type BoardGoalAutopilot = z.infer<typeof BoardGoalAutopilotSchema>;
+
+/**
+ * A long-running aim that tasks serve. An owner agent, when set, plans and dispatches the goal's
+ * work and brings its decisions to the user. A landed goal is finished.
+ */
+export const BoardGoalSchema = z.object({
+  id: z.string(),
+  /** Host-local sequence shown as `G-<number>`. */
+  number: z.number().int().positive(),
+  title: z.string(),
+  notes: z.string(),
+  ownerAgentId: z.string().nullable(),
+  autopilot: BoardGoalAutopilotSchema.nullable(),
+  /** Autopilot starts counted against today's limit, and why the last one failed. */
+  startsToday: z.number().int().nonnegative(),
+  lastAutopilotError: z.string().nullable(),
+  /** Display order among goals. Lower first. */
+  rank: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  landedAt: z.string().nullable(),
+});
+export type BoardGoal = z.infer<typeof BoardGoalSchema>;
+
+export const BoardGoalCreateRequestSchema = z.object({
+  type: z.literal("board.goal.create.request"),
+  requestId: z.string(),
+  title: z.string(),
+  notes: z.string().optional(),
+  ownerAgentId: z.string().nullable().optional(),
+});
+/** Omitted fields stay unchanged. `autopilot: null` turns Autopilot off and forgets its settings. */
+export const BoardGoalUpdateRequestSchema = z.object({
+  type: z.literal("board.goal.update.request"),
+  requestId: z.string(),
+  goalId: z.string(),
+  title: z.string().optional(),
+  notes: z.string().optional(),
+  ownerAgentId: z.string().nullable().optional(),
+  autopilot: BoardGoalAutopilotSchema.nullable().optional(),
+  rank: z.number().optional(),
+  landed: z.boolean().optional(),
+});
+/** Deleting a goal keeps its tasks; they lose the goal. */
+export const BoardGoalDeleteRequestSchema = z.object({
+  type: z.literal("board.goal.delete.request"),
+  requestId: z.string(),
+  goalId: z.string(),
+});
+
+export const BoardDecisionOptionSchema = z.object({ id: z.string(), label: z.string() });
+/**
+ * A question waiting on the user, shown as a brief in Decide. `agent` decisions come from an agent
+ * (usually a goal owner) and the answer is sent back to it as a prompt; `autopilot_start` asks
+ * whether goal Autopilot may start a task, and choosing `start` starts it.
+ */
+export const BoardDecisionSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["agent", "autopilot_start"]),
+  goalId: z.string().nullable(),
+  taskId: z.string().nullable(),
+  agentId: z.string().nullable(),
+  title: z.string(),
+  /** Markdown brief: what happened and what is being decided. */
+  brief: z.string(),
+  options: z.array(BoardDecisionOptionSchema),
+  createdAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  choiceId: z.string().nullable(),
+  /** The user's free-text addition to the choice. */
+  note: z.string().nullable(),
+});
+export type BoardDecision = z.infer<typeof BoardDecisionSchema>;
+
+export const BoardDecisionResolveRequestSchema = z.object({
+  type: z.literal("board.decision.resolve.request"),
+  requestId: z.string(),
+  decisionId: z.string(),
+  choiceId: z.string(),
+  note: z.string().optional(),
+});
+
+/**
+ * A checkpoint the user put off. Keys are opaque to the daemon; the app derives them so a new
+ * checkpoint on the same agent or task is not hidden by an old snooze.
+ */
+export const BoardSnoozeSchema = z.object({ key: z.string(), until: z.string() });
+export type BoardSnooze = z.infer<typeof BoardSnoozeSchema>;
+/** `until: null` wakes the checkpoint now. */
+export const BoardSnoozeSetRequestSchema = z.object({
+  type: z.literal("board.snooze.set.request"),
+  requestId: z.string(),
+  key: z.string(),
+  until: z.string().nullable(),
+});
+
+export const BOARD_DESK_ZONE_IDS = ["decide", "flight", "ahead", "landed"] as const;
+export const BOARD_CHECKPOINT_KINDS = [
+  "permission",
+  "question",
+  "failed",
+  "review",
+  "decision",
+] as const;
+
+/** How the Desk works on this host; every device follows it. */
+export const BoardDeskSettingsSchema = z.object({
+  /** Zone order is array order. A custom name replaces the default label. */
+  zones: z.array(
+    z.object({
+      id: z.enum(BOARD_DESK_ZONE_IDS),
+      visible: z.boolean(),
+      name: z.string().nullable(),
+    }),
+  ),
+  /** Checkpoint kinds that appear in Decide; the rest stay on their work in Flight. */
+  decideKinds: z.array(z.enum(BOARD_CHECKPOINT_KINDS)),
+  grouping: z.enum(["goal", "project", "host", "agent"]),
+  landedRetentionDays: z.number().int().min(1).max(365),
+  /** Checkpoint kinds that send a push notification. */
+  notifyKinds: z.array(z.enum(BOARD_CHECKPOINT_KINDS)),
+});
+export type BoardDeskSettings = z.infer<typeof BoardDeskSettingsSchema>;
+
+export const BoardDeskSettingsSetRequestSchema = z.object({
+  type: z.literal("board.settings.set.request"),
+  requestId: z.string(),
+  settings: BoardDeskSettingsSchema,
+});
+
 export const ChangeRequestCheckoutSourceSchema = z.object({
   kind: z.literal("change_request"),
   forge: z.string().optional(),
@@ -3426,6 +3703,17 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceLabelUpdateRequestSchema,
   WorkspaceLabelDeleteRequestSchema,
   WorkspaceLabelDeleteInspectRequestSchema,
+  BoardTaskListRequestSchema,
+  BoardTaskCreateRequestSchema,
+  BoardTaskUpdateRequestSchema,
+  BoardTaskDeleteRequestSchema,
+  BoardTaskStartRequestSchema,
+  BoardGoalCreateRequestSchema,
+  BoardGoalUpdateRequestSchema,
+  BoardGoalDeleteRequestSchema,
+  BoardDecisionResolveRequestSchema,
+  BoardSnoozeSetRequestSchema,
+  BoardDeskSettingsSetRequestSchema,
   WorkspaceRecoveryInspectRequestSchema,
   WorkspaceRecoveryRestoreRequestSchema,
   SetVoiceModeMessageSchema,
@@ -3809,6 +4097,8 @@ export const ServerInfoStatusPayloadSchema = z
         directorySync: z.boolean().optional(),
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         workspaceLabels: z.boolean().optional(),
+        // COMPAT(boardTasks): added in v0.14.0, remove gate after 2027-05-01.
+        boardTasks: z.boolean().optional(),
         // COMPAT(workspaceSetupRun): added in v0.8.0, remove gate after 2027-09-02.
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
@@ -4603,6 +4893,106 @@ export const WorkspaceLabelDeleteInspectResponseSchema = z.object({
     requestId: z.string(),
     affectedWorkspaceCount: z.number().int().nonnegative(),
   }),
+});
+
+export const BoardTaskListResponseSchema = z.object({
+  type: z.literal("board.task.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    subscriptionId: z.string().optional(),
+    tasks: z.array(BoardTaskSchema),
+    goals: z.array(BoardGoalSchema),
+    /** Unresolved decisions, plus those resolved in the last day. */
+    decisions: z.array(BoardDecisionSchema),
+    snoozes: z.array(BoardSnoozeSchema),
+    settings: BoardDeskSettingsSchema,
+  }),
+});
+/** Live change for `board.task.list.request` subscribers. Carries the whole task. */
+export const BoardTaskUpdateSchema = z.object({
+  type: z.literal("board.task.update"),
+  payload: z.discriminatedUnion("kind", [
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("upsert"),
+      task: BoardTaskSchema,
+    }),
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("remove"),
+      taskId: z.string(),
+    }),
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("goal"),
+      goal: BoardGoalSchema,
+    }),
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("goal_remove"),
+      goalId: z.string(),
+    }),
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("decision"),
+      decision: BoardDecisionSchema,
+    }),
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("snoozes"),
+      snoozes: z.array(BoardSnoozeSchema),
+    }),
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("settings"),
+      settings: BoardDeskSettingsSchema,
+    }),
+  ]),
+});
+export const BoardTaskCreateResponseSchema = z.object({
+  type: z.literal("board.task.create.response"),
+  payload: z.object({ requestId: z.string(), task: BoardTaskSchema }),
+});
+export const BoardTaskUpdateResponseSchema = z.object({
+  type: z.literal("board.task.update.response"),
+  payload: z.object({ requestId: z.string(), task: BoardTaskSchema }),
+});
+export const BoardTaskDeleteResponseSchema = z.object({
+  type: z.literal("board.task.delete.response"),
+  payload: z.object({ requestId: z.string(), taskId: z.string() }),
+});
+export const BoardTaskStartResponseSchema = z.object({
+  type: z.literal("board.task.start.response"),
+  payload: z.object({
+    requestId: z.string(),
+    task: BoardTaskSchema,
+    workspaceId: z.string(),
+    agentId: z.string(),
+  }),
+});
+export const BoardGoalCreateResponseSchema = z.object({
+  type: z.literal("board.goal.create.response"),
+  payload: z.object({ requestId: z.string(), goal: BoardGoalSchema }),
+});
+export const BoardGoalUpdateResponseSchema = z.object({
+  type: z.literal("board.goal.update.response"),
+  payload: z.object({ requestId: z.string(), goal: BoardGoalSchema }),
+});
+export const BoardGoalDeleteResponseSchema = z.object({
+  type: z.literal("board.goal.delete.response"),
+  payload: z.object({ requestId: z.string(), goalId: z.string() }),
+});
+export const BoardDecisionResolveResponseSchema = z.object({
+  type: z.literal("board.decision.resolve.response"),
+  payload: z.object({ requestId: z.string(), decision: BoardDecisionSchema }),
+});
+export const BoardSnoozeSetResponseSchema = z.object({
+  type: z.literal("board.snooze.set.response"),
+  payload: z.object({ requestId: z.string(), snoozes: z.array(BoardSnoozeSchema) }),
+});
+export const BoardDeskSettingsSetResponseSchema = z.object({
+  type: z.literal("board.settings.set.response"),
+  payload: z.object({ requestId: z.string(), settings: BoardDeskSettingsSchema }),
 });
 
 export const ProjectUpdateMessageSchema = z.object({
@@ -7223,6 +7613,18 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceLabelUpdateResponseSchema,
   WorkspaceLabelDeleteResponseSchema,
   WorkspaceLabelDeleteInspectResponseSchema,
+  BoardTaskListResponseSchema,
+  BoardTaskUpdateSchema,
+  BoardTaskCreateResponseSchema,
+  BoardTaskUpdateResponseSchema,
+  BoardTaskDeleteResponseSchema,
+  BoardTaskStartResponseSchema,
+  BoardGoalCreateResponseSchema,
+  BoardGoalUpdateResponseSchema,
+  BoardGoalDeleteResponseSchema,
+  BoardDecisionResolveResponseSchema,
+  BoardSnoozeSetResponseSchema,
+  BoardDeskSettingsSetResponseSchema,
   ProjectUpdateMessageSchema,
   ProjectListResponseMessageSchema,
   ScriptStatusUpdateMessageSchema,

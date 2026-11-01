@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { addChatQuoteToAgent } from "@/attachments/chat-quote";
+import { getWorkspaceProjectId, openBoardTaskSheet } from "@/board/sheet";
 import type { ToastApi } from "@/components/toast-host";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -63,6 +64,13 @@ function buildSideConversationSetup(
   };
 }
 
+const BOARD_TASK_TITLE_MAX_CHARS = 80;
+
+function boardTaskTitleFromSelection(text: string): string {
+  const firstLine = text.trim().split("\n", 1)[0] ?? "";
+  return Array.from(firstLine.trim()).slice(0, BOARD_TASK_TITLE_MAX_CHARS).join("").trim();
+}
+
 function sourceAgentTabId(workspaceKey: string, agentId: string): string | undefined {
   const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
   if (!layout) return undefined;
@@ -76,6 +84,7 @@ export function useChatSelectionActions(
 ): ChatSelectionActions | undefined {
   const { t } = useTranslation();
   const supportsSideConversation = useHostFeature(input.serverId, "agentSideConversation");
+  const supportsBoardTasks = useHostFeature(input.serverId, "boardTasks");
 
   const addToChat = useStableEvent((selection: ChatTextSelection) => {
     if (input.readOnly) return;
@@ -133,8 +142,20 @@ export function useChatSelectionActions(
     }
   });
 
-  return useMemo(
-    () => (input.readOnly ? undefined : { addToChat, askInSideConversation }),
-    [input.readOnly, addToChat, askInSideConversation],
-  );
+  const addToBoard = useStableEvent((selection: ChatTextSelection) => {
+    openBoardTaskSheet({
+      mode: "create",
+      serverId: input.serverId,
+      projectId: getWorkspaceProjectId(input.serverId, input.agent.workspaceId),
+      title: boardTaskTitleFromSelection(selection.text),
+      notes: selection.text,
+    });
+  });
+
+  return useMemo(() => {
+    if (input.readOnly) return undefined;
+    return supportsBoardTasks
+      ? { addToChat, askInSideConversation, addToBoard }
+      : { addToChat, askInSideConversation };
+  }, [input.readOnly, addToChat, askInSideConversation, addToBoard, supportsBoardTasks]);
 }

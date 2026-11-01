@@ -22,6 +22,7 @@ const ScheduleCreateTargetSchema = z.discriminatedUnion("type", [
     type: z.literal("new-agent"),
     config: ScheduleCreateNewAgentConfigSchema,
   }),
+  ScheduleTargetSchema.options[2],
 ]);
 
 export const ScheduleCreateRequestSchema = z.object({
@@ -39,11 +40,13 @@ export const ScheduleCreateRequestSchema = z.object({
 export const ScheduleListRequestSchema = z.object({
   type: z.literal("schedule/list"),
   requestId: z.string(),
+  includeBoardTasks: z.boolean().optional(),
 });
 
 export const ScheduleInspectRequestSchema = z.object({
   type: z.literal("schedule/inspect"),
   requestId: z.string(),
+  includeBoardTasks: z.boolean().optional(),
   scheduleId: z.string(),
 });
 
@@ -56,12 +59,14 @@ export const ScheduleLogsRequestSchema = z.object({
 export const SchedulePauseRequestSchema = z.object({
   type: z.literal("schedule/pause"),
   requestId: z.string(),
+  includeBoardTasks: z.boolean().optional(),
   scheduleId: z.string(),
 });
 
 export const ScheduleResumeRequestSchema = z.object({
   type: z.literal("schedule/resume"),
   requestId: z.string(),
+  includeBoardTasks: z.boolean().optional(),
   scheduleId: z.string(),
 });
 
@@ -74,6 +79,7 @@ export const ScheduleDeleteRequestSchema = z.object({
 export const ScheduleRunOnceRequestSchema = z.object({
   type: z.literal("schedule/run-once"),
   requestId: z.string(),
+  includeBoardTasks: z.boolean().optional(),
   scheduleId: z.string(),
 });
 
@@ -90,6 +96,7 @@ const ScheduleUpdateNewAgentConfigSchema = z.object({
 export const ScheduleUpdateRequestSchema = z.object({
   type: z.literal("schedule/update"),
   requestId: z.string(),
+  includeBoardTasks: z.boolean().optional(),
   scheduleId: z.string(),
   name: z.string().nullable().optional(),
   prompt: z.string().min(1).optional(),

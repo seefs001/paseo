@@ -14,6 +14,7 @@ import { type BoundCreateAgentCommand, formatProviderModel } from "../agent/crea
 import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../worktree-session.js";
 import { ScheduleStore } from "./store.js";
+import { BoardTaskError, type BoardTaskService } from "../board/tasks.js";
 import { computeNextRunAt, validateScheduleCadence } from "./cron.js";
 import type {
   CreateScheduleInput,
@@ -25,6 +26,7 @@ import type {
   UpdateScheduleNewAgentConfig,
 } from "@getpaseo/protocol/schedule/types";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+import { ScheduleTargetSchema } from "@getpaseo/protocol/schedule/types";
 
 const SCHEDULE_TICK_INTERVAL_MS = 1000;
 
@@ -254,6 +256,7 @@ export interface ScheduleServiceOptions {
   logger: Logger;
   agentManager: ScheduleAgentManager;
   agentStorage: AgentStorage;
+  boardTaskService?: Pick<BoardTaskService, "create">;
   createAgent: BoundCreateAgentCommand;
   createDirectoryWorkspace: (
     input: ScheduleWorkspaceCreateInput,
@@ -272,6 +275,7 @@ export class ScheduleService {
   private readonly agentManager: ScheduleAgentManager;
   private readonly agentStorage: AgentStorage;
   private readonly createAgent: BoundCreateAgentCommand;
+  private readonly boardTaskService: Pick<BoardTaskService, "create"> | undefined;
   private readonly createDirectoryWorkspace: (
     input: ScheduleWorkspaceCreateInput,
   ) => Promise<PersistedWorkspaceRecord>;
@@ -292,6 +296,7 @@ export class ScheduleService {
     this.store = new ScheduleStore(join(options.paseoHome, "schedules"), this.logger);
     this.agentManager = options.agentManager;
     this.agentStorage = options.agentStorage;
+    this.boardTaskService = options.boardTaskService;
     this.createAgent = options.createAgent;
     this.createDirectoryWorkspace = options.createDirectoryWorkspace;
     this.createPaseoWorktreeWorkspace = options.createPaseoWorktreeWorkspace;
@@ -461,7 +466,14 @@ export class ScheduleService {
       let updated: StoredSchedule = schedule;
 
       if (input.prompt !== undefined) {
-        updated = { ...updated, prompt: normalizePrompt(input.prompt) };
+        const prompt = normalizePrompt(input.prompt);
+        updated = { ...updated, prompt };
+        if (updated.target.type === "board-task") {
+          updated = {
+            ...updated,
+            target: ScheduleTargetSchema.options[2].parse({ ...updated.target, title: prompt }),
+          };
+        }
       }
 
       if (input.name !== undefined) {
@@ -750,6 +762,7 @@ export class ScheduleService {
           runId,
           status: "succeeded",
           agentId: result.agentId,
+          taskId: result.taskId,
           output: result.output,
           error: null,
           targetGone: false,
@@ -841,6 +854,7 @@ export class ScheduleService {
     runId: string;
     status: "succeeded" | "failed";
     agentId: string | null;
+    taskId?: string;
     output: string | null;
     error: string | null;
     targetGone: boolean;
@@ -855,6 +869,7 @@ export class ScheduleService {
               status: params.status,
               endedAt: now.toISOString(),
               agentId: params.agentId ?? run.agentId,
+              ...(params.taskId === undefined ? {} : { taskId: params.taskId }),
               output: params.output,
               error: params.error,
             }
@@ -924,10 +939,30 @@ export class ScheduleService {
     requireSchedule(updatedSchedule, params.scheduleId);
   }
 
+  private async executeBoardTask(
+    target: Extract<ScheduleTarget, { type: "board-task" }>,
+  ): Promise<ScheduleExecutionResult> {
+    if (!this.boardTaskService) throw new Error("Board task schedules are unavailable");
+    try {
+      const task = await this.boardTaskService.create(target);
+      return {
+        agentId: null,
+        taskId: task.id,
+        output: `Created Board task ${task.id}: ${task.title}`,
+      };
+    } catch (error) {
+      if (error instanceof BoardTaskError && error.code === "project_not_found") {
+        throw new ScheduleTargetGoneError(error.message);
+      }
+      throw error;
+    }
+  }
+
   private async executeSchedule(
     schedule: StoredSchedule,
     runId: string,
   ): Promise<ScheduleExecutionResult> {
+    if (schedule.target.type === "board-task") return this.executeBoardTask(schedule.target);
     if (schedule.target.type === "agent") {
       const wrappedPrompt = formatSystemNotificationPrompt(buildScheduleFireBody(schedule, runId));
       const record = await this.agentStorage.get(schedule.target.agentId);
@@ -969,10 +1004,7 @@ export class ScheduleService {
       };
     }
 
-    const config = schedule.target.type === "new-agent" ? schedule.target.config : null;
-    if (!config) {
-      throw new Error(`Schedule ${schedule.id} target changed during execution`);
-    }
+    const config = schedule.target.config;
     await this.assertNewAgentCwdDirectory(config.cwd);
     let workspace: PersistedWorkspaceRecord | null = null;
     let agentId: string | null = null;

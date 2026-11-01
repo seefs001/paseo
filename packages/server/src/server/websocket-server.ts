@@ -17,8 +17,17 @@ import { HOST_ROUTE_OPCODE } from "@getpaseo/protocol/binary-frames/index";
 import { DaemonLinkEndpoint, VirtualHostSocket } from "./connected-hosts/index.js";
 import { ConnectedHosts } from "./connected-hosts/index.js";
 import { stat } from "node:fs/promises";
-import type { CreationSnapshot } from "@getpaseo/protocol/messages";
+import type { BoardDecision, CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
+import { WorkspaceCreation, type WorkspaceCreationEffects } from "./creation/workspace-creation.js";
+import { createDaemonWorkspaceEffects } from "./creation/daemon-workspace-effects.js";
+import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
+import { createWorkspaceScriptsService } from "./session/workspace-scripts/workspace-scripts-service.js";
+import { createPaseoWorktree } from "./paseo-worktree-service.js";
+import { createPaseoWorktreeWorkflow } from "./worktree-session.js";
+import { spawnWorkspaceScript } from "./worktree-bootstrap.js";
+import { assertWorkspaceAutomationAllowedForWorkspace } from "./workspace-automation-gate.js";
+import { startBoardTask, type BoardTaskStartInput } from "./board/start.js";
 import { MessageReceipts } from "./message-receipts/index.js";
 import { WebSocket, WebSocketServer } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
@@ -123,6 +132,8 @@ import type { DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import { DirectorySyncService } from "./directory-sync/index.js";
 import { OWNER_PERMISSIONS, type DaemonPermission } from "./authorization/index.js";
 import type { WorkspaceLabelService } from "./workspace-labels/index.js";
+import type { BoardServices } from "./board/services.js";
+import { attentionCheckpointKind, type BoardCheckpointKind } from "./board/desk.js";
 import {
   APPLICATION_SOCKET_LEASE_CHECK_INTERVAL_MS,
   ApplicationSocketLease,
@@ -567,9 +578,12 @@ export class VoiceAssistantWebSocketServer {
   private readonly messageReceipts: MessageReceipts;
   readonly agentMessages: AgentMessageDelivery;
   private readonly creationService: CreationService;
+  private readonly workspaceCreation: WorkspaceCreation;
+  private readonly daemonWorkspaceEffects: WorkspaceCreationEffects;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly workspaceLabelService: WorkspaceLabelService | null;
+  private readonly board: BoardServices | undefined;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
   private readonly github: ForgeService;
@@ -695,6 +709,7 @@ export class VoiceAssistantWebSocketServer {
     pluginRuntime?: SessionOptions["pluginRuntime"],
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
+    board?: BoardServices,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -750,6 +765,7 @@ export class VoiceAssistantWebSocketServer {
     this.projectRegistry = projectRegistry ?? createNoopProjectRegistry();
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
     this.workspaceLabelService = workspaceLabelService ?? null;
+    this.board = board;
     const requiredServices = requireWebSocketServices({
       scheduleService,
       checkoutDiffManager,
@@ -783,6 +799,31 @@ export class VoiceAssistantWebSocketServer {
       throw new Error("providerSnapshotManager is required");
     }
     this.providerSnapshotManager = providerSnapshotManager;
+    const isDirectory = async (path: string) =>
+      (await stat(path).catch(() => null))?.isDirectory() ?? false;
+    const workspaceProvisioning = createWorkspaceProvisioningService({
+      lifecycle: this.pluginRuntime,
+      serverId,
+      workspaceRegistry: this.workspaceRegistry,
+      projectRegistry: this.projectRegistry,
+      workspaceGitService: this.workspaceGitService,
+      isDirectory,
+      logger: this.logger,
+    });
+    this.workspaceCreation = new WorkspaceCreation({
+      creations: this.creationService,
+      projectRegistry: this.projectRegistry,
+      workspaceRegistry: this.workspaceRegistry,
+      agentManager,
+      agentStorage,
+      workspaceProvisioning,
+      workspaceGitService: this.workspaceGitService,
+      workspaceAutoName,
+      pluginRuntime: this.pluginRuntime,
+      isDirectory,
+      logger: this.logger,
+    });
+    this.daemonWorkspaceEffects = this.createDaemonWorkspaceEffects(workspaceProvisioning);
     this.serverCapabilities = buildServerCapabilities({
       readiness: this.speech?.getReadiness() ?? null,
     });
@@ -1618,6 +1659,115 @@ export class VoiceAssistantWebSocketServer {
     return connection;
   }
 
+  /** Starts a Board task on the daemon, for clients, agents and Autopilot alike. */
+  startBoardTask(input: BoardTaskStartInput) {
+    if (!this.board) throw new Error("Board is unavailable on this host");
+    return startBoardTask(
+      {
+        service: this.board.tasks,
+        projectRegistry: this.projectRegistry,
+        workspaceRegistry: this.workspaceRegistry,
+        daemonConfigStore: this.daemonConfigStore,
+        serverId: this.serverId,
+        createWorkspace: (request) =>
+          this.workspaceCreation.create(request, this.daemonWorkspaceEffects),
+        readCreation: (key) => this.workspaceCreation.read(key),
+      },
+      input,
+    );
+  }
+
+  private createDaemonWorkspaceEffects(
+    workspaceProvisioning: ReturnType<typeof createWorkspaceProvisioningService>,
+  ): WorkspaceCreationEffects {
+    const publishWorkspaces = async (workspaceIds: string[]) => {
+      await Promise.all(
+        this.listSessions().map((session) =>
+          session.emitWorkspaceUpdatesForExternalWorkspaceIds(workspaceIds),
+        ),
+      );
+    };
+    const workspaceScripts = createWorkspaceScriptsService({
+      serviceProxy: this.serviceProxy,
+      scriptRuntimeStore: this.scriptRuntimeStore,
+      terminalManager: this.terminalManager,
+      workspaceRegistry: this.workspaceRegistry,
+      projectRegistry: this.projectRegistry,
+      workspaceRuntimeStore: this.workspaceRuntimeStore,
+      getDaemonTcpPort: this.getDaemonTcpPort,
+      getDaemonTcpHost: this.getDaemonTcpHost,
+      serviceProxyPublicBaseUrl: this.serviceProxyPublicBaseUrl,
+      resolveScriptHealth: this.resolveScriptHealth,
+      logger: this.logger,
+      emit: (message) => this.broadcast(wrapSessionMessage(message)),
+      publishStatusUpdate: (message) => this.publishScriptStatusUpdate(message),
+      spawnWorkspaceScript,
+      assertAutomationAllowed: (workspaceId) =>
+        assertWorkspaceAutomationAllowedForWorkspace(this.workspaceRegistry, workspaceId),
+      getGlobalServicePorts: () => this.daemonConfigStore.readServicePorts(),
+    });
+    return createDaemonWorkspaceEffects({
+      descriptorSources: {
+        projectRegistry: this.projectRegistry,
+        workspaceRuntimeStore: this.workspaceRuntimeStore,
+        workspaceSetupObservation: this.workspaceSetupObservation,
+        buildScripts: (workspace, project) => workspaceScripts.buildSnapshot(workspace, project),
+      },
+      createWorktree: (input, options) =>
+        createPaseoWorktreeWorkflow(
+          {
+            paseoHome: this.paseoHome,
+            worktreesRoot: this.worktreesRoot,
+            createPaseoWorktree: (workflowInput, workflowOptions) =>
+              createPaseoWorktree(workflowInput, {
+                lifecycle: this.pluginRuntime,
+                github: this.github,
+                ...(workflowOptions?.resolveDefaultBranch
+                  ? { resolveDefaultBranch: workflowOptions.resolveDefaultBranch }
+                  : {}),
+                workspaceGitService: this.workspaceGitService,
+                workspaceProvisioning,
+              }),
+            warmWorkspaceGitData: async (workspace) => {
+              await Promise.all(
+                this.listSessions().map((session) =>
+                  session.warmWorkspaceGitDataForWorkspace(workspace),
+                ),
+              );
+            },
+            autoNameWorkspaceBranchForFirstAgent: (autoNameInput) =>
+              this.workspaceAutoName.scheduleForWorktree(autoNameInput),
+            startWorkspaceSetup: (workspaceId, operation) =>
+              this.workspaceSetupRuntime.start(workspaceId, operation),
+            assertWorkspaceAutomationAllowed: (workspaceId) =>
+              assertWorkspaceAutomationAllowedForWorkspace(this.workspaceRegistry, workspaceId),
+            emitWorkspaceUpdateForWorkspaceId: (workspaceId) => publishWorkspaces([workspaceId]),
+            cacheWorkspaceSetupSnapshot: (workspaceId, snapshot) =>
+              this.workspaceSetupObservation.cache(workspaceId, snapshot),
+            emit: (message) => this.broadcast(wrapSessionMessage(message)),
+            sessionLogger: this.logger,
+            terminalManager: this.terminalManager,
+            serviceProxy: this.serviceProxy,
+            scriptRuntimeStore: this.scriptRuntimeStore,
+            getDaemonTcpPort: this.getDaemonTcpPort,
+            getDaemonTcpHost: this.getDaemonTcpHost,
+            serviceProxyPublicBaseUrl: this.serviceProxyPublicBaseUrl,
+            onScriptsChanged: null,
+          },
+          input,
+          options,
+        ),
+      publishWorkspaces,
+      workspaceRegistry: this.workspaceRegistry,
+      agentManager: this.agentManager,
+      agentStorage: this.agentStorage,
+      providerSnapshotManager: this.providerSnapshotManager,
+      paseoHome: this.paseoHome,
+      worktreesRoot: this.worktreesRoot,
+      logger: this.logger,
+    });
+  }
+
   private createSocketSession(options: SocketSessionOptions): Session {
     return new Session({
       connectedHosts: this.connectedHosts,
@@ -1661,9 +1811,12 @@ export class VoiceAssistantWebSocketServer {
       messageReceipts: this.messageReceipts,
       agentMessages: this.agentMessages,
       creationService: this.creationService,
+      workspaceCreation: this.workspaceCreation,
+      startBoardTask: (input) => this.startBoardTask(input),
       projectRegistry: this.projectRegistry,
       workspaceRegistry: this.workspaceRegistry,
       workspaceLabelService: this.workspaceLabelService ?? undefined,
+      board: this.board,
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
       checkoutDiffManager: this.checkoutDiffManager,
@@ -2022,6 +2175,8 @@ export class VoiceAssistantWebSocketServer {
         directorySync: true,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         ...(this.workspaceLabelService ? { workspaceLabels: true } : {}),
+        // COMPAT(boardTasks): added in v0.14.0, remove gate after 2027-05-01.
+        ...(this.board ? { boardTasks: true } : {}),
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
         workspaceSetupRun: true,
         workspaceSetupObservation: true,
@@ -2901,19 +3056,22 @@ export class VoiceAssistantWebSocketServer {
     const allStates = notificationEntries.map((e) => e.state);
     const nowMs = Date.now();
     const assistantMessage = await this.agentManager.getLastAssistantMessage(params.agentId);
+    const permissionRequest = findLatestPermissionRequest(agent.pendingPermissions);
     const notification = buildAgentAttentionNotificationPayload({
       reason: params.reason,
       serverId: this.serverId,
       workspaceId: agent.workspaceId,
       agentId: params.agentId,
       assistantMessage,
-      permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
+      permissionRequest,
     });
+    const checkpointKind = attentionCheckpointKind(params.reason, permissionRequest?.kind ?? null);
 
     const plan = computeNotificationPlan({
       allStates,
       focusTarget: { kind: "agent", id: params.agentId },
-      pushEligible: isPushEligibleAttentionReason(params.reason),
+      pushEligible:
+        isPushEligibleAttentionReason(params.reason) && this.notifiesCheckpoint(checkpointKind),
       nowMs,
     });
 
@@ -2964,6 +3122,38 @@ export class VoiceAssistantWebSocketServer {
         this.sessions.get(ws)!.session.publishToSource(ws, message.message);
       else this.sendToClient(ws, message);
     }
+  }
+
+  /** Desk settings choose which checkpoint kinds reach phones; without a Board every kind does. */
+  private notifiesCheckpoint(kind: BoardCheckpointKind): boolean {
+    return this.board?.desk.getSettings().notifyKinds.includes(kind) ?? true;
+  }
+
+  /** Pushes a new Desk decision when no client is present and the host notifies decisions. */
+  notifyBoardDecision(decision: BoardDecision): void {
+    if (!this.notifiesCheckpoint("decision")) return;
+    const plan = computeNotificationPlan({
+      allStates: [...this.sessions].map(([ws, connection]) =>
+        this.getClientActivityState(connection.session, ws),
+      ),
+      focusTarget: null,
+      pushEligible: true,
+      nowMs: Date.now(),
+    });
+    if (!plan.shouldPush) return;
+    const body = decision.brief
+      .replace(/[*_`#>]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    void this.pushNotificationSender
+      .send({
+        title: decision.title,
+        body: body.length > 200 ? `${body.slice(0, 200)}...` : body,
+        data: { serverId: this.serverId, decisionId: decision.id },
+      })
+      .catch((err) => {
+        this.logger.warn({ err, decisionId: decision.id }, "Failed to send push notification");
+      });
   }
 
   private async broadcastTerminalAttention(params: {

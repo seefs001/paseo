@@ -8,7 +8,7 @@ category: Schedules
 
 # Schedules from the CLI
 
-`paseo schedule` creates and manages new-agent [schedules](/docs/schedules) from your terminal, useful for headless boxes and scripts. Every run starts a fresh agent.
+`paseo schedule` creates and manages [schedules](/docs/schedules) from your terminal. By default, each run starts a fresh agent. Use `--board-task` to file work in the Board without starting an agent.
 
 Run workspaces are archived when each run ends by default. The CLI has no **Archive on finish** flag; [change the option in the app](/docs/schedules#keep-run-workspaces) to keep subsequent run workspaces active.
 
@@ -64,6 +64,24 @@ paseo schedule create \
   "Review overnight CI failures and summarize anything urgent."
 ```
 
+## File Board tasks
+
+Create one fog task on the Desk on each run:
+
+```bash
+paseo schedule create \
+  --board-task \
+  --cron "0 9 * * 1-5" \
+  --name morning-review \
+  --project <project-id> \
+  --notes "Review overnight CI failures and note anything urgent" \
+  "Morning CI review"
+```
+
+The positional argument is the task title. `--notes` and `--project` are optional. Do not combine `--board-task` with agent options or `--cwd`. This target creates no workspace or agent; start the task later with [`paseo task start`](/docs/cli#board-tasks).
+
+Use the same list, inspect, pause, resume, update, run-once, logs, and delete commands as other schedules. `update --prompt` changes the title of future tasks. Run logs include the created `taskId`. Board task schedules are managed through the CLI; the app schedule form remains agent-only. Upgrade the host if the CLI reports that Board tasks are unsupported.
+
 ## Heartbeats
 
 Inside a running Paseo agent, create a heartbeat for that same conversation:
@@ -84,7 +102,7 @@ paseo heartbeat delete <id>
 
 Updating a heartbeat changes only its cron cadence and optional time zone. Its target and prompt stay fixed. Heartbeat commands require `PASEO_AGENT_ID`, which Paseo sets inside agent sessions.
 
-Heartbeats require a raw `--cron` expression. The `--every` presets below are available only for new-agent schedules.
+Heartbeats require a raw `--cron` expression. The `--every` presets below are available for new-agent and Board task schedules.
 
 ## Manage
 
@@ -107,4 +125,4 @@ Schedules default to UTC. Pass `--timezone <IANA>` to interpret cron fields in a
 
 Schedules wait for the next matching cron time by default. Pass `--run-now` to start one immediate run on creation.
 
-Start the command with `paseo --host <target> schedule create ...` when targeting a remote daemon. Pass `--cwd`; your local working directory may not exist on the remote machine.
+Start the command with `paseo --host <target> schedule create ...` when targeting a remote daemon. For new-agent schedules, pass `--cwd`; your local working directory may not exist on the remote machine. Board task schedules use the remote host's project ID instead.

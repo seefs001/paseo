@@ -63,6 +63,9 @@ function isAgentTargetGone(input: ResolveScheduleInput): boolean {
 
 function resolveTarget(input: ResolveScheduleInput): ScheduleTargetResolution {
   const { schedule, serverId, agentsByKey, projectNameByCwd } = input;
+  if (schedule.target.type === "board-task") {
+    return { label: schedule.target.title, provider: null };
+  }
   if (schedule.target.type === "agent") {
     const agent = agentsByKey.get(agentKey(serverId, schedule.target.agentId));
     if (agent) {

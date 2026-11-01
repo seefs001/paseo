@@ -12,6 +12,7 @@ import {
   History,
   Plus,
   Search,
+  SquareKanban,
   type LucideIcon,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -42,6 +43,7 @@ const moveDownIcon = <ThemedArrowDown size={ICON_SIZE.sm} uniProps={mutedColorMa
 
 const BUILTIN_ICONS: Record<BuiltinSidebarItemId, LucideIcon> = {
   "new-workspace": Plus,
+  board: SquareKanban,
   history: History,
   search: Search,
   schedules: CalendarClock,

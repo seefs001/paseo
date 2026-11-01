@@ -138,6 +138,123 @@ function browser(
 }
 
 export const PASEO_TOOL_CATALOG = {
+  list_board_tasks: {
+    label: "List Desk tasks",
+    completedLabel: "Listed Desk tasks",
+    context: field("goalId", "state", "projectId"),
+    detail: {
+      inputOrder: ["state", "stage", "goalId", "projectId", "frontier"],
+      outputFields: ["tasks"],
+    },
+  },
+  plan_board_tasks: {
+    label: "Plan Desk tasks",
+    completedLabel: "Planned Desk tasks",
+    context: field("goalId", "projectId"),
+    detail: { inputOrder: ["goalId", "projectId", "tasks"], outputFields: ["tasks"] },
+  },
+  create_board_task: {
+    label: "Create Desk task",
+    completedLabel: "Created Desk task",
+    context: field("title"),
+    detail: {
+      promptField: "notes",
+      inputOrder: [
+        "title",
+        "goalId",
+        "projectId",
+        "stage",
+        "parentId",
+        "blockedBy",
+        "acceptanceCriteria",
+        "readyFor",
+      ],
+      outputFields: ["task"],
+    },
+  },
+  update_board_task: {
+    label: "Update Desk task",
+    completedLabel: "Updated Desk task",
+    context: field("title", "taskId"),
+    detail: {
+      inputOrder: [
+        "taskId",
+        "title",
+        "notes",
+        "summary",
+        "completed",
+        "acceptanceCriteria",
+        "criteriaMet",
+        "goalId",
+        "parentId",
+        "blockedBy",
+        "readyFor",
+        "stage",
+      ],
+      outputFields: ["task"],
+    },
+  },
+  claim_board_task: {
+    label: "Claim Desk task",
+    completedLabel: "Claimed Desk task",
+    context: field("taskId"),
+    detail: { inputOrder: ["taskId"], outputFields: ["task"] },
+  },
+  release_board_task: {
+    label: "Release Desk task",
+    completedLabel: "Released Desk task",
+    context: field("taskId"),
+    detail: { inputOrder: ["taskId"], outputFields: ["task"] },
+  },
+  start_board_task: {
+    label: "Start Desk task",
+    completedLabel: "Started Desk task",
+    context: field("taskId"),
+    detail: {
+      inputOrder: [
+        "taskId",
+        "isolation",
+        "profile",
+        "provider",
+        "model",
+        "modeId",
+        "thinkingOptionId",
+        "featureValues",
+        "idempotencyKey",
+      ],
+      outputFields: ["task", "workspaceId", "agentId"],
+    },
+  },
+  list_goals: {
+    label: "List goals",
+    completedLabel: "Listed goals",
+    detail: { inputOrder: ["all"], outputFields: ["goals"] },
+  },
+  create_goal: {
+    label: "Create goal",
+    completedLabel: "Created goal",
+    context: field("title"),
+    detail: { promptField: "notes", inputOrder: ["title", "owner"], outputFields: ["goal"] },
+  },
+  update_goal: {
+    label: "Update goal",
+    completedLabel: "Updated goal",
+    context: field("title", "goalId"),
+    detail: {
+      inputOrder: ["goalId", "title", "notes", "owner", "landed"],
+      outputFields: ["goal"],
+    },
+  },
+  request_decision: {
+    label: "Request decision",
+    completedLabel: "Requested decision",
+    context: field("title"),
+    detail: {
+      promptField: "brief",
+      inputOrder: ["title", "options", "goalId", "taskId"],
+      outputFields: ["decisionId"],
+    },
+  },
   // Agents
   create_agent: {
     label: "Create agent",

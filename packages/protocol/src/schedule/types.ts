@@ -39,6 +39,12 @@ export const ScheduleTargetSchema = z.discriminatedUnion("type", [
       mcpServers: z.record(z.string(), z.unknown()).optional(),
     }),
   }),
+  z.object({
+    type: z.literal("board-task"),
+    title: z.string().trim().min(1).max(200),
+    notes: z.string().max(20_000).optional(),
+    projectId: z.string().min(1).optional(),
+  }),
 ]);
 export type ScheduleTarget = z.infer<typeof ScheduleTargetSchema>;
 
@@ -50,6 +56,7 @@ export const ScheduleRunSchema = z.object({
   status: z.enum(["running", "succeeded", "failed"]),
   agentId: z.guid().nullable(),
   workspaceId: z.string().nullable().optional(),
+  taskId: z.string().optional(),
   output: z.string().nullable(),
   error: z.string().nullable(),
 });
@@ -110,5 +117,6 @@ export interface UpdateScheduleInput {
 
 export interface ScheduleExecutionResult {
   agentId: string | null;
+  taskId?: string;
   output: string | null;
 }

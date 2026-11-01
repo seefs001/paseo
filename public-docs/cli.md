@@ -340,6 +340,69 @@ paseo wait <id> --timeout 60   # 60 second timeout
 
 Useful in scripts or when one agent needs to wait for another.
 
+## Desk tasks and goals {#board-tasks}
+
+Store work on the Desk without starting an agent:
+
+```bash
+paseo task ls
+paseo task ls --all --json
+paseo task ls --stage ready --goal G-1
+paseo task add "Fix CI" --notes "Investigate the failing Linux job" --project <project-id>
+paseo task add "Ship the fix" --stage ready --goal G-1 --parent T-3 --blocked-by T-4 --criterion "CI is green" --criterion "Changelog updated"
+paseo task add "Pick the release date" --ready-for human
+paseo task edit T-5 --title "Fix Linux CI" --notes "Include the build logs"
+paseo task edit T-5 --stage ready
+paseo task edit T-5 --goal ""
+paseo task start T-5 --profile <name-or-id> --isolation worktree
+paseo task start T-5 --provider codex/gpt-5.5 --mode full-access --thinking high
+paseo task done T-5 --summary "Fixed the missing dependency"
+paseo task reopen T-5
+paseo task rm T-5
+```
+
+Every task has a host-local number. Each command that takes a task ID, `--parent` or `--blocked-by` also accepts `T-<number>`, and `--goal` accepts a goal ID or `G-<number>`.
+
+New tasks land in Fog: ideas that are not specified yet, which agents and Autopilot never take. `--stage ready` on `add`, or `edit --stage ready` later, specifies the task so agents and Autopilot can take it. `edit --stage fog` moves it back. `--goal` assigns the goal the task serves; on `edit`, `--goal ""` makes it Loose work.
+
+`ls` omits Done tasks unless `--all` is set; `--goal` lists only that goal's tasks and `--stage fog|ready` lists only the tasks not started yet in that stage. Columns show the `T-<number>` reference, the task ID, derived state (Fog, Ready, Running, Needs you, Review, Done), a `*` for frontier tasks, who the task is ready for, title, goal, project, workspace, unfinished blockers, and the claiming agent. A frontier task is Ready, unclaimed, ready for an agent, and not waiting on unfinished blockers. JSON adds `ref`, `goal` and `stage` and also preserves the notes, acceptance criteria, attachments, rank, summary, and timestamps. `paseo task` lists Desk tasks only; agent sessions the Desk shows next to them stay under `paseo ls`.
+
+`--parent` makes the task a subtask; on `edit`, `--parent ""` detaches it. `--blocked-by` takes one or more task IDs or `T-<number>` references that must be Done first and replaces the list on `edit`. Repeat `--criterion` for each acceptance criterion; on `edit` the new list replaces the old one unchecked. `--ready-for human` keeps agents and Autopilot off the task; the default is `agent`. Parents and blockers must be on the same host, and cycles are rejected.
+
+`start` requires exactly one Agent profile or provider, a task linked to a project, and no unfinished blockers. `--mode` and `--thinking` apply only with `--provider`; a profile supplies its own settings. Isolation defaults to `local`. Starting creates a workspace and agent, sends the task's title, notes and attachments, and links the task. Archiving that workspace marks the task Done. `done` records completion without archiving the workspace; `reopen` clears completion without removing the workspace link. Choose the host with the standard `--host` / `--home` options.
+
+### Goals
+
+A goal is a long-running aim that tasks serve. An owner agent, when set, plans the goal, splits it into Ready tasks, dispatches subagents and brings its decisions to your Desk.
+
+```bash
+paseo goal ls
+paseo goal ls --all
+paseo goal add "Ship the importer" --notes "CSV first, then Excel" --owner <agent-id>
+paseo goal edit G-1 --title "Ship the CSV importer" --owner ""
+paseo goal land G-1
+paseo goal rm G-1
+```
+
+Each goal has a host-local number shown as `G-<number>`. `ls` lists goals that have not landed; `--all` adds landed ones. Columns show the reference, goal ID, title, owner agent, done and total tasks, Autopilot settings, whether the goal landed, and the last Autopilot error. `--owner ""` removes the owner agent. `land` marks the goal finished. `rm` deletes the goal and keeps its tasks as Loose work.
+
+### Autopilot
+
+Autopilot starts a goal's Ready tasks for you:
+
+```bash
+paseo goal autopilot G-1 --enable --profile <name-or-id> --isolation worktree --max-active 2 --daily-limit 10
+paseo goal autopilot G-1 --confirm-starts
+paseo goal autopilot G-1 --disable
+paseo goal autopilot G-1
+```
+
+While enabled, the daemon starts the goal's top frontier task whenever fewer than `--max-active` of its tasks are started and unfinished, and fewer than `--daily-limit` automatic starts happened today (daemon local date). It uses the chosen profile or `--provider` (with `--mode` and `--thinking`) and isolation. With `--confirm-starts`, it asks on your Desk with a decision before each start instead; `--no-confirm-starts` turns that off. Without flags, the command shows the current settings; with flags, omitted settings keep their values. New settings start disabled, with `worktree` isolation, 1 active task, 10 starts a day and no confirmation; the first setup needs `--profile` or `--provider`.
+
+When a start fails, the error shows in `LAST ERROR` and Autopilot pauses the goal until the failed task, the settings, or the date changes, so a broken profile does not retry in a loop. Agents cannot change Autopilot.
+
+For recurring Fog work, use [schedules that file Desk tasks](/docs/schedules-cli#file-board-tasks).
+
 ## Schedules
 
 Run an agent on a cron schedule. The CLI also accepts simple cadence presets and compiles them to cron. See [Schedules from the CLI](/docs/schedules-cli) for the full reference.

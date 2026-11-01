@@ -15,14 +15,14 @@ export async function runLsCommand(
 ): Promise<ListResult<ScheduleRow>> {
   const { client } = await connectScheduleClient(options.daemonTarget);
   try {
-    const payload = await client.scheduleList();
+    const payload = await client.scheduleList(undefined, { includeBoardTasks: true });
     if (payload.error) {
       throw new Error(payload.error);
     }
     return {
       type: "list",
       data: payload.schedules
-        .filter((schedule) => schedule.target.type === "new-agent")
+        .filter((schedule) => schedule.target.type !== "agent")
         .map(toScheduleRow),
       schema: scheduleSchema,
     };

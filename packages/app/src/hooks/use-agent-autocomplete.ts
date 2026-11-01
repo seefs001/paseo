@@ -14,6 +14,7 @@ import { orderAutocompleteOptions } from "@/components/ui/autocomplete-utils";
 import { useAutocomplete } from "./use-autocomplete";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useHostFeature } from "@/runtime/host-features";
 import {
   collectAllTabs,
   useWorkspaceLayoutStore,
@@ -35,7 +36,7 @@ import {
   type ComposerMentionKind,
   type SessionMentionCandidate,
 } from "@/utils/session-mention-autocomplete";
-import { CLIENT_SLASH_COMMANDS, type ClientSlashCommand } from "@/client-slash-commands";
+import { listClientSlashCommands, type ClientSlashCommand } from "@/client-slash-commands";
 import type { CustomCommand } from "@/custom-commands/model";
 import { expandSelectedCustomCommand, type ExpandedCustomCommand } from "@/custom-commands/expand";
 import type { PluginClientSlashCommand } from "@/plugins/client-slash-commands";
@@ -479,6 +480,7 @@ interface BuildAutocompleteOptionsInput {
   isVisible: boolean;
   mode: AutocompleteMode;
   commands: AgentSlashCommand[];
+  clientCommands: readonly ClientSlashCommand[];
   pluginCommands: readonly PluginClientSlashCommand[];
   customCommands: readonly CustomCommand[];
   isDraftContext: boolean;
@@ -501,7 +503,7 @@ export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsI
       command,
     }));
     const rootCommands: AvailableCommand[] = mergeSlashCommandSources({
-      builtIn: CLIENT_SLASH_COMMANDS,
+      builtIn: input.clientCommands,
       custom: input.customCommands,
       plugins: input.pluginCommands,
       provider: input.commands,
@@ -856,6 +858,11 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
+  const supportsBoardTasks = useHostFeature(serverId, "boardTasks");
+  const clientCommands = useMemo(
+    () => listClientSlashCommands({ boardTasks: supportsBoardTasks }),
+    [supportsBoardTasks],
+  );
 
   const mode = resolveAutocompleteMode({
     mentionKind: mention?.kind ?? null,
@@ -927,6 +934,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         activeFileMention,
         commandFilterQuery,
         commands,
+        clientCommands,
         pluginCommands: pluginClientSlashCommands,
         customCommands,
         activeSlashCommand,
@@ -940,6 +948,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [
       activeFileMention,
       activeSlashCommand,
+      clientCommands,
       commandFilterQuery,
       commands,
       pluginClientSlashCommands,

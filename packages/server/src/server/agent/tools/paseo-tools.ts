@@ -27,7 +27,23 @@ import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { AgentManager } from "../agent-manager.js";
-import { ActiveTurnBehaviorSchema, AgentProfileSchema } from "@getpaseo/protocol/messages";
+import {
+  ActiveTurnBehaviorSchema,
+  AgentProfileSchema,
+  BoardTaskCriterionSchema,
+  BoardTaskReadyForSchema,
+  BoardTaskSchema,
+  BoardTaskStageSchema,
+  BoardDecisionSchema,
+  BoardGoalSchema,
+  type BoardGoal,
+  type BoardTask,
+  type BoardTaskCriterion,
+} from "@getpaseo/protocol/messages";
+import type { BoardTaskService, BoardTaskUpdateInput } from "../../board/tasks.js";
+import type { BoardTaskStartInput, BoardTaskStartResult } from "../../board/start.js";
+import type { BoardGoalService } from "../../board/goals.js";
+import type { BoardDecisionService } from "../../board/decisions.js";
 import type { DaemonConfigStore } from "../../daemon-config-store.js";
 import {
   AgentFeatureSchema,
@@ -138,6 +154,10 @@ export interface PaseoToolHostDependencies {
   terminalManager?: TerminalManager | null;
   getDaemonTcpPort?: () => number | null;
   scheduleService?: ScheduleService | null;
+  boardTaskService?: BoardTaskService;
+  boardGoalService?: BoardGoalService;
+  boardDecisionService?: BoardDecisionService;
+  startBoardTask?: (input: BoardTaskStartInput) => Promise<BoardTaskStartResult>;
   providerSnapshotManager: ProviderSnapshotManager;
   daemonConfigStore?: Pick<DaemonConfigStore, "get">;
   github?: ForgeService;
@@ -186,6 +206,72 @@ export interface PaseoToolHostDependencies {
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
   logger: Logger;
+}
+
+interface ListBoardTasksInput {
+  state?: "ahead" | "started" | "landed";
+  stage?: BoardTask["stage"];
+  goalId?: string;
+  projectId?: string;
+  frontier?: boolean;
+}
+
+interface CreateBoardTaskToolInput {
+  title: string;
+  notes?: string;
+  projectId?: string;
+  goalId?: string;
+  acceptanceCriteria?: string[];
+  parentId?: string;
+  blockedBy?: string[];
+  readyFor?: BoardTask["readyFor"];
+  stage?: BoardTask["stage"];
+}
+
+interface PlanBoardTasksToolInput {
+  projectId?: string;
+  goalId?: string;
+  tasks: Array<
+    Omit<CreateBoardTaskToolInput, "projectId" | "goalId"> & { key: string; parentKey?: string }
+  >;
+}
+
+type UpdateBoardTaskToolInput = Omit<
+  BoardTaskUpdateInput,
+  "taskId" | "projectId" | "workspaceId" | "attachments" | "rank" | "claimedBy"
+> & { taskId?: string; criteriaMet?: number[] };
+
+interface CreateGoalToolInput {
+  title: string;
+  notes?: string;
+  owner?: string | null;
+}
+
+interface UpdateGoalToolInput {
+  goalId: string;
+  title?: string;
+  notes?: string;
+  owner?: string | null;
+  landed?: boolean;
+}
+
+interface RequestDecisionToolInput {
+  title: string;
+  brief: string;
+  options: Array<string | { id: string; label: string }>;
+  goalId?: string;
+  taskId?: string;
+}
+
+interface StartBoardTaskToolInput extends Omit<
+  Extract<BoardTaskStartInput["agent"], { kind: "config" }>,
+  "kind" | "provider"
+> {
+  taskId: string;
+  isolation: BoardTaskStartInput["isolation"];
+  profile?: string;
+  provider?: string;
+  idempotencyKey?: string;
 }
 
 interface ProviderSummary {
@@ -1418,6 +1504,536 @@ function createToolCatalog(
       content: [],
       structuredContent: ensureValidJson(await hostResolver.directory()),
     }),
+  );
+
+  function boardTasks(): BoardTaskService {
+    if (!options.boardTaskService)
+      throw new PaseoToolInputError("The Desk is unavailable on this host");
+    return options.boardTaskService;
+  }
+
+  function boardGoals(): BoardGoalService {
+    if (!options.boardGoalService)
+      throw new PaseoToolInputError("Desk goals are unavailable on this host");
+    return options.boardGoalService;
+  }
+
+  function boardDecisions(): BoardDecisionService {
+    if (!options.boardDecisionService)
+      throw new PaseoToolInputError("Desk decisions are unavailable on this host");
+    return options.boardDecisionService;
+  }
+
+  async function callerProjectId(): Promise<string | undefined> {
+    const caller = resolveCallerAgent();
+    if (!caller?.workspaceId) return undefined;
+    if (!options.workspaceRegistry) throw new Error("Workspace registry is not configured");
+    const workspace = await options.workspaceRegistry.get(caller.workspaceId);
+    if (!workspace) throw new PaseoToolInputError("Caller workspace not found");
+    return workspace.projectId;
+  }
+
+  const requireCallerAgentId = (tool: string): string => {
+    if (!callerAgentId) {
+      throw new PaseoToolInputError(`${tool} is only available to agent-scoped tool sessions`);
+    }
+    return callerAgentId;
+  };
+
+  const criteria = (texts: string[] | undefined): BoardTaskCriterion[] | undefined =>
+    texts?.map((text) => ({ text, met: false }));
+
+  /** Resolves a task id or its `T-<number>` reference to the task id. */
+  const taskIdFor = (ref: string): string => {
+    const task = boardTasks().find(ref);
+    if (!task) throw new PaseoToolInputError(`Task not found: ${ref}`);
+    return task.id;
+  };
+
+  /** Resolves a goal id or its `G-<number>` reference to the goal id. */
+  const goalIdFor = (ref: string): string => {
+    const goal = boardGoals().find(ref);
+    if (!goal) throw new PaseoToolInputError(`Goal not found: ${ref}`);
+    return goal.id;
+  };
+
+  /** Goals the calling agent owns that have not landed. */
+  const ownedGoals = (): BoardGoal[] =>
+    callerAgentId && options.boardGoalService
+      ? options.boardGoalService
+          .list()
+          .filter((goal) => goal.ownerAgentId === callerAgentId && goal.landedAt === null)
+      : [];
+
+  /** An explicit goal wins; otherwise the one goal the caller owns, if it owns exactly one. */
+  const goalIdOrOwned = (ref: string | undefined): string | undefined => {
+    if (ref !== undefined) return goalIdFor(ref);
+    const owned = ownedGoals();
+    return owned.length === 1 ? owned[0].id : undefined;
+  };
+
+  /** `me` is the calling agent, `null` clears the owner, anything else must be a known agent id. */
+  const ownerAgentIdFor = async (owner: string | null): Promise<string | null> => {
+    if (owner === null) return null;
+    if (owner === "me") return requireCallerAgentId("owner: me");
+    if (!agentManager.getAgent(owner) && !(await agentStorage.get(owner))) {
+      throw new PaseoToolInputError(`Agent not found: ${owner}`);
+    }
+    return owner;
+  };
+
+  const withRef = <T extends BoardTask>(task: T) => ({ ...task, ref: `T-${task.number}` });
+  const BoardTaskOutputSchema = BoardTaskSchema.extend({
+    ref: z.string().describe("Short task reference, T-<number>; accepted wherever a task id is."),
+  });
+  const withGoalRef = (goal: BoardGoal) => {
+    const tasks = boardTasks()
+      .list()
+      .filter((task) => task.goalId === goal.id);
+    return {
+      ...goal,
+      ref: `G-${goal.number}`,
+      tasks: {
+        total: tasks.length,
+        done: tasks.filter((task) => task.completedAt !== null).length,
+      },
+    };
+  };
+  const BoardGoalOutputSchema = BoardGoalSchema.extend({
+    ref: z.string().describe("Short goal reference, G-<number>; accepted wherever a goal id is."),
+    tasks: z.object({ total: z.number(), done: z.number() }),
+  });
+  const goalIdInput = z
+    .string()
+    .optional()
+    .describe("Goal id or G-<number>. Defaults to the goal you own, if you own exactly one.");
+
+  registerTool(
+    "list_board_tasks",
+    {
+      title: "List Desk tasks",
+      description:
+        "List Desk tasks. Without filters, agent-scoped calls list the goal you own (when you own goals), else your workspace's project. `state` picks `ahead` (not started), `started`, or `landed` (done). A task that has not started is in stage `fog` (an idea, not specified yet; never claimed or started automatically) or `ready` (specified work agents and Autopilot may take). `frontier: true` returns only tasks an agent may take now: ready, unclaimed, ready for an agent, and with every blocker done. Each task shows `ref` (T-<number>, usable in place of its id), `goalId`, `stage`, `readyFor`, `claimedBy`, `openBlockers` (unfinished tasks it waits on) and `children` counts for subtasks. Never work a task that is ready for a human.",
+      inputSchema: {
+        state: z.enum(["ahead", "started", "landed"]).optional(),
+        stage: BoardTaskStageSchema.optional(),
+        goalId: z.string().optional().describe("Goal id or G-<number>."),
+        projectId: z.string().optional(),
+        frontier: z.boolean().optional(),
+      },
+      outputSchema: {
+        tasks: z.array(
+          BoardTaskOutputSchema.extend({
+            onFrontier: z.boolean(),
+            openBlockers: z.array(z.string()),
+            children: z.object({ total: z.number(), done: z.number() }),
+          }),
+        ),
+      },
+    },
+    async ({ state, stage, goalId, projectId, frontier }: ListBoardTasksInput) => {
+      let goals: Set<string> | undefined;
+      let project = projectId;
+      if (goalId !== undefined) goals = new Set([goalIdFor(goalId)]);
+      else if (projectId === undefined) {
+        const owned = ownedGoals();
+        if (owned.length > 0) goals = new Set(owned.map((goal) => goal.id));
+        else project = await callerProjectId();
+      }
+      const service = boardTasks();
+      const all = service.list();
+      const tasks = [];
+      for (const task of all) {
+        if (goals !== undefined && (task.goalId === null || !goals.has(task.goalId))) continue;
+        if (project !== undefined && task.projectId !== project) continue;
+        const onFrontier = service.isOnFrontier(task);
+        if (frontier && !onFrontier) continue;
+        let taskState = task.workspaceId === null ? "ahead" : "started";
+        if (task.completedAt !== null) taskState = "landed";
+        if (state !== undefined && taskState !== state) continue;
+        if (stage !== undefined && (taskState !== "ahead" || task.stage !== stage)) continue;
+        const children = all.filter((child) => child.parentId === task.id);
+        tasks.push({
+          ...withRef(task),
+          onFrontier,
+          openBlockers: service.unfinishedBlockers(task),
+          children: {
+            total: children.length,
+            done: children.filter((child) => child.completedAt !== null).length,
+          },
+        });
+      }
+      tasks.sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
+      return { content: [], structuredContent: ensureValidJson({ tasks }) };
+    },
+  );
+
+  registerTool(
+    "plan_board_tasks",
+    {
+      title: "Plan Desk tasks",
+      description:
+        'Record a plan as ready tasks in one atomic call, in the order given. Use it when you own a goal and split it into work: ready tasks are what agents and Autopilot take, so give each one acceptance criteria the finishing agent can check. Slice the work into thin end-to-end vertical slices, not horizontal layers. Set `stage: "fog"` for ideas that are not specified yet. List blockers before the tasks they block. Give every task a `key`; `parentKey` and `blockedBy` may name keys from this batch, and `parentId` and `blockedBy` also accept existing task ids or T-<number> references. Use `readyFor: "human"` for tasks that need a person\'s action. The project defaults to your workspace\'s project; the goal defaults to the goal you own.',
+      inputSchema: {
+        projectId: z.string().optional(),
+        goalId: goalIdInput,
+        tasks: z
+          .array(
+            z.object({
+              key: z.string().min(1),
+              title: z.string().min(1),
+              notes: z.string().optional(),
+              acceptanceCriteria: z.array(z.string()).optional(),
+              readyFor: BoardTaskReadyForSchema.optional(),
+              stage: BoardTaskStageSchema.optional().describe("Defaults to ready."),
+              parentKey: z.string().optional(),
+              parentId: z
+                .string()
+                .optional()
+                .describe("Existing parent task id or T-<number> on this host."),
+              blockedBy: z
+                .array(z.string())
+                .optional()
+                .describe(
+                  "Batch keys, or existing task ids or T-<number>, that must be done first.",
+                ),
+            }),
+          )
+          .min(1),
+      },
+      outputSchema: { tasks: z.array(BoardTaskOutputSchema) },
+    },
+    async (input: PlanBoardTasksToolInput) => {
+      const projectId = input.projectId ?? (await callerProjectId());
+      const goalId = goalIdOrOwned(input.goalId);
+      const keys = new Set(input.tasks.map((task) => task.key));
+      const tasks = await boardTasks().createMany(
+        input.tasks.map(({ acceptanceCriteria, parentId, blockedBy, stage, ...task }) => ({
+          ...task,
+          projectId,
+          goalId,
+          stage: stage ?? "ready",
+          parentId: parentId === undefined ? undefined : taskIdFor(parentId),
+          blockedBy: blockedBy?.map((ref) => (keys.has(ref) ? ref : taskIdFor(ref))),
+          acceptanceCriteria: criteria(acceptanceCriteria),
+        })),
+      );
+      return { content: [], structuredContent: ensureValidJson({ tasks: tasks.map(withRef) }) };
+    },
+  );
+
+  registerTool(
+    "create_board_task",
+    {
+      title: "Create Desk task",
+      description:
+        "Record a follow-up or an idea as a task without starting work. It lands in fog (not specified yet), where agents and Autopilot leave it alone, until a person, the user's instruction or the goal's owner agent specifies it with `stage: \"ready\"`. The project defaults to your workspace's project; the goal defaults to the goal you own. Start it only when the user asks you to do that work. To record a multi-task plan, use plan_board_tasks instead. `parentId` makes it a subtask and `blockedBy` lists tasks that must be done first; both take task ids or T-<number>. Write acceptance criteria the finishing agent can check.",
+      inputSchema: {
+        title: z.string().min(1),
+        notes: z.string().optional(),
+        projectId: z.string().optional(),
+        goalId: goalIdInput,
+        acceptanceCriteria: z.array(z.string()).optional(),
+        parentId: z.string().optional().describe("Parent task id or T-<number> on this host."),
+        blockedBy: z
+          .array(z.string())
+          .optional()
+          .describe("Task ids or T-<number> on this host that must be done first."),
+        readyFor: BoardTaskReadyForSchema.optional().describe(
+          "Who takes the task next. Defaults to agent.",
+        ),
+        stage: BoardTaskStageSchema.optional().describe("Defaults to fog."),
+      },
+      outputSchema: { task: BoardTaskOutputSchema },
+    },
+    async ({
+      projectId,
+      goalId,
+      acceptanceCriteria,
+      parentId,
+      blockedBy,
+      ...input
+    }: CreateBoardTaskToolInput) => {
+      const task = await boardTasks().create({
+        ...input,
+        goalId: goalIdOrOwned(goalId),
+        parentId: parentId === undefined ? undefined : taskIdFor(parentId),
+        blockedBy: blockedBy?.map(taskIdFor),
+        acceptanceCriteria: criteria(acceptanceCriteria),
+        projectId: projectId ?? (await callerProjectId()),
+      });
+      return { content: [], structuredContent: ensureValidJson({ task: withRef(task) }) };
+    },
+  );
+
+  registerTool(
+    "update_board_task",
+    {
+      title: "Update Desk task",
+      description:
+        'Update a task by id or T-<number>. Omit taskId for the task linked to your workspace. Tick acceptance criteria with `criteriaMet` (zero-based indexes) or replace the whole list with `acceptanceCriteria`. When marking your own task completed, write a one-paragraph summary of what changed and what remains that addresses each acceptance criterion. `parentId: null` detaches a subtask; `blockedBy` replaces the whole list; `goalId` (id or G-<number>) assigns a goal and `null` makes it loose work. `stage: "ready"` specifies a fog task: do it when the user commits to the work or when you own the task\'s goal and have written its criteria. Record follow-ups as new fog tasks instead of starting them.',
+      inputSchema: {
+        taskId: z.string().optional(),
+        title: z.string().optional(),
+        notes: z.string().optional(),
+        summary: z.string().nullable().optional(),
+        acceptanceCriteria: z.array(BoardTaskCriterionSchema).optional(),
+        criteriaMet: z.array(z.number().int().nonnegative()).optional(),
+        parentId: z.string().nullable().optional(),
+        blockedBy: z.array(z.string()).optional(),
+        goalId: z.string().nullable().optional(),
+        readyFor: BoardTaskReadyForSchema.optional(),
+        stage: BoardTaskStageSchema.optional(),
+        completed: z.boolean().optional(),
+      },
+      outputSchema: { task: BoardTaskOutputSchema },
+    },
+    async ({ criteriaMet, parentId, blockedBy, goalId, ...input }: UpdateBoardTaskToolInput) => {
+      const service = boardTasks();
+      let taskId = input.taskId === undefined ? undefined : taskIdFor(input.taskId);
+      if (!taskId) {
+        const workspaceId = resolveCallerAgent()?.workspaceId;
+        const linked = service
+          .list()
+          .filter((task) => workspaceId !== undefined && task.workspaceId === workspaceId);
+        if (linked.length !== 1)
+          throw new PaseoToolInputError(
+            "Specify taskId when your workspace does not have exactly one linked task",
+          );
+        taskId = linked[0].id;
+      }
+      let acceptanceCriteria = input.acceptanceCriteria;
+      if (criteriaMet !== undefined) {
+        if (acceptanceCriteria !== undefined) {
+          throw new PaseoToolInputError("Use criteriaMet or acceptanceCriteria, not both");
+        }
+        const current = service.find(taskId)?.acceptanceCriteria;
+        if (!current) throw new PaseoToolInputError("Task not found");
+        const outOfRange = criteriaMet.find((index) => index >= current.length);
+        if (outOfRange !== undefined) {
+          throw new PaseoToolInputError(`No acceptance criterion at index ${outOfRange}`);
+        }
+        acceptanceCriteria = current.map(({ text, met }, index) => ({
+          text,
+          met: met || criteriaMet.includes(index),
+        }));
+      }
+      const task = await service.update({
+        ...input,
+        taskId,
+        acceptanceCriteria,
+        parentId: parentId ? taskIdFor(parentId) : parentId,
+        blockedBy: blockedBy?.map(taskIdFor),
+        goalId: goalId ? goalIdFor(goalId) : goalId,
+      });
+      return { content: [], structuredContent: ensureValidJson({ task: withRef(task) }) };
+    },
+  );
+
+  registerTool(
+    "claim_board_task",
+    {
+      title: "Claim Desk task",
+      description:
+        "Claim a frontier task by id or T-<number> before you work it in your own session, so Autopilot and other agents leave it alone. Find candidates with list_board_tasks `frontier: true`. Never claim a task that is ready for a human or still in fog. Claiming a task you already hold is a no-op. Mark it completed with a summary when done, or release it if you stop.",
+      inputSchema: { taskId: z.string() },
+      outputSchema: { task: BoardTaskOutputSchema },
+    },
+    async ({ taskId }: { taskId: string }) => {
+      const task = await boardTasks().claim(
+        taskIdFor(taskId),
+        requireCallerAgentId("claim_board_task"),
+      );
+      return { content: [], structuredContent: ensureValidJson({ task: withRef(task) }) };
+    },
+  );
+
+  registerTool(
+    "release_board_task",
+    {
+      title: "Release Desk task",
+      description:
+        "Give back a task (id or T-<number>) you claimed and will not finish, so it returns to the frontier. Add what you learned to its notes first.",
+      inputSchema: { taskId: z.string() },
+      outputSchema: { task: BoardTaskOutputSchema },
+    },
+    async ({ taskId }: { taskId: string }) => {
+      const task = await boardTasks().release(
+        taskIdFor(taskId),
+        requireCallerAgentId("release_board_task"),
+      );
+      return { content: [], structuredContent: ensureValidJson({ task: withRef(task) }) };
+    },
+  );
+
+  registerTool(
+    "start_board_task",
+    {
+      title: "Start Desk task",
+      description:
+        "Start a task (id or T-<number>) in a new local or worktree workspace. Use a saved profile's name or id, or explicit provider settings from list_providers/list_models. The agent is your subagent when called from an agent. As a goal's owner agent, start the goal's ready tasks to dispatch its work; otherwise record follow-ups with create_board_task instead of starting work unless the user asks.",
+      inputSchema: {
+        taskId: z.string(),
+        isolation: z.enum(["local", "worktree"]),
+        profile: z.string().optional(),
+        provider: z.string().optional(),
+        model: z.string().optional(),
+        modeId: z.string().optional(),
+        thinkingOptionId: z.string().optional(),
+        featureValues: z.record(z.string(), z.unknown()).optional(),
+        idempotencyKey: z.string().min(1).max(512).optional(),
+      },
+      outputSchema: { task: BoardTaskOutputSchema, workspaceId: z.string(), agentId: z.string() },
+    },
+    async (input: StartBoardTaskToolInput) => {
+      if (!options.startBoardTask)
+        throw new PaseoToolInputError("Task start is unavailable on this host");
+      const { profile, provider, taskId, isolation, idempotencyKey, ...settings } = input;
+      let agent: BoardTaskStartInput["agent"];
+      if (profile !== undefined) {
+        if (
+          provider !== undefined ||
+          Object.values(settings).some((value) => value !== undefined)
+        ) {
+          throw new PaseoToolInputError("Choose a profile or explicit provider settings, not both");
+        }
+        const profiles = daemonConfigStore?.get().agentProfiles ?? [];
+        const selected =
+          profiles.find((candidate) => candidate.id === profile) ??
+          profiles.find((candidate) => candidate.name === profile);
+        if (!selected) throw new PaseoToolInputError(`Agent profile not found: ${profile}`);
+        agent = { kind: "profile", profileId: selected.id };
+      } else {
+        if (!provider) throw new PaseoToolInputError("A profile or provider is required");
+        agent = { kind: "config", provider, ...settings };
+      }
+      resolveCallerAgent();
+      const started = await options.startBoardTask({
+        taskId: taskIdFor(taskId),
+        isolation,
+        agent,
+        idempotencyKey,
+        callerAgentId,
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ ...started, task: withRef(started.task) }),
+      };
+    },
+  );
+
+  registerTool(
+    "list_goals",
+    {
+      title: "List goals",
+      description:
+        "List Desk goals on this host. A goal is a long-running aim that tasks serve (`goalId`). Each goal shows `ref` (G-<number>, usable in place of its id), `ownerAgentId` (the owner agent that plans and dispatches its work), task counts, and `landedAt` once finished. Landed goals are left out unless `all: true`.",
+      inputSchema: { all: z.boolean().optional() },
+      outputSchema: { goals: z.array(BoardGoalOutputSchema) },
+    },
+    async ({ all }: { all?: boolean }) => {
+      const goals = boardGoals()
+        .list()
+        .filter((goal) => all || goal.landedAt === null)
+        .sort((a, b) => a.rank - b.rank || a.number - b.number)
+        .map(withGoalRef);
+      return { content: [], structuredContent: ensureValidJson({ goals }) };
+    },
+  );
+
+  registerTool(
+    "create_goal",
+    {
+      title: "Create goal",
+      description:
+        'Create a Desk goal: a long-running aim that tasks serve. Create one when the user hands you an aim bigger than one task. `owner: "me"` makes you its owner agent: you plan it, split it into ready, thin, end-to-end tasks with acceptance criteria (plan_board_tasks), dispatch subagents (start_board_task), and bring real choices back with request_decision. Goals have no owner unless set.',
+      inputSchema: {
+        title: z.string().min(1),
+        notes: z.string().optional().describe("What the goal is and what done looks like."),
+        owner: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('"me" for you, another agent id, or null for none.'),
+      },
+      outputSchema: { goal: BoardGoalOutputSchema },
+    },
+    async ({ title, notes, owner }: CreateGoalToolInput) => {
+      const goal = await boardGoals().create({
+        title,
+        notes,
+        ownerAgentId: await ownerAgentIdFor(owner ?? null),
+      });
+      return { content: [], structuredContent: ensureValidJson({ goal: withGoalRef(goal) }) };
+    },
+  );
+
+  registerTool(
+    "update_goal",
+    {
+      title: "Update goal",
+      description:
+        'Update a goal by id or G-<number>. `owner` takes "me", another agent id, or null to remove the owner agent. `landed: true` marks the goal finished once its work is done; `landed: false` reopens it. Autopilot settings are for people and are not changed here.',
+      inputSchema: {
+        goalId: z.string(),
+        title: z.string().optional(),
+        notes: z.string().optional(),
+        owner: z.string().nullable().optional(),
+        landed: z.boolean().optional(),
+      },
+      outputSchema: { goal: BoardGoalOutputSchema },
+    },
+    async ({ goalId, owner, ...input }: UpdateGoalToolInput) => {
+      const goal = await boardGoals().update({
+        ...input,
+        goalId: goalIdFor(goalId),
+        ownerAgentId: owner === undefined ? undefined : await ownerAgentIdFor(owner),
+      });
+      return { content: [], structuredContent: ensureValidJson({ goal: withGoalRef(goal) }) };
+    },
+  );
+
+  registerTool(
+    "request_decision",
+    {
+      title: "Request decision",
+      description:
+        "Ask the user to choose, shown on their Desk as a brief. Push right: do everything you can first, then ask only for a real choice the user must make (direction, trade-off, approval), never for status updates. Write `brief` in Markdown: what happened, what you prepared, what is being decided, and what each option leads to; include your recommendation. Give 2 to 8 `options`, as plain labels or `{ id, label }`. The goal defaults to the goal you own; `taskId` ties it to a task. Returns at once with the decision id. The answer arrives later as a prompt in this conversation, so continue other work or end your turn; do not wait or poll.",
+      inputSchema: {
+        title: z.string().min(1).describe("The question, in one line."),
+        brief: z.string().min(1),
+        options: z
+          .array(z.union([z.string().min(1), z.object({ id: z.string(), label: z.string() })]))
+          .min(2)
+          .max(8),
+        goalId: goalIdInput,
+        taskId: z.string().optional().describe("Task id or T-<number> the decision is about."),
+      },
+      outputSchema: { decisionId: z.string(), decision: BoardDecisionSchema, message: z.string() },
+    },
+    async ({ title, brief, options: choices, goalId, taskId }: RequestDecisionToolInput) => {
+      const agentId = requireCallerAgentId("request_decision");
+      const decision = await boardDecisions().create({
+        kind: "agent",
+        goalId: goalIdOrOwned(goalId) ?? null,
+        taskId: taskId === undefined ? null : taskIdFor(taskId),
+        agentId,
+        title,
+        brief,
+        options: choices.map((choice) =>
+          typeof choice === "string" ? { id: choice, label: choice } : choice,
+        ),
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          decisionId: decision.id,
+          decision,
+          message:
+            "The decision is on the user's Desk. Their answer will arrive later as a prompt in this conversation.",
+        }),
+      };
+    },
   );
 
   registerTool(

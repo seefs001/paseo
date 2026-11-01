@@ -7,7 +7,7 @@ import {
 } from "@/projects/workspace-structure";
 import type { DesktopBadgeWorkspaceStatus } from "@/utils/desktop-badge-state";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
-import type { ProjectDescriptor, WorkspaceDescriptor } from "../session-store";
+import type { Agent, ProjectDescriptor, WorkspaceDescriptor } from "../session-store";
 
 export type { DesktopBadgeWorkspaceStatus } from "@/utils/desktop-badge-state";
 export type { WorkspaceStructure, WorkspaceStructureProject } from "@/projects/workspace-structure";
@@ -20,6 +20,7 @@ export interface SessionsSnapshot {
       hasWorkspaceDirectorySnapshot?: boolean;
       workspaces: Map<string, WorkspaceDescriptor>;
       projects?: Map<string, ProjectDescriptor>;
+      agents?: Map<string, Agent>;
     }
   >;
 }
@@ -30,6 +31,52 @@ export interface SidebarOrderSnapshot {
 
 const EMPTY_WORKSPACE_KEYS: string[] = [];
 const EMPTY_WORKSPACE_STRUCTURE: WorkspaceStructure = { projects: [] };
+const EMPTY_WORKSPACES: ReadonlyMap<string, WorkspaceDescriptor> = new Map();
+const EMPTY_PROJECTS: ReadonlyMap<string, ProjectDescriptor> = new Map();
+const EMPTY_AGENTS: ReadonlyMap<string, Agent> = new Map();
+
+/** One host's whole workspace and project directory, for surfaces that span every workspace. */
+export interface HostDirectory {
+  serverId: string;
+  hydrated: boolean;
+  workspaces: ReadonlyMap<string, WorkspaceDescriptor>;
+  projects: ReadonlyMap<string, ProjectDescriptor>;
+  agents: ReadonlyMap<string, Agent>;
+}
+
+function isSameHostDirectory(a: HostDirectory, b: HostDirectory | undefined): boolean {
+  return (
+    b !== undefined &&
+    a.serverId === b.serverId &&
+    a.hydrated === b.hydrated &&
+    a.workspaces === b.workspaces &&
+    a.projects === b.projects &&
+    a.agents === b.agents
+  );
+}
+
+export function createHostDirectoriesSelector(
+  serverIds: readonly string[],
+): (state: SessionsSnapshot) => HostDirectory[] {
+  let previous: HostDirectory[] = [];
+  return (state) => {
+    const next = serverIds.map((serverId) => {
+      const session = state.sessions[serverId];
+      return {
+        serverId,
+        hydrated: session?.hasHydratedWorkspaces ?? false,
+        workspaces: session?.workspaces ?? EMPTY_WORKSPACES,
+        projects: session?.projects ?? EMPTY_PROJECTS,
+        agents: session?.agents ?? EMPTY_AGENTS,
+      };
+    });
+    const unchanged =
+      next.length === previous.length &&
+      next.every((directory, index) => isSameHostDirectory(directory, previous[index]));
+    if (!unchanged) previous = next;
+    return previous;
+  };
+}
 
 export const workspaceEqualityFns = {
   identity: Object.is as (a: unknown, b: unknown) => boolean,

@@ -727,7 +727,9 @@ Diagnoses version mismatches and native module issues.
 
 ## Typecheck
 
-Always run typecheck after changes:
+Run typecheck and lint once after a batch of related code changes. Scope checks to affected workspaces and code paths; include direct consumers when a shared contract changes. Do not repeat passing checks unless relevant inputs changed. Documentation-only changes need formatting and diff checks, not typecheck or lint.
+
+From the repository root, use `npm run typecheck --workspace=<package>` for each affected workspace and pass changed code paths to `npm run lint -- <paths>`. Reserve the full-workspace command for changes affecting all workspaces or an explicit request:
 
 ```bash
 npm run typecheck

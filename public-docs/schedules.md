@@ -8,13 +8,13 @@ category: Schedules
 
 # Schedules
 
-A schedule starts a new agent for you on a cron cadence: at this time, run this prompt, in this repo, with these agent settings.
+A schedule runs work on a cron cadence. By default, it starts a fresh agent with a prompt, repo, and agent settings. It can also [file a fog task on the Desk without starting an agent](/docs/schedules-cli#file-board-tasks).
 
 Paseo also has **heartbeats**. A heartbeat sends a recurring prompt back into one existing agent so it can reassess and continue the same conversation.
 
 Both concepts use the same cron engine, but their product surfaces stay separate:
 
-- **Schedules** create a new agent each run. You can inspect, pause, resume, run once, update, or delete them.
+- **Schedules** create a new agent or a Board task each run. You can inspect, pause, resume, run once, update, or delete them.
 - **Heartbeats** target one existing agent. They are intentionally lightweight: create or delete them over MCP; from the CLI you can also update only their cron period.
 
 Cron is the canonical cadence. The CLI accepts simple presets such as `5m` or `1h`, but compiles them to cron rather than storing a separate interval type.

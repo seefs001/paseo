@@ -55,6 +55,11 @@ $PASEO_HOME/
 │       └── {agentId}.json               # One file per agent
 ├── schedules/
 │   └── {scheduleId}.json                # One file per schedule
+├── board/
+│   ├── tasks.json                       # Host-local Desk tasks
+│   ├── goals.json                       # Goals with their Autopilot settings
+│   ├── decisions.json                   # Open and recently answered decisions
+│   └── desk.json                        # Desk settings and snoozes
 ├── projects/
 │   ├── projects.json                    # Project registry
 │   ├── workspaces.json                  # Workspace registry
@@ -545,70 +550,134 @@ These small files are not validated as full Zod schemas but are persisted under 
 
 ---
 
-## Client-side stores (App)
+## 8. Board tasks
 
-These live in React Native `AsyncStorage` or browser `IndexedDB`, not on the daemon filesystem.
+The Desk stores four host-local files under `$PASEO_HOME/board/`. Each is written atomically
+with a `version: 1` envelope. Every service keeps its data in memory, serializes mutations, and
+pushes a `board.task.update` change to subscribers after each write. Nothing syncs between hosts.
+`createBoardServices` (`server/board/services.ts`) builds the four together.
 
-### Keying convention: directory-backed vs workspace-owned
+### Tasks
 
-Right-sidebar client state splits on whether it is determined by the directory or owned by the workspace (two workspaces can share one `cwd`). The split is enforced by the cache key, so changing a key changes the sharing semantics — see [architecture.md](architecture.md#right-sidebar-boundary-directory-backed-vs-workspace-owned) for the full table.
+**Path:** `$PASEO_HOME/board/tasks.json`, written as `{ version: 1, tasks: BoardTask[] }`.
 
-- **Directory-backed** (shared by same-`cwd` workspaces): keyed by `(serverId, cwd)`. Git status/diff, GitHub PR status, PR timeline, file preview content. These are TanStack Query caches, not persisted stores.
-- **Workspace-owned** (independent per workspace): keyed by `workspaceId`, with `cwd` used only as a fallback when no `workspaceId` is present. Review draft comments (`@paseo:review-draft-store`), diff-mode overrides (in-memory), workspace composer attachments, and file-explorer nav/expand state. The `workspaceId` part of these keys is **opaque** — never parse it back into a path.
+Deleting a task removes it from other tasks' `blockedBy` and detaches its subtasks. Fields added
+after the first release default on load, so older files still parse: tasks without `stage` load as
+`ready` because they were already committed work, the pre-Desk stages `backlog` and `todo` load
+as `fog` and `ready`, tasks without `goalId` are loose work, and tasks without `number` are
+numbered in creation order after the highest existing number.
 
-### Replica row store
+| Field                | Type                  | Description                                                                      |
+| -------------------- | --------------------- | -------------------------------------------------------------------------------- |
+| `id`                 | `string`              | `tsk_<16 hex>`                                                                   |
+| `number`             | `number`              | Host-local sequence shown as `T-<number>`; one above the highest existing number |
+| `title`              | `string`              | Whitespace-collapsed, 1 to 200 characters                                        |
+| `notes`              | `string`              | Up to 20,000 characters; the start prompt below the title                        |
+| `projectId`          | `string \| null`      | Host-local project; set to the workspace's project when linked                   |
+| `workspaceId`        | `string \| null`      | Linked workspace. Must be active at link time                                    |
+| `goalId`             | `string \| null`      | Goal the task serves; must exist. Deleting the goal sets it to `null`            |
+| `attachments`        | forge issue / PR refs | Added to the first prompt on start. Forge kinds only, so the wire stays pure     |
+| `rank`               | `number`              | Order in Ahead, lower first. New tasks go to the top                             |
+| `summary`            | `string \| null`      | What happened, usually written by the agent when it finishes                     |
+| `parentId`           | `string \| null`      | Parent task on the same host; ancestor cycles are rejected                       |
+| `blockedBy`          | `string[]`            | Same-host tasks that must be done first; cycles are rejected                     |
+| `acceptanceCriteria` | `{ text, met }[]`     | Checklist the finishing agent ticks; empty when unset                            |
+| `readyFor`           | `"agent" \| "human"`  | Who takes it next. Agents and Autopilot only take `agent` tasks                  |
+| `stage`              | `"fog" \| "ready"`    | New tasks default to `fog`; only `ready` tasks are on the frontier               |
+| `claimedBy`          | `string \| null`      | Agent id working it in its own session; cleared by start, link or completion     |
+| `createdAt`          | `string` (ISO 8601)   |                                                                                  |
+| `updatedAt`          | `string` (ISO 8601)   |                                                                                  |
+| `completedAt`        | `string \| null`      | Set by **Mark done**, or when the linked workspace is archived                   |
 
-The durable client replica uses IndexedDB on browser/Electron and expo-sqlite on native. Rows use the
-compound key `(serverId, kind, id)`; kinds are `agent`, `workspace`, `project`, `timeline`, and
-`checkpoint`. Directory entities have individual rows, timelines use the agent id, and the checkpoint
-uses the singleton id.
+The zone is never stored. See **Desk** and **Zone** in [glossary.md](glossary.md). Agent items are
+not stored here either: the app builds them from each host's live agents and workspaces.
 
-The store is a typed persistence boundary. It returns values to directory and timeline owners and
-accepts their explicit commits; it never reads or writes UI state. Reads are scoped to the requested
-host, kinds, and ids. Opening a cached workspace uses exact workspace and project keys rather than a
-directory scan. One invalid row is deleted and returned as a miss without affecting other rows.
-An invalid directory row and its affected checkpoint cursor are repaired in one transaction, so a
-later launch cannot accept a checkpoint for a partial baseline. Directory changes and their
-checkpoint are also applied in one transaction. Reads wait for accepted changes to reach storage,
-then retry only when a requested row changes during the read. Unrelated agent streams do not
-invalidate the read. Directory baseline replacements and host removal or renaming still invalidate
-the affected reads.
+`BoardTaskService.find` resolves an id or a `T-<number>` reference, and `BoardGoalService.find`
+an id or a `G-<number>`. MCP tools resolve every reference through them; `paseo task` and
+`paseo goal` resolve against the lists they load. The WebSocket RPCs take ids only.
 
-The cache is capped at 32 MiB and evicts whole hosts in least-recently-written order. Budget
-bookkeeping may scan opaque row sizes during a deferred write, never during host registry startup or
-before a requested cache row can paint. The row store is not encrypted. A cached timeline can contain
-source code, prompts, and tool output; encrypted-at-rest storage is a separate security decision.
+### Goals
 
-### Draft Store
+**Path:** `$PASEO_HOME/board/goals.json`, written as `{ version: 1, goals: BoardGoal[] }`. A goal
+carries its own Autopilot settings; there is no per-project Autopilot.
 
-**AsyncStorage key:** `paseo-drafts` (version 2)
+| Field                | Type                         | Description                                                       |
+| -------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `id`                 | `string`                     | `gol_<16 hex>`                                                    |
+| `number`             | `number`                     | Host-local sequence shown as `G-<number>`                         |
+| `title`, `notes`     | `string`                     | Same limits as task title and notes                               |
+| `ownerAgentId`       | `string \| null`             | Owner agent that plans and dispatches the goal's work             |
+| `autopilot`          | `BoardGoalAutopilot \| null` | `null` means never set up; see below                              |
+| `startsToday`        | `number`                     | Counted against `startsDate`; reads as 0 once the date has passed |
+| `startsDate`         | `string \| null`             | Daemon-local `YYYY-MM-DD`. Stored only; never sent to clients     |
+| `lastAutopilotError` | `string \| null`             | Last failed automatic start; cleared by a success or new settings |
+| `rank`               | `number`                     | Goal order, lower first. New goals go to the end                  |
+| `createdAt`          | `string` (ISO 8601)          |                                                                   |
+| `updatedAt`          | `string` (ISO 8601)          | Also changes on every recorded start                              |
+| `landedAt`           | `string \| null`             | Set when the goal lands; Autopilot does nothing for a landed goal |
 
-```typescript
-{
-  drafts: Record<draftKey, {
-    input: { text: string, images: AttachmentMetadata[] },
-    lifecycle: "active" | "abandoned" | "sent",
-    updatedAt: number,     // epoch ms
-    version: number        // optimistic concurrency
-  }>,
-  createModalDraft: DraftRecord | null
-}
-```
+`BoardGoalAutopilot` is `{ enabled, agent, isolation, maxActive (1..20), dailyStartLimit (1..200),
+confirmStarts }`, where `agent` is the same profile or config selection as
+`board.task.start.request`.
 
-### Attachment Store (Web)
+`BoardAutopilotRunner` (`server/board/autopilot-runner.ts`) decides what to start. It
+re-evaluates goals on every task, goal or decision change and once a minute for the date rollover,
+one pass at a time. While the goal has fewer than `maxActive` started, unfinished tasks and
+`startsToday` is below the limit, it takes the lowest-`rank` task of the goal on the frontier
+(`isOnFrontier`: ready, not started, unclaimed, ready for an agent, blockers done). Fog tasks
+wait until someone specifies them. Without `confirmStarts` it calls the same start path as
+`start_board_task`, keyed on the task's id and `updatedAt` so a retry reuses the start. After a
+failed start the goal pauses until the failed task changes, the settings change, or the day
+changes; the pause is in memory, so a daemon restart retries once. With `confirmStarts` it posts
+an `autopilot_start` decision instead, and open questions count against both limits.
 
-**IndexedDB database:** `paseo-attachment-bytes`, object store: `attachments`
+### Decisions
 
-Stores binary attachment blobs keyed by attachment ID.
+**Path:** `$PASEO_HOME/board/decisions.json`, written as
+`{ version: 1, decisions: BoardDecision[], skips: { taskId, taskUpdatedAt }[] }`.
 
-### AttachmentMetadata
+| Field           | Type                           | Description                                                            |
+| --------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| `id`            | `string`                       | `dec_<16 hex>`                                                         |
+| `kind`          | `"agent" \| "autopilot_start"` | Who asks: an agent through `request_decision`, or goal Autopilot       |
+| `goalId`        | `string \| null`               | Goal the question is about                                             |
+| `taskId`        | `string \| null`               | Task the question is about                                             |
+| `agentId`       | `string \| null`               | Agent that asked; it gets the answer as a prompt                       |
+| `title`         | `string`                       | The question, 1 to 200 characters                                      |
+| `brief`         | `string`                       | Markdown, up to 20,000 characters                                      |
+| `options`       | `{ id, label }[]`              | 1 to 8, unique ids, labels up to 100 characters                        |
+| `createdAt`     | `string` (ISO 8601)            |                                                                        |
+| `resolvedAt`    | `string \| null`               | Set by an answer, or when the daemon closes a stale question           |
+| `choiceId`      | `string \| null`               | `null` with `resolvedAt` set means closed without an answer            |
+| `note`          | `string \| null`               | The user's text added to the choice                                    |
+| `taskUpdatedAt` | `string \| null`               | Stored only: the task version an `autopilot_start` question asks about |
 
-| Field         | Type      | Description                    |
-| ------------- | --------- | ------------------------------ |
-| `id`          | `string`  | Unique attachment ID           |
-| `mimeType`    | `string`  | MIME type                      |
-| `storageType` | `string`  | Storage backend identifier     |
-| `storageKey`  | `string`  | Key within the storage backend |
-| `createdAt`   | `number`  | Epoch ms                       |
-| `fileName`    | `string?` | Original filename              |
-| `byteSize`    | `number?` | Size in bytes                  |
+Resolving runs the answer's effect first and records the answer only when the effect succeeds, so
+a failed start keeps the question open. An `agent` answer is sent to the asking agent as a prompt;
+`start` on an `autopilot_start` question starts the task with the goal's Autopilot settings and
+counts against today's limit. `skip` records the task version in `skips`, so Autopilot does not
+ask again until the task changes. The runner closes `autopilot_start` questions whose task changed
+or left the frontier, or whose goal stopped asking. Answered decisions stay listed for a day, then the next write drops them.
+
+### Desk settings and snoozes
+
+**Path:** `$PASEO_HOME/board/desk.json`, written as
+`{ version: 1, settings: BoardDeskSettings, snoozes: { key, until }[] }`. A missing file means the
+defaults.
+
+| Field                          | Default                                        | Description                                                      |
+| ------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
+| `settings.zones`               | Decide, Flight, Ahead, Landed; visible         | Order, visibility and custom name (up to 40 characters) per zone |
+| `settings.decideKinds`         | every checkpoint kind                          | Checkpoint kinds shown in Decide                                 |
+| `settings.grouping`            | `goal`                                         | `goal`, `project`, `host` or `agent`                             |
+| `settings.landedRetentionDays` | `7`                                            | How long Landed keeps finished work, 1 to 365                    |
+| `settings.notifyKinds`         | `permission`, `question`, `failed`, `decision` | Checkpoint kinds that send a push notification                   |
+| `snoozes[].key`                | —                                              | Opaque to the daemon; the app derives it per checkpoint          |
+| `snoozes[].until`              | —                                              | ISO 8601. Woken snoozes are dropped on the next write            |
+
+Settings are how the Desk works on this host and apply to every device. How it looks (density,
+card fields, zone widths) is device-local in the app.
+
+---
+
+]

@@ -54,6 +54,9 @@ Paseo only sees the returned promise, so detached work gets no error reporting a
 | `workspace.create.before` | yes   | `{ request }`                          | Entire create request                          |
 | `workspace.create.after`  | no    | `{ workspace }`                        |                                                |
 | `workspace.archive.after` | no    | `{ workspace }`                        |                                                |
+| `board.task.create.after` | no    | `{ task }`                             |                                                |
+| `board.task.update.after` | no    | `{ previous, next }`                   |                                                |
+| `board.task.delete.after` | no    | `{ task }`                             |                                                |
 | `worktree.create.before`  | yes   | `{ request }`                          | Creation options and destination               |
 | `worktree.create.after`   | yes   | `{ worktree }`                         | Files in the worktree; throw to abort creation |
 | `agent.create.before`     | yes   | `{ request: { config, env? } }`        | Saved config except `cwd`; `env`               |
@@ -143,6 +146,20 @@ Fires after archive state is saved. Receives `{ workspace }`; worktree cleanup c
 ```ts
 server.addHook("workspace.archive.after", async ({ workspace }) => {
   console.log(workspace);
+});
+```
+
+## Board task hooks
+
+`board.task.create.after`, `board.task.update.after`, and `board.task.delete.after` fire after the Board task is saved. They observe changes from the app, CLI, MCP, schedules, and workspace archive. Loading saved tasks on daemon startup does not replay hooks.
+
+Create and delete receive `{ task }`. Update receives `{ previous, next }`. Each task is a full `BoardTask` from `@getpaseo/protocol/messages`, including its project and workspace links, attachments, summary, and completion timestamp. These are notifications: Paseo does not wait, and handler errors do not roll back the saved task.
+
+```ts
+server.addHook("board.task.update.after", async ({ previous, next }) => {
+  if (previous.completedAt === null && next.completedAt !== null) {
+    console.log("Task completed", next.id, next.summary);
+  }
 });
 ```
 

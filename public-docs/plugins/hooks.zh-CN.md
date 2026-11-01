@@ -52,6 +52,9 @@ Paseo 只观察返回的 Promise，因此独立任务没有错误报告，也没
 | `workspace.create.before` | 是   | `{ request }`                          | 整个创建请求                              |
 | `workspace.create.after`  | 否   | `{ workspace }`                        |                                           |
 | `workspace.archive.after` | 否   | `{ workspace }`                        |                                           |
+| `board.task.create.after` | 否   | `{ task }`                             |                                           |
+| `board.task.update.after` | 否   | `{ previous, next }`                   |                                           |
+| `board.task.delete.after` | 否   | `{ task }`                             |                                           |
 | `worktree.create.before`  | 是   | `{ request }`                          | 创建选项和目标路径                        |
 | `worktree.create.after`   | 是   | `{ worktree }`                         | worktree 中的文件；抛出错误中止创建       |
 | `agent.create.before`     | 是   | `{ request: { config, env? } }`        | 除 `cwd` 外的已保存配置；`env`            |
@@ -140,6 +143,20 @@ server.addHook("workspace.create.after", async ({ workspace }) => {
 ```ts
 server.addHook("workspace.archive.after", async ({ workspace }) => {
   console.log(workspace);
+});
+```
+
+## 看板任务钩子 {#board-task-hooks}
+
+`board.task.create.after`、`board.task.update.after` 和 `board.task.delete.after` 在看板任务保存后触发，覆盖应用、CLI、MCP、定时任务和工作区归档产生的变更。daemon 启动时加载已保存的任务不会重放钩子。
+
+创建和删除收到 `{ task }`，更新收到 `{ previous, next }`。每个任务都是 `@getpaseo/protocol/messages` 中完整的 `BoardTask`，包括项目和工作区关联、附件、摘要及完成时间。这些钩子都是通知：Paseo 不等待处理器完成，处理器报错不会回滚已保存的任务。
+
+```ts
+server.addHook("board.task.update.after", async ({ previous, next }) => {
+  if (previous.completedAt === null && next.completedAt !== null) {
+    console.log("Task completed", next.id, next.summary);
+  }
 });
 ```
 

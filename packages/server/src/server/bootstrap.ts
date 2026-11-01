@@ -131,6 +131,9 @@ export async function fanOutReconciledWorkspaceUpdates(input: {
 import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
 import { createWorkspaceLabelService } from "./workspace-labels/index.js";
+import { createBoardServices, initializeBoardServices } from "./board/services.js";
+import { BoardAutopilotRunner } from "./board/autopilot-runner.js";
+import { subscribeBoardTaskHooks } from "./plugins/board-hooks.js";
 import { createGitHubService } from "../services/github-service.js";
 import { createPaseoWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
@@ -972,6 +975,27 @@ export async function createPaseoDaemon(
     paseoHome: config.paseoHome,
     workspaceRegistry,
   });
+  const board = createBoardServices({
+    paseoHome: config.paseoHome,
+    projectRegistry,
+    workspaceRegistry,
+    startBoardTask: (input) => {
+      if (!wsServer) throw new Error("Daemon is not accepting Board starts");
+      return wsServer.startBoardTask(input);
+    },
+    // A decision answer is the user's reply, so it goes in like a human prompt and steers a busy agent.
+    sendAgentPrompt: async (agentId, prompt) => {
+      await sendPromptToAgent({
+        agentId,
+        prompt,
+        agentManager,
+        agentStorage,
+        logger,
+        activeTurnBehavior: "steer",
+      });
+    },
+  });
+  const boardTaskService = board.tasks;
   const github = createGitHubService();
   const workspaceGitService = new WorkspaceGitServiceImpl({
     logger,
@@ -995,6 +1019,9 @@ export async function createPaseoDaemon(
     if (mutation.kind === "archive" && mutation.workspace) {
       pluginRuntime.emit("workspace.archive.after", {
         workspace: describeHookWorkspace(mutation.workspace),
+      });
+      await boardTaskService.completeForWorkspace(mutation.workspaceId).catch((err: unknown) => {
+        logger.error({ err, workspaceId: mutation.workspaceId }, "Failed to complete Board tasks");
       });
     }
   });
@@ -1090,6 +1117,21 @@ export async function createPaseoDaemon(
     logger,
   });
   await workspaceLabelService.initialize();
+  await initializeBoardServices(board);
+  const unsubscribeBoardTaskHooks = subscribeBoardTaskHooks(boardTaskService, pluginRuntime);
+  const unsubscribeBoardDecisionPush = board.decisions.subscribe((change) => {
+    if (change.created) wsServer?.notifyBoardDecision(change.decision);
+  });
+  const boardAutopilotRunner = new BoardAutopilotRunner({
+    tasks: board.tasks,
+    goals: board.goals,
+    decisions: board.decisions,
+    startBoardTask: (input) => {
+      if (!wsServer) throw new Error("Daemon is not accepting Board starts");
+      return wsServer.startBoardTask(input);
+    },
+    logger,
+  });
   logger.info({ elapsed: elapsed() }, "Workspace registries bootstrapped");
   const teardownArchivedWorkspaceRuntime = (workspaceId: string): void => {
     scriptRuntimeStore.removeForWorkspace(workspaceId);
@@ -1475,6 +1517,7 @@ export async function createPaseoDaemon(
     createDirectoryWorkspace: createScheduleLocalWorkspaceExternal,
     createPaseoWorktreeWorkspace: createSchedulePaseoWorktreeExternal,
     archiveWorkspace: archiveScheduleWorkspaceExternal,
+    boardTaskService,
   });
   await scheduleService.start();
 
@@ -1547,6 +1590,13 @@ export async function createPaseoDaemon(
   ): PaseoToolHostDependencies => ({
     finishSubscriptions: () => finishSubscriptions,
     finishWebhooks,
+    boardTaskService,
+    boardGoalService: board.goals,
+    boardDecisionService: board.decisions,
+    startBoardTask: (input) => {
+      if (!wsServer) throw new Error("Daemon is not accepting Board starts");
+      return wsServer.startBoardTask(input);
+    },
     agentMessages: () => {
       if (!wsServer) throw new Error("Daemon is not accepting agent messages");
       return wsServer.agentMessages;
@@ -2003,6 +2053,7 @@ export async function createPaseoDaemon(
               pluginRuntime,
               orchestrationSkills,
               workspaceLabelService,
+              board,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
@@ -2010,6 +2061,7 @@ export async function createPaseoDaemon(
             restartRecovery.resumePending();
             await finishSubscriptions.start();
             wsServer.beginAcceptingConnections();
+            boardAutopilotRunner.start();
             const relaySecurityLogger = logger.child({ module: "relay-security" });
             relayRuntime = createRelayRuntime({
               config: {
@@ -2070,6 +2122,9 @@ export async function createPaseoDaemon(
       await deleteLocalCredential(config.paseoHome);
       unsubscribePluginProviders();
       unsubscribePluginSessionChanges();
+      unsubscribeBoardTaskHooks();
+      unsubscribeBoardDecisionPush();
+      await boardAutopilotRunner.stop();
       await pluginRuntime.stopAllPlugins().catch(() => undefined);
       await serviceProxy.stopStandalone().catch(() => undefined);
       await agentProviderRuntime.shutdown().catch(() => undefined);
@@ -2092,6 +2147,9 @@ export async function createPaseoDaemon(
     // they serve has been closed, further down.
     unsubscribePluginProviders();
     unsubscribePluginSessionChanges();
+    unsubscribeBoardTaskHooks();
+    unsubscribeBoardDecisionPush();
+    await boardAutopilotRunner.stop();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();
     scriptHealthMonitor.stop();

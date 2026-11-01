@@ -11,9 +11,12 @@ import {
   Home,
   Import,
   Keyboard,
+  ListPlus,
   PanelLeft,
   Plus,
   Settings,
+  SquareKanban,
+  Target,
 } from "lucide-react-native";
 import { withUnistyles } from "react-native-unistyles";
 import { getIsElectronRuntime, useIsCompactFormFactor } from "@/constants/layout";
@@ -26,8 +29,13 @@ import { resolveShortcutKeysForAction } from "@/keyboard/keyboard-shortcuts";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
+import { openDeskGoalSheet } from "@/board/goal-sheet";
+import { getWorkspaceProjectId, openBoardTaskSheet } from "@/board/sheet";
+import { useBoardTasks } from "@/board/tasks";
+import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { clearCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
 import {
+  buildBoardRoute,
   buildMcpCallsRoute,
   buildOpenProjectRoute,
   buildSchedulesRoute,
@@ -50,6 +58,15 @@ const ThemedCalendarClock = withUnistyles(CalendarClock, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedCable = withUnistyles(Cable, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedSquareKanban = withUnistyles(SquareKanban, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedListPlus = withUnistyles(ListPlus, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedTarget = withUnistyles(Target, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
 const ThemedKeyboard = withUnistyles(Keyboard, (theme) => ({
@@ -92,6 +109,25 @@ function McpCallsIcon({ size }: CommandCenterIconProps) {
   return <ThemedCable size={size} strokeWidth={2.2} />;
 }
 
+function BoardIcon({ size }: CommandCenterIconProps) {
+  return <ThemedSquareKanban size={size} strokeWidth={2.2} />;
+}
+
+function NewTaskIcon({ size }: CommandCenterIconProps) {
+  return <ThemedListPlus size={size} strokeWidth={2.2} />;
+}
+
+function NewGoalIcon({ size }: CommandCenterIconProps) {
+  return <ThemedTarget size={size} strokeWidth={2.2} />;
+}
+
+/** A new goal goes to the active workspace's host when its Desk is loaded, else the first one. */
+function resolveDeskHost(preferred: string | null): string | null {
+  const hosts = useBoardTasks.getState().hosts;
+  if (preferred && hosts[preferred]?.status === "ready") return preferred;
+  return Object.keys(hosts).find((serverId) => hosts[serverId]?.status === "ready") ?? null;
+}
+
 function KeyboardIcon({ size }: CommandCenterIconProps) {
   return <ThemedKeyboard size={size} strokeWidth={2.2} />;
 }
@@ -128,6 +164,10 @@ export function CommandCenterRootActions() {
   const sessionsRoute = useMemo<Href>(() => buildSessionsRoute(), []);
   const schedulesRoute = useMemo<Href>(() => buildSchedulesRoute(), []);
   const mcpCallsRoute = useMemo<Href>(() => buildMcpCallsRoute(), []);
+  const boardRoute = useMemo<Href>(() => buildBoardRoute(), []);
+  const activeWorkspace = useActiveWorkspaceSelection();
+  const activeServerId = activeWorkspace?.serverId ?? null;
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const setShortcutsDialogOpen = useKeyboardShortcutsStore((state) => state.setShortcutsDialogOpen);
   // Narrow selector on purpose: a whole-store subscription would re-register every root action
   // each time host filters are reconciled.
@@ -274,6 +314,69 @@ export function CommandCenterRootActions() {
         },
       },
       {
+        id: "board",
+        group: "actions",
+        groupRank: 0,
+        rank: 5,
+        keywords: ["desk", "board", "tasks", "goals", "decide", "kanban"],
+        visibility: "always",
+        run: () => {
+          clearCommandCenterFocusRestoreElement();
+          router.push(boardRoute);
+        },
+        presentation: {
+          kind: "action",
+          title: t("board.desk.command.open"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: BoardIcon,
+        },
+      },
+      {
+        id: "new-board-task",
+        group: "actions",
+        groupRank: 0,
+        rank: 5,
+        keywords: ["new", "task", "desk", "board", "fog", "ready"],
+        visibility: "always",
+        run: () => {
+          clearCommandCenterFocusRestoreElement();
+          openBoardTaskSheet(
+            activeServerId
+              ? {
+                  mode: "create",
+                  serverId: activeServerId,
+                  projectId: getWorkspaceProjectId(activeServerId, activeWorkspaceId),
+                }
+              : { mode: "create" },
+          );
+        },
+        presentation: {
+          kind: "action",
+          title: t("board.newTask"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: NewTaskIcon,
+        },
+      },
+      {
+        id: "new-desk-goal",
+        group: "actions",
+        groupRank: 0,
+        rank: 5,
+        keywords: ["new", "goal", "desk", "board", "aim"],
+        visibility: "always",
+        run: () => {
+          clearCommandCenterFocusRestoreElement();
+          const serverId = resolveDeskHost(activeServerId);
+          if (serverId) openDeskGoalSheet({ mode: "create", serverId });
+        },
+        presentation: {
+          kind: "action",
+          title: t("board.desk.newGoal"),
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: NewGoalIcon,
+        },
+      },
+      {
         id: "settings",
         group: "actions",
         groupRank: 0,
@@ -359,6 +462,9 @@ export function CommandCenterRootActions() {
 
     return availableActions;
   }, [
+    activeServerId,
+    activeWorkspaceId,
+    boardRoute,
     groupMode,
     homeRoute,
     keyboardActionDispatcher,

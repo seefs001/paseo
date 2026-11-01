@@ -4,6 +4,7 @@ import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
 import {
   composeWorkspaceStructure,
+  createHostDirectoriesSelector,
   createWorkspaceStructureProjectsSelector,
   selectHasHydratedWorkspaces,
   selectHydratedWorkspaceServerIds,
@@ -18,6 +19,7 @@ import {
   selectWorkspaceKeys,
   selectWorkspaceStatusesForBadges,
   workspaceEqualityFns,
+  type HostDirectory,
   type WorkspaceStructure,
 } from "./selectors";
 import { useSessionStore, type WorkspaceDescriptor } from "../session-store";
@@ -29,6 +31,7 @@ import type { DesktopBadgeWorkspaceStatus } from "@/utils/desktop-badge-state";
 
 export type {
   DesktopBadgeWorkspaceStatus,
+  HostDirectory,
   WorkspaceStructure,
   WorkspaceStructureProject,
 } from "./selectors";
@@ -70,6 +73,12 @@ export function useHasHydratedWorkspaces(serverId: string | null): boolean {
     (state) => selectHasHydratedWorkspaces(state, serverId),
     workspaceEqualityFns.identity,
   );
+}
+
+/** Re-renders whenever any workspace or project on these hosts changes. */
+export function useHostDirectories(serverIds: readonly string[]): HostDirectory[] {
+  const selectDirectories = useMemo(() => createHostDirectoriesSelector(serverIds), [serverIds]);
+  return useStoreWithEqualityFn(useSessionStore, selectDirectories, workspaceEqualityFns.identity);
 }
 
 export function useHydratedWorkspaceServerIds(serverIds: string[]): string[] {

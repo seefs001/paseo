@@ -181,7 +181,13 @@ import { parseSessionShareCommand, supportsSessionShareCommand } from "@/agent-s
 import { openAgentShare, type AgentShareModel } from "@/agent-sharing/model";
 import { normalizeNativePastedImages, type NativePastedFile } from "./native-pasted-image";
 import { PluginResourceAttachmentPill, usePluginAttachmentPicker } from "@/plugins";
-import { resolveClientSlashCommand, type ClientSlashCommand } from "@/client-slash-commands";
+import {
+  readClientSlashCommandArgument,
+  resolveClientSlashCommand,
+  type ClientSlashCommand,
+} from "@/client-slash-commands";
+import { runBoardTaskSlashCommand } from "@/client-slash-commands/board-task";
+import { useHostFeature } from "@/runtime/host-features";
 import { expandCustomCommand, type ExpandedCustomCommand } from "@/custom-commands/expand";
 import {
   appendWorkspaceFileAttachment,
@@ -1490,6 +1496,7 @@ function ComposerContentImpl({
     workspaceId,
     agentId,
   });
+  const supportsBoardTasks = useHostFeature(serverId, "boardTasks");
   const isComposerLocked = resolveIsComposerLocked(submitBehavior, isSubmitLoading);
   const keyboardHandlerIdRef = useRef(
     `message-input:${serverId}:${agentId}:${Math.random().toString(36).slice(2)}`,
@@ -1550,8 +1557,17 @@ function ComposerContentImpl({
   );
 
   const runClientSlashCommand = useCallback(
-    (command: ClientSlashCommand): boolean => {
-      if (command.execution !== "immediate" || !onClientSlashCommand) {
+    (command: ClientSlashCommand, text = ""): boolean => {
+      let run: (() => Promise<void>) | null = null;
+      if (command.kind === "create-board-task") {
+        if (workspaceId) {
+          const title = readClientSlashCommandArgument(text);
+          run = () => runBoardTaskSlashCommand({ serverId, workspaceId, title, toast });
+        }
+      } else if (command.execution === "immediate" && onClientSlashCommand) {
+        run = () => onClientSlashCommand(command);
+      }
+      if (!run) {
         return false;
       }
 
@@ -1564,7 +1580,7 @@ function ComposerContentImpl({
       resetSuppression();
       setSendError(null);
       setIsProcessing(true);
-      void onClientSlashCommand(command)
+      void run()
         .catch((error) => {
           console.error("[Composer] Failed to run client slash command:", error);
           setSendError(error instanceof Error ? error.message : String(error));
@@ -1579,8 +1595,11 @@ function ComposerContentImpl({
       clearDraft,
       onClientSlashCommand,
       resetSuppression,
+      serverId,
       setSelectedAttachments,
       replaceUserInput,
+      toast,
+      workspaceId,
     ],
   );
 
@@ -1921,8 +1940,9 @@ function ComposerContentImpl({
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
         hasAttachments: outgoingAttachments.length > 0,
+        boardTasks: supportsBoardTasks,
       });
-      if (clientSlashCommand && runClientSlashCommand(clientSlashCommand)) {
+      if (clientSlashCommand && runClientSlashCommand(clientSlashCommand, payload.text)) {
         return;
       }
       const customCommand = mode.showAutocomplete
@@ -1963,6 +1983,7 @@ function ComposerContentImpl({
       runPluginClientSlashCommand,
       openShareDialog,
       sendMessageWithContent,
+      supportsBoardTasks,
     ],
   );
 
@@ -2197,8 +2218,9 @@ function ComposerContentImpl({
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
         hasAttachments: outgoingAttachments.length > 0,
+        boardTasks: supportsBoardTasks,
       });
-      if (clientSlashCommand && runClientSlashCommand(clientSlashCommand)) {
+      if (clientSlashCommand && runClientSlashCommand(clientSlashCommand, payload.text)) {
         return;
       }
       const customCommand = mode.showAutocomplete
@@ -2229,6 +2251,7 @@ function ComposerContentImpl({
       openShareDialog,
       runClientSlashCommand,
       runPluginClientSlashCommand,
+      supportsBoardTasks,
     ],
   );
 

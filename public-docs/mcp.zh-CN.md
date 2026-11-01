@@ -174,6 +174,36 @@ Paseo 发送 `POST`，请求头为 `Content-Type: application/json`：
 
 对于 worktree 隔离，`create_workspace` 接受与应用中相同的常用选择：从某个基础分支分出、检出一个已有分支，或检出一个 Pull Request。worktree 仍然是工作区生命周期的实现细节。
 
+### 工作台任务与目标 {#board-tasks}
+
+这些工具操作调用方所在主机的工作台。原则是向右推进（push right）：先把能做的都做完，再带着准备好的简报来找用户，而不是每一步都停下来问。
+
+**目标**（`G-<number>`）是一个长期的目的，任务为它服务。目标可以有一个**主理 agent**：它规划目标，把目标拆成可开工的任务，派出子 Agent，并把真正需要用户选择的事项作为决定带回来。尚未启动的**任务**（`T-<number>`）处于 `fog`（迷雾：还没说清楚的想法，Agent 和 Autopilot 不会接手）或 `ready`（可开工：已经说清楚的工作）阶段。所有接受任务或目标 ID 的工具也接受对应的引用。输出在 `id` 旁附带 `ref`。
+
+| 工具                 | 功能                                                                                                                                                                                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_board_tasks`   | 按 `state`（`ahead`、`started`、`landed`）、`stage`（`fog`、`ready`，只返回尚未启动的任务）、`goalId`、`projectId` 和 `frontier: true` 过滤。不带过滤条件时，主理目标的 Agent 看到这些目标的任务，其他 Agent 看到其工作区所属项目的任务。每个任务包含 `goalId`、`readyFor`、`claimedBy`、`onFrontier`、`openBlockers` 和 `children` 计数。 |
+| `plan_board_tasks`   | 按给定顺序一次性原子地创建整个计划。任务默认是 `ready`；想法类任务单独设置 `stage: "fog"`。每个任务有一个 `key`；`parentKey` 和 `blockedBy` 可以引用同批任务的 key，`parentId` 和 `blockedBy` 也接受已有任务 ID 或 `T-<number>`。验收标准用字符串填写。                                                                                    |
+| `create_board_task`  | 创建单个任务，参数为 `title`，以及可选的 `notes`、`projectId`、`goalId`、`acceptanceCriteria`（字符串）、`parentId`、`blockedBy`、`readyFor` 和 `stage`（默认 `fog`）。不启动工作。                                                                                                                                                        |
+| `update_board_task`  | 修改字段：用 `stage` 在 `fog` 和 `ready` 之间移动任务，用 `goalId` 指定目标（`null` 表示不属于任何目标），用 `criteriaMet`（从 0 开始的序号）勾选验收标准，或用 `acceptanceCriteria` 整体替换，并设置 `summary` 或 `completed`。省略 `taskId` 时更新与当前工作区关联的任务。                                                               |
+| `claim_board_task`   | 调用方 Agent 在自己的会话中处理某个前沿任务之前，先认领它。                                                                                                                                                                                                                                                                                |
+| `release_board_task` | 归还调用方 Agent 认领的任务。                                                                                                                                                                                                                                                                                                              |
+| `start_board_task`   | 用 `taskId` 和 `isolation: "local" \| "worktree"` 启动任务。选择 `profile`（已保存配置的名称或 ID），或指定 `provider` 以及可选的 `model`、`modeId`、`thinkingOptionId`、`featureValues`。                                                                                                                                                 |
+| `list_goals`         | 列出目标及其主理 agent、任务计数和 `landedAt`。已落地的目标只在 `all: true` 时列出。                                                                                                                                                                                                                                                       |
+| `create_goal`        | 用 `title` 和可选的 `notes` 创建目标。`owner: "me"` 让调用方成为主理 agent；也可以填其他 Agent ID 或 `null`。                                                                                                                                                                                                                              |
+| `update_goal`        | 修改 `title`、`notes`、`owner`（`"me"`、Agent ID 或 `null`）或 `landed`。                                                                                                                                                                                                                                                                  |
+| `request_decision`   | 请用户做选择。`title` 是问题，`brief` 是 Markdown 简报（发生了什么、已经准备了什么、每个选项会带来什么、你的建议），`options` 是 2 到 8 个纯文本标签或 `{ id, label }`。可选 `goalId` 和 `taskId`。立即返回决定的 ID。                                                                                                                     |
+
+调用方只主理一个目标时，`create_board_task`、`plan_board_tasks` 和 `request_decision` 的 `goalId` 默认就是这个目标。项目默认是调用方工作区所属的项目。
+
+前沿（frontier）是 Agent 现在可以接手的任务：`ready`、尚未启动、未被认领、`readyFor: "agent"`，且所有阻塞任务都已完成。Agent 不处理 `readyFor: "human"` 的任务。后续工作记为 `fog` 任务，不要直接开工。主理 agent 把目标切成很薄的端到端任务，每个任务有自己的验收标准，把阻塞任务排在被阻塞任务之前，再用 `start_board_task` 启动。完成自己的任务时，勾选已满足的验收标准，并写一段 `summary`，逐条回应每项标准。
+
+`request_decision` 只用于真正的选择：方向、取舍、批准。不要用它汇报进度。决定以简报的形式出现在用户的工作台上。答复稍后作为提示词回到同一个对话，包含所选标签和用户的备注，所以发出后结束本轮或继续做别的事，不要等待。
+
+启动前，任务必须有项目、尚未完成、阻塞任务都已完成，并且没有关联的活动工作区。人或 `start_board_task` 调用可以启动任一阶段的任务。任务的标题、备注和附件构成第一条提示词。工具返回 `task`、`workspaceId` 和 `agentId`。Agent 调用创建的 Agent 是调用方的子 Agent。重试时传入相同的 `idempotencyKey`，复用已创建的工作区和 Agent。
+
+Agent 不能修改目标的 [Autopilot](/docs/cli#autopilot)；由人在工作台上或用 `paseo goal autopilot` 设置。
+
 ### 工作区脚本 {#workspace-scripts}
 
 这些工具管理在工作区的 `paseo.json` 中配置的脚本。每个工具都需要显式的 `workspaceId`；启动和停止还需要已配置的 `scriptName`。

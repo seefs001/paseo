@@ -8,7 +8,7 @@ import {
 import {
   connectScheduleClient,
   parseScheduleUpdateInput,
-  requireNewAgentSchedule,
+  requireRecurringSchedule,
   toScheduleCommandError,
   type ScheduleCommandOptions,
 } from "./shared.js";
@@ -50,7 +50,7 @@ export async function runUpdateCommand(
   });
   const { client } = await connectScheduleClient(options.daemonTarget);
   try {
-    await requireNewAgentSchedule(client, id);
+    await requireRecurringSchedule(client, id);
     const payload = await client.scheduleUpdate(input);
     if (payload.error || !payload.schedule) {
       throw new Error(payload.error ?? `Failed to update schedule: ${id}`);

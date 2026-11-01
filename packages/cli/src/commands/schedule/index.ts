@@ -18,7 +18,10 @@ export function createScheduleCommand(): Command {
     schedule
       .command("create")
       .description("Create a schedule")
-      .argument("<prompt>", "Prompt to run on the schedule")
+      .argument("<prompt>", "Agent prompt or Board task title")
+      .option("--board-task", "File a fog task on the Desk instead of starting an agent")
+      .option("--notes <text>", "Board task notes (requires --board-task)")
+      .option("--project <id>", "Board task project ID (requires --board-task)")
       .option("--every <duration>", "Cron-compatible cadence preset (for example: 5m, 1h)")
       .option("--cron <expr>", "Cron cadence expression")
       .option("--timezone <iana>", "IANA time zone for cron cadence (default: UTC)")

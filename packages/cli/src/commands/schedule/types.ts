@@ -13,6 +13,12 @@ export type ScheduleCadence =
 
 export type ScheduleTarget =
   | {
+      type: "board-task";
+      title: string;
+      notes?: string;
+      projectId?: string;
+    }
+  | {
       type: "self";
       agentId: string;
     }
@@ -40,6 +46,7 @@ export interface ScheduleRunRecord {
   endedAt: string | null;
   status: "running" | "succeeded" | "failed";
   agentId: string | null;
+  taskId?: string;
   output: string | null;
   error: string | null;
 }
@@ -159,7 +166,10 @@ export interface ScheduleUpdatePayload {
 
 export interface ScheduleDaemonClient {
   scheduleCreate(input: CreateScheduleInput): Promise<ScheduleCreatePayload>;
-  scheduleList(): Promise<ScheduleListPayload>;
+  scheduleList(
+    requestId?: string,
+    options?: { includeBoardTasks?: boolean },
+  ): Promise<ScheduleListPayload>;
   scheduleInspect(input: { id: string }): Promise<ScheduleInspectPayload>;
   scheduleLogs(input: { id: string }): Promise<ScheduleLogsPayload>;
   schedulePause(input: { id: string }): Promise<SchedulePausePayload>;

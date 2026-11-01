@@ -23,6 +23,13 @@ import {
 } from "./connection/index.js";
 import { CreationClient } from "./creation/index.js";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
+import type {
+  BoardDecision,
+  BoardDeskSettings,
+  BoardGoal,
+  BoardSnooze,
+  BoardTask,
+} from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { LocalSpeechModel } from "@getpaseo/protocol/speech/rpc-schemas";
@@ -873,6 +880,24 @@ export type WorkspaceLabelDeleteInspectPayload = Extract<
   SessionOutboundMessage,
   { type: "workspace.label.delete.inspect.response" }
 >["payload"];
+export type BoardTaskListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "board.task.list.response" }
+>["payload"];
+type BoardTaskCreateRequest = Extract<SessionInboundMessage, { type: "board.task.create.request" }>;
+export type BoardTaskCreateOptions = Omit<BoardTaskCreateRequest, "type" | "requestId">;
+type BoardTaskUpdateRequest = Extract<SessionInboundMessage, { type: "board.task.update.request" }>;
+export type BoardTaskUpdateOptions = Omit<BoardTaskUpdateRequest, "type" | "requestId">;
+type BoardTaskStartRequest = Extract<SessionInboundMessage, { type: "board.task.start.request" }>;
+export type BoardTaskStartOptions = Omit<BoardTaskStartRequest, "type" | "requestId">;
+type BoardGoalCreateRequest = Extract<SessionInboundMessage, { type: "board.goal.create.request" }>;
+export type BoardGoalCreateOptions = Omit<BoardGoalCreateRequest, "type" | "requestId">;
+type BoardGoalUpdateRequest = Extract<SessionInboundMessage, { type: "board.goal.update.request" }>;
+export type BoardGoalUpdateOptions = Omit<BoardGoalUpdateRequest, "type" | "requestId">;
+export type BoardTaskStartPayload = Extract<
+  SessionOutboundMessage,
+  { type: "board.task.start.response" }
+>["payload"];
 export type ProjectListPayload = Extract<
   SessionOutboundMessage,
   { type: "project.list.response" }
@@ -913,6 +938,12 @@ export interface CreateScheduleOptions {
           systemPrompt?: string;
           mcpServers?: AgentSessionConfig["mcpServers"];
         };
+      }
+    | {
+        type: "board-task";
+        title: string;
+        notes?: string;
+        projectId?: string;
       };
   maxRuns?: number;
   expiresAt?: string;
@@ -2958,6 +2989,124 @@ export class DaemonClient {
         name: options.name,
       },
     });
+  }
+
+  observeBoardTasks(options?: { signal?: AbortSignal }): OwnedSubscription<BoardTaskListPayload> {
+    return this.observe(
+      "board.task.list.response",
+      { type: "board.task.list.request", subscribe: {} },
+      options,
+    );
+  }
+
+  async createBoardTask(
+    options: BoardTaskCreateOptions & { requestId?: string },
+  ): Promise<BoardTask> {
+    const { requestId, ...fields } = options;
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"board.task.create.response">(
+      {
+        requestId,
+        message: { type: "board.task.create.request", ...fields },
+      },
+    );
+    return payload.task;
+  }
+
+  async updateBoardTask(
+    options: BoardTaskUpdateOptions & { requestId?: string },
+  ): Promise<BoardTask> {
+    const { requestId, ...fields } = options;
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"board.task.update.response">(
+      {
+        requestId,
+        message: { type: "board.task.update.request", ...fields },
+      },
+    );
+    return payload.task;
+  }
+
+  async deleteBoardTask(options: { taskId: string; requestId?: string }): Promise<void> {
+    await this.sendNamespacedCorrelatedSessionRequest<"board.task.delete.response">({
+      requestId: options.requestId,
+      message: { type: "board.task.delete.request", taskId: options.taskId },
+    });
+  }
+
+  startBoardTask(
+    options: BoardTaskStartOptions & { requestId?: string },
+  ): Promise<BoardTaskStartPayload> {
+    const { requestId, ...fields } = options;
+    return this.sendNamespacedCorrelatedSessionRequest<"board.task.start.response">({
+      requestId,
+      message: { type: "board.task.start.request", ...fields },
+    });
+  }
+
+  async createBoardGoal(
+    options: BoardGoalCreateOptions & { requestId?: string },
+  ): Promise<BoardGoal> {
+    const { requestId, ...fields } = options;
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"board.goal.create.response">(
+      { requestId, message: { type: "board.goal.create.request", ...fields } },
+    );
+    return payload.goal;
+  }
+
+  async updateBoardGoal(
+    options: BoardGoalUpdateOptions & { requestId?: string },
+  ): Promise<BoardGoal> {
+    const { requestId, ...fields } = options;
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"board.goal.update.response">(
+      { requestId, message: { type: "board.goal.update.request", ...fields } },
+    );
+    return payload.goal;
+  }
+
+  async deleteBoardGoal(options: { goalId: string; requestId?: string }): Promise<void> {
+    await this.sendNamespacedCorrelatedSessionRequest<"board.goal.delete.response">({
+      requestId: options.requestId,
+      message: { type: "board.goal.delete.request", goalId: options.goalId },
+    });
+  }
+
+  async resolveBoardDecision(options: {
+    decisionId: string;
+    choiceId: string;
+    note?: string;
+    requestId?: string;
+  }): Promise<BoardDecision> {
+    const { requestId, ...fields } = options;
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"board.decision.resolve.response">({
+        requestId,
+        message: { type: "board.decision.resolve.request", ...fields },
+      });
+    return payload.decision;
+  }
+
+  async setBoardSnooze(options: {
+    key: string;
+    until: string | null;
+    requestId?: string;
+  }): Promise<BoardSnooze[]> {
+    const { requestId, ...fields } = options;
+    const payload = await this.sendNamespacedCorrelatedSessionRequest<"board.snooze.set.response">({
+      requestId,
+      message: { type: "board.snooze.set.request", ...fields },
+    });
+    return payload.snoozes;
+  }
+
+  async setBoardDeskSettings(options: {
+    settings: BoardDeskSettings;
+    requestId?: string;
+  }): Promise<BoardDeskSettings> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"board.settings.set.response">({
+        requestId: options.requestId,
+        message: { type: "board.settings.set.request", settings: options.settings },
+      });
+    return payload.settings;
   }
 
   async listProjects(options?: string | ProjectListOptions): Promise<ProjectListPayload> {
@@ -6718,6 +6867,12 @@ export class DaemonClient {
   }
 
   async scheduleCreate(options: CreateScheduleOptions): Promise<ScheduleCreatePayload> {
+    if (
+      options.target.type === "board-task" &&
+      this.getLastServerInfoMessage()?.features?.boardTasks !== true
+    ) {
+      throw new Error("Update the host to file Board tasks from schedules");
+    }
     return this.sendCorrelatedSessionRequest({
       requestId: options.requestId,
       message: {
@@ -6734,11 +6889,15 @@ export class DaemonClient {
     });
   }
 
-  async scheduleList(requestId?: string): Promise<ScheduleListPayload> {
+  async scheduleList(
+    requestId?: string,
+    options?: { includeBoardTasks?: boolean },
+  ): Promise<ScheduleListPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
         type: "schedule/list",
+        ...(options?.includeBoardTasks ? { includeBoardTasks: true } : {}),
       },
       responseType: "schedule/list/response",
     });
@@ -6750,6 +6909,7 @@ export class DaemonClient {
       message: {
         type: "schedule/inspect",
         scheduleId: options.id,
+        includeBoardTasks: true,
       },
       responseType: "schedule/inspect/response",
     });
@@ -6772,6 +6932,7 @@ export class DaemonClient {
       message: {
         type: "schedule/pause",
         scheduleId: options.id,
+        includeBoardTasks: true,
       },
       responseType: "schedule/pause/response",
     });
@@ -6783,6 +6944,7 @@ export class DaemonClient {
       message: {
         type: "schedule/resume",
         scheduleId: options.id,
+        includeBoardTasks: true,
       },
       responseType: "schedule/resume/response",
     });
@@ -6805,6 +6967,7 @@ export class DaemonClient {
       message: {
         type: "schedule/run-once",
         scheduleId: options.id,
+        includeBoardTasks: true,
       },
       responseType: "schedule/run-once/response",
     });
@@ -6816,6 +6979,7 @@ export class DaemonClient {
       message: {
         type: "schedule/update",
         scheduleId: options.id,
+        includeBoardTasks: true,
         ...(options.name !== undefined ? { name: options.name } : {}),
         ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
         ...(options.cadence !== undefined ? { cadence: options.cadence } : {}),

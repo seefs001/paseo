@@ -1,5 +1,8 @@
 import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { memo, useCallback, type ReactElement } from "react";
+import type { AwaitingAgent } from "@/board/chat-desk";
+import type { BoardCard } from "@/board/columns";
+import { ChatAwaitingTrack, ChatTaskTrack } from "@/components/board/chat-desk-tracks";
 import { WorkspaceDiffStatPill } from "@/composer/diff-stat-pill";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import { AgentTaskList } from "@/composer/task-list";
@@ -41,6 +44,8 @@ export const AgentTracks = memo(function AgentTracks({
   archiveFinishedStatus,
   onArchiveFinished,
   hasPluginComposerPills,
+  deskTask,
+  awaitingAgents,
 }: {
   serverId: string;
   workspaceId: string;
@@ -51,6 +56,10 @@ export const AgentTracks = memo(function AgentTracks({
   archiveFinishedStatus: ArchiveFinishedStatus;
   onArchiveFinished: () => void;
   hasPluginComposerPills: boolean;
+  /** The Desk task this conversation's workspace is working on. */
+  deskTask: BoardCard | null;
+  /** Other agents waiting on the user. */
+  awaitingAgents: readonly AwaitingAgent[];
 }): ReactElement | null {
   const { tabId } = usePaneContext();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
@@ -120,6 +129,8 @@ export const AgentTracks = memo(function AgentTracks({
       tasks,
       archiveFinishedStatus,
       hasPluginComposerPills,
+      deskTask,
+      awaitingAgents,
     })
   ) {
     return null;
@@ -127,6 +138,9 @@ export const AgentTracks = memo(function AgentTracks({
 
   return (
     <ComposerTrackBar>
+      {/* What waits on the user elsewhere leads: it is the one pill that asks for action now. */}
+      {awaitingAgents.length > 0 ? <ChatAwaitingTrack awaiting={awaitingAgents} /> : null}
+      {deskTask ? <ChatTaskTrack card={deskTask} /> : null}
       {parentAgentId ? <ParentAgentPill serverId={serverId} parentAgentId={parentAgentId} /> : null}
       <AgentTaskList tasks={tasks} />
       <SubagentsTrack
@@ -161,14 +175,20 @@ export function hasAgentTracks({
   tasks,
   archiveFinishedStatus,
   hasPluginComposerPills = false,
+  deskTask = null,
+  awaitingAgents = [],
 }: {
   parentAgentId: string | null;
   subagentRows: readonly SubagentRow[];
   tasks: readonly TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
   hasPluginComposerPills?: boolean;
+  deskTask?: BoardCard | null;
+  awaitingAgents?: readonly AwaitingAgent[];
 }): boolean {
   return (
+    deskTask !== null ||
+    awaitingAgents.length > 0 ||
     parentAgentId !== null ||
     subagentRows.length > 0 ||
     Boolean(tasks?.length) ||

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { MessageSquarePlus, PanelRightOpen } from "lucide-react-native";
+import { ListPlus, MessageSquarePlus, PanelRightOpen } from "lucide-react-native";
 import { SelectionToolbar, type SelectionToolbarAction } from "@/components/selection-toolbar.web";
 import { readChatTextSelection, type AnchoredChatTextSelection } from "./selection.web";
 import type { ChatSelectionActions } from "./types";
@@ -16,8 +16,8 @@ export function ChatSelectionToolbar({ rootRef, actions }: ChatSelectionToolbarP
     () => (rootRef.current ? readChatTextSelection(rootRef.current) : null),
     [rootRef],
   );
-  const toolbarActions = useMemo<SelectionToolbarAction<AnchoredChatTextSelection>[]>(
-    () => [
+  const toolbarActions = useMemo<SelectionToolbarAction<AnchoredChatTextSelection>[]>(() => {
+    const items: SelectionToolbarAction<AnchoredChatTextSelection>[] = [
       {
         id: "chat-selection-add",
         label: t("message.selection.addToChat"),
@@ -30,9 +30,17 @@ export function ChatSelectionToolbar({ rootRef, actions }: ChatSelectionToolbarP
         icon: PanelRightOpen,
         onSelect: actions.askInSideConversation,
       },
-    ],
-    [actions, t],
-  );
+    ];
+    if (actions.addToBoard) {
+      items.push({
+        id: "chat-selection-board",
+        label: t("board.capture.addToBoard"),
+        icon: ListPlus,
+        onSelect: actions.addToBoard,
+      });
+    }
+    return items;
+  }, [actions, t]);
   return (
     <SelectionToolbar
       readSelection={readSelection}

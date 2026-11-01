@@ -4,6 +4,7 @@ import type {
 } from "@getpaseo/client/internal/daemon-client";
 import type { AgentSnapshotPayload, CreationSnapshot } from "@getpaseo/protocol/messages";
 import { encodeImages } from "@/utils/encode-images";
+import { linkBoardTaskWorkspace } from "@/board/start";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -173,6 +174,7 @@ interface NewWorkspaceScreenProps {
   projectId?: string;
   displayName?: string;
   draftId?: string;
+  boardTaskId?: string;
 }
 
 // A terminal launch sends argv, not a message: there is nothing to attach and
@@ -864,6 +866,7 @@ export function NewWorkspaceScreen({
   projectId,
   displayName: displayNameProp,
   draftId,
+  boardTaskId,
 }: NewWorkspaceScreenProps) {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -1280,9 +1283,22 @@ export function NewWorkspaceScreen({
         createFailedMessage: t("newWorkspace.errors.createWorktreeFailed"),
       });
       setCreationResult(normalizedWorkspace);
+      if (boardTaskId) {
+        // Board tasks are host-local; a workspace on another host cannot be linked.
+        if (selectedServerId === serverId) {
+          linkBoardTaskWorkspace({
+            serverId,
+            taskId: boardTaskId,
+            workspaceId: normalizedWorkspace.workspace.id,
+          }).catch(() => toast.error(t("board.errors.linkFailed")));
+        } else {
+          toast.error(t("board.errors.linkOtherHost"));
+        }
+      }
       return normalizedWorkspace;
     },
     [
+      boardTaskId,
       creationIdentity,
       creationResult,
       effectiveIsolation,
@@ -1292,8 +1308,10 @@ export function NewWorkspaceScreen({
       selectedProject,
       selectedServerId,
       selectedSourceDirectory,
+      serverId,
       supportsWorkspaceMultiplicity,
       t,
+      toast,
       withConnectedClient,
     ],
   );

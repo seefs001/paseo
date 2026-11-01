@@ -6,7 +6,7 @@ import type {
   AgentSessionConfig,
 } from "@getpaseo/protocol/agent-types";
 import type { PaseoApi } from "@getpaseo/client";
-import type { WorkspaceCreateRequest } from "@getpaseo/protocol/messages";
+import type { BoardTask, WorkspaceCreateRequest } from "@getpaseo/protocol/messages";
 
 export interface PluginHookContext {
   paseo: PaseoApi;
@@ -112,6 +112,9 @@ export interface PluginHookEvents {
   "agent.close.after": { agent: PluginHookAgent };
   "workspace.create.after": { workspace: PluginHookWorkspace };
   "workspace.archive.after": { workspace: PluginHookWorkspace };
+  "board.task.create.after": { task: BoardTask };
+  "board.task.update.after": { previous: BoardTask; next: BoardTask };
+  "board.task.delete.after": { task: BoardTask };
 }
 
 export interface PluginHookRequests {
@@ -175,6 +178,9 @@ export const pluginHookRegistry = {
   "workspace.create.before": { waits: true },
   "workspace.create.after": { waits: false },
   "workspace.archive.after": { waits: false },
+  "board.task.create.after": { waits: false },
+  "board.task.update.after": { waits: false },
+  "board.task.delete.after": { waits: false },
   "worktree.create.before": { waits: true },
   "worktree.create.after": { waits: true },
   "agent.create.before": { waits: true },

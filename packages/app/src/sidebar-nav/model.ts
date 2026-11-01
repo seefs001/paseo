@@ -8,7 +8,7 @@ export type SidebarSection = PluginSidebarSection;
  * (Add project and the Hosts, Help and support, Settings icons) is fixed.
  */
 export const BUILTIN_SIDEBAR_ITEM_IDS = {
-  header: ["new-workspace", "history", "search", "schedules", "mcp-calls"],
+  header: ["new-workspace", "board", "history", "search", "schedules", "mcp-calls"],
   footer: ["usage"],
 } as const satisfies Record<SidebarSection, readonly string[]>;
 
@@ -42,6 +42,7 @@ export type SidebarNavItem<Section extends SidebarSection = SidebarSection> =
 
 const BUILTIN_LABEL_KEYS: Record<BuiltinSidebarItemId, string> = {
   "new-workspace": "sidebar.actions.newWorkspace",
+  board: "sidebar.sections.board",
   history: "sidebar.sections.sessions",
   search: "sidebar.sections.search",
   schedules: "sidebar.sections.schedules",
@@ -60,6 +61,7 @@ export function builtinSidebarNavLabelKey(id: BuiltinSidebarItemId): string {
  */
 const BUILTIN_SHORTCUT_ACTIONS: Record<BuiltinSidebarItemId, string | null> = {
   "new-workspace": "new-workspace",
+  board: null,
   history: null,
   search: "toggle-command-center",
   schedules: null,
@@ -135,11 +137,10 @@ export function resolveSidebarNavItems<Section extends SidebarSection>(input: {
     if (placed.has(key)) continue;
     items.push({ kind: "plugin", key, group, visible: true });
   }
-  if (
-    input.section === "header" &&
-    !input.preferences.some((preference) => preference.key === "mcp-calls")
-  ) {
-    placeBuiltinAfter(items, "mcp-calls", "schedules");
+  if (input.section === "header") {
+    const storedKeys = new Set(input.preferences.map((preference) => preference.key));
+    if (!storedKeys.has("mcp-calls")) placeBuiltinAfter(items, "mcp-calls", "schedules");
+    if (!storedKeys.has("board")) placeBuiltinAfter(items, "board", "new-workspace");
   }
   return items;
 }
