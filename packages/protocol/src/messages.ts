@@ -3626,6 +3626,17 @@ export const HubExecutionControlRequestSchema = z.object({
 
 export type HubExecutionControlRequest = z.infer<typeof HubExecutionControlRequestSchema>;
 
+// Hub reads a file from an agent's working directory to attach it to a provider reply.
+export const HubAgentFileReadRequestSchema = z.object({
+  type: z.literal("hub.agent.file.read.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  path: z.string(),
+  maxBytes: z.number().int().positive(),
+});
+
+export type HubAgentFileReadRequest = z.infer<typeof HubAgentFileReadRequestSchema>;
+
 // These connection event streams have no directory bootstrap or timeline membership.
 export const SessionEventSubscriptionSchema = z.enum([
   "project.update",
@@ -3697,6 +3708,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HubExecutionAgentCreateRequestSchema,
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
+  HubAgentFileReadRequestSchema,
   BrowserAutomationExecuteResponseSchema,
   VoiceAudioChunkMessageSchema,
   AbortRequestMessageSchema,
@@ -4098,6 +4110,7 @@ export const ServerInfoStatusPayloadSchema = z
         agentSideConversation: z.boolean().optional(),
         // COMPAT(hubAgentRpc): added in v0.8.0; remove gate after 2027-03-05.
         hubAgentRpc: z.boolean().optional(),
+        hubAgentFileRead: z.boolean().optional(),
         // COMPAT(internalAgents): added in v0.9.0; remove gate after 2027-03-17.
         internalAgents: z.boolean().optional(),
         // COMPAT(internalWorkspaces): added in v0.9.0; remove gate after 2027-03-17.
@@ -7320,6 +7333,25 @@ export const HubExecutionAgentStreamSchema = z.object({
   }),
 });
 
+export const HubAgentFileReadResponseSchema = z.object({
+  type: z.literal("hub.agent.file.read.response"),
+  payload: z.object({
+    requestId: z.string(),
+    file: z
+      .object({
+        path: z.string(),
+        fileName: z.string(),
+        mimeType: z.string(),
+        size: z.number().int().nonnegative(),
+        contentBase64: z.string(),
+      })
+      .nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type HubAgentFileReadResponse = z.infer<typeof HubAgentFileReadResponseSchema>;
+
 export type HubExecutionAgentCreateResponse = z.infer<typeof HubExecutionAgentCreateResponseSchema>;
 export type HubExecutionAgentValidateResponse = z.infer<
   typeof HubExecutionAgentValidateResponseSchema
@@ -7588,6 +7620,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   HubExecutionControlResponseSchema,
   HubExecutionAgentUpdateSchema,
   HubExecutionAgentStreamSchema,
+  HubAgentFileReadResponseSchema,
   BrowserAutomationExecuteRequestSchema,
   PluginCatalogGetResponseSchema,
   PluginListResponseSchema,

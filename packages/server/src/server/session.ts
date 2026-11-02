@@ -193,6 +193,7 @@ import { saveDaemonPassword } from "./daemon-password.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
 import { HubExecutionController } from "./hub/execution-controller.js";
+import { readHubAgentFile } from "./hub/agent-files.js";
 import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import type { PushNotifications } from "./push/index.js";
@@ -2898,7 +2899,29 @@ export class Session {
     if (msg.type === "hub.execution.control.request") {
       return this.hubExecutionController?.controlExecution(msg);
     }
+    if (msg.type === "hub.agent.file.read.request") {
+      return this.handleHubAgentFileRead(msg);
+    }
     return undefined;
+  }
+
+  private async handleHubAgentFileRead(
+    msg: Extract<SessionInboundMessage, { type: "hub.agent.file.read.request" }>,
+  ): Promise<void> {
+    let file: Awaited<ReturnType<typeof readHubAgentFile>> | null = null;
+    let error: string | null = null;
+    try {
+      const agent =
+        this.agentManager.getAgent(msg.agentId) ?? (await this.agentStorage.get(msg.agentId));
+      if (!agent) throw new Error(`Agent ${msg.agentId} not found`);
+      file = await readHubAgentFile({ cwd: agent.cwd, path: msg.path, maxBytes: msg.maxBytes });
+    } catch (readError) {
+      error = getErrorMessage(readError);
+    }
+    this.emit({
+      type: "hub.agent.file.read.response",
+      payload: { requestId: msg.requestId, file, error },
+    });
   }
 
   private dispatchCreationMessage(
