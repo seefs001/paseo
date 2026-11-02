@@ -61,12 +61,17 @@ function getTextAttachmentSubtitle(
   if (attachment.contextKind === "agent_profile") {
     return t("message.attachments.agentProfile");
   }
+  if (attachment.contextKind === "agent_role") {
+    return t("message.attachments.agentRole");
+  }
   return t("message.attachments.text");
 }
 
 function getTextAttachmentIcon(attachment: Extract<AgentAttachment, { type: "text" }>): ReactNode {
   const isAgentMention =
-    attachment.contextKind === "agent_session" || attachment.contextKind === "agent_profile";
+    attachment.contextKind === "agent_session" ||
+    attachment.contextKind === "agent_profile" ||
+    attachment.contextKind === "agent_role";
   if (isAgentMention) {
     return attachmentAgentSessionIcon;
   }

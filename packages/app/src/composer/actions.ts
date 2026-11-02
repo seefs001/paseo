@@ -361,7 +361,8 @@ export function openComposerAttachment(input: OpenComposerAttachmentInput): void
     input.attachment.kind === "workspace_file" ||
     input.attachment.kind === "chat_quote" ||
     input.attachment.kind === "profile_reference" ||
-    input.attachment.kind === "session_reference"
+    input.attachment.kind === "session_reference" ||
+    input.attachment.kind === "role_reference"
   ) {
     return;
   }

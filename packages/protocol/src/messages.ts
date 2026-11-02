@@ -1250,6 +1250,7 @@ export const TextAttachmentSchema = z
     ...(contextKind === "chat_history" ||
     contextKind === "agent_session" ||
     contextKind === "agent_profile" ||
+    contextKind === "agent_role" ||
     contextKind === "chat_quote"
       ? { contextKind }
       : {}),

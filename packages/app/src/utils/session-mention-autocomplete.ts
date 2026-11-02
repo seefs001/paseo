@@ -81,6 +81,8 @@ export function mentionOptionGroups(kind: ComposerMentionKind): {
 
 // `#` opens agent profiles only at a word boundary, and never for `#123` issue references.
 const PROFILE_MENTION = /(?:^|[\s(（，。：；！？])#([^\s#/\\()[\]{}'"`<>]*)$/u;
+// `%` opens agent roles under the same boundary rule, so `50%` and `%20` never open it.
+const ROLE_MENTION = /(?:^|[\s(（，。：；！？])%([^\s%/\\()[\]{}'"`<>]*)$/u;
 
 export function findActiveProfileMention(input: {
   text: string;
@@ -88,6 +90,16 @@ export function findActiveProfileMention(input: {
 }): SessionMentionRange | null {
   const cursor = Math.max(0, Math.min(input.cursorIndex, input.text.length));
   const match = PROFILE_MENTION.exec(input.text.slice(0, cursor));
+  if (!match || /^\d/.test(match[1])) return null;
+  return { start: cursor - match[1].length - 1, end: cursor, query: match[1] };
+}
+
+export function findActiveRoleMention(input: {
+  text: string;
+  cursorIndex: number;
+}): SessionMentionRange | null {
+  const cursor = Math.max(0, Math.min(input.cursorIndex, input.text.length));
+  const match = ROLE_MENTION.exec(input.text.slice(0, cursor));
   if (!match || /^\d/.test(match[1])) return null;
   return { start: cursor - match[1].length - 1, end: cursor, query: match[1] };
 }
@@ -168,6 +180,39 @@ export function buildAgentProfileAddressCard(input: AgentProfileMention): string
   lines.push(
     "",
     "Copy provider, model, modeId, thinkingOptionId, and featureValues into create_agent. There is no profile parameter. Do not guess these values from the name.",
+  );
+  return lines.join("\n");
+}
+
+export interface AgentRoleMention {
+  id: string;
+  name: string;
+  description?: string | null;
+  defaultProfileId?: string | null;
+}
+
+export function rankAgentRoleMentions<T extends AgentRoleMention>(input: {
+  roles: readonly T[];
+  query: string;
+}): T[] {
+  const query = input.query.trim().toLowerCase();
+  if (!query) return [...input.roles];
+  return input.roles.filter((role) =>
+    [role.name, role.id, role.description ?? ""].join(" ").toLowerCase().includes(query),
+  );
+}
+
+// The role's instructions stay out of the card: the daemon reads them by id when the agent is
+// created, and an agent that reads them here may take them as instructions for itself.
+export function buildAgentRoleAddressCard(input: AgentRoleMention): string {
+  const lines = ["Referenced agent role", `- roleId: ${input.id}`, `- name: ${input.name}`];
+  if (input.description?.trim()) lines.push(`- description: ${input.description.trim()}`);
+  if (input.defaultProfileId?.trim()) {
+    lines.push(`- defaultProfileId: ${input.defaultProfileId.trim()}`);
+  }
+  lines.push(
+    "",
+    "Pass roleId as `role` to create_agent. The daemon writes the role's instructions into the new agent's system prompt. A role does not choose a model: still pass provider and model. Only providers with supportsSystemPrompt in list_providers accept a role. Call list_roles if the id is not found. Do not guess the id from the name.",
   );
   return lines.join("\n");
 }

@@ -25,6 +25,10 @@ import {
   type ProfileReferenceSelection,
 } from "@/composer/profile-reference/use-autocomplete";
 import {
+  useRoleReferenceAutocomplete,
+  type RoleReferenceSelection,
+} from "@/composer/profile-reference/use-role-autocomplete";
+import {
   sessionReferenceLabel,
   type ProfileReferenceRange,
   type SessionReferenceSource,
@@ -68,7 +72,9 @@ export interface UseAgentAutocompleteInput {
   onSessionReferenceSelected?: (selection: SessionReferenceSelection) => void;
   /** Enables `#` agent profile references; the composer owns the draft update. */
   onProfileReferenceSelected?: (selection: ProfileReferenceSelection) => void;
-  /** Bound reference intervals; `#` or `@` inside one does not reopen the picker. */
+  /** Enables `%` agent role references; the composer owns the draft update. */
+  onRoleReferenceSelected?: (selection: RoleReferenceSelection) => void;
+  /** Bound reference intervals; `#`, `%` or `@` inside one does not reopen the picker. */
   boundReferenceRanges?: readonly ProfileReferenceRange[];
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
@@ -789,6 +795,7 @@ function resolveDraftCommandContext(draft: DraftCommandTarget | undefined) {
 export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAutocompleteResult {
   const skills = useSkillAutocomplete(input);
   const profileReferences = useProfileReferenceAutocomplete(input);
+  const roleReferences = useRoleReferenceAutocomplete(input);
   const { t } = useTranslation();
   const {
     userInput,
@@ -1027,6 +1034,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
   if (skills.isActive) return skills;
   if (profileReferences.isActive) return profileReferences;
+  if (roleReferences.isActive) return roleReferences;
 
   return {
     isVisible,

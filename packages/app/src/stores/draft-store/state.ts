@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   isTextReference,
   ProfileReferenceSchema,
+  RoleReferenceSchema,
   SessionReferenceSchema,
   updateProfileReferences,
 } from "@/composer/profile-reference/model";
@@ -107,6 +108,7 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
   [
     ProfileReferenceSchema,
     SessionReferenceSchema,
+    RoleReferenceSchema,
     z.strictObject({
       kind: z.literal("chat_quote"),
       id: z.string(),

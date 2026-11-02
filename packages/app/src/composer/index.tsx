@@ -144,6 +144,7 @@ import {
   findTextReferenceAt,
   getProfileReferenceHighlights,
   insertProfileReference,
+  insertRoleReference,
   insertSessionReference,
   isTextReference,
   textReferenceToAgentAttachment,
@@ -152,6 +153,7 @@ import {
   type TextReference,
 } from "@/composer/profile-reference/model";
 import type { ProfileReferenceSelection } from "@/composer/profile-reference/use-autocomplete";
+import type { RoleReferenceSelection } from "@/composer/profile-reference/use-role-autocomplete";
 import type { SessionReferenceSelection } from "@/hooks/use-agent-autocomplete";
 import { getAgentMentionDetail } from "@/attachments/agent-mention-detail";
 import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
@@ -1638,6 +1640,22 @@ function ComposerContentImpl({
     [alignProfileReferences, onReplaceInput, serverId],
   );
 
+  const handleRoleReferenceSelected = useCallback(
+    ({ text, mention, role }: RoleReferenceSelection) => {
+      if (!onReplaceInput) return;
+      onReplaceInput(
+        insertRoleReference({
+          text,
+          attachments: alignProfileReferences([text]),
+          mention,
+          role,
+          serverId,
+        }),
+      );
+    },
+    [alignProfileReferences, onReplaceInput, serverId],
+  );
+
   const handleSessionReferenceSelected = useCallback(
     ({ text, mention, session }: SessionReferenceSelection) => {
       if (!onReplaceInput) return;
@@ -2678,6 +2696,7 @@ function ComposerContentImpl({
       onCustomCommandSelected: handleCustomCommandSelected,
       onSessionReferenceSelected: onReplaceInput ? handleSessionReferenceSelected : undefined,
       onProfileReferenceSelected: onReplaceInput ? handleProfileReferenceSelected : undefined,
+      onRoleReferenceSelected: onReplaceInput ? handleRoleReferenceSelected : undefined,
       boundReferenceRanges: profileReferenceHighlights,
       pluginClientSlashCommands,
     }),
@@ -2695,6 +2714,7 @@ function ComposerContentImpl({
       onReplaceInput,
       handleSessionReferenceSelected,
       handleProfileReferenceSelected,
+      handleRoleReferenceSelected,
       profileReferenceHighlights,
       pluginClientSlashCommands,
     ],

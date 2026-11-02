@@ -55,11 +55,7 @@ function ProfileReferenceText({ reference, label, onOpenMention }: ProfileRefere
       style={styles.reference}
       onPress={handlePress}
       accessibilityRole="button"
-      testID={
-        reference.kind === "profile_reference"
-          ? "user-message-profile-reference"
-          : "user-message-session-reference"
-      }
+      testID={`user-message-${reference.kind.replace("_reference", "")}-reference`}
     >
       {label}
     </Text>

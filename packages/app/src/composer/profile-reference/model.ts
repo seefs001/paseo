@@ -1,11 +1,14 @@
 import {
   AgentProfileSchema,
+  AgentRoleSnapshotSchema,
   type AgentAttachment,
   type AgentProfile,
+  type AgentRole,
 } from "@getpaseo/protocol/messages";
 import type { ComposerAttachment, UserComposerAttachment } from "@/attachments/types";
 import {
   buildAgentProfileAddressCard,
+  buildAgentRoleAddressCard,
   buildAgentSessionAddressCard,
 } from "@/utils/session-mention-autocomplete";
 import { z } from "zod";
@@ -34,7 +37,24 @@ export const SessionReferenceSchema = z.object({
   end: z.number().int().nonnegative(),
 });
 export type SessionReference = z.infer<typeof SessionReferenceSchema>;
-export type TextReference = ProfileReference | SessionReference;
+
+/** What a `%` reference keeps of a role: enough to name it and to address it in create_agent. */
+const RoleReferenceSnapshotSchema = AgentRoleSnapshotSchema.extend({
+  description: z.string().optional(),
+  defaultProfileId: z.string().optional(),
+});
+export type RoleReferenceSnapshot = z.infer<typeof RoleReferenceSnapshotSchema>;
+
+export const RoleReferenceSchema = z.object({
+  kind: z.literal("role_reference"),
+  id: z.string(),
+  serverId: z.string(),
+  role: RoleReferenceSnapshotSchema,
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+});
+export type RoleReference = z.infer<typeof RoleReferenceSchema>;
+export type TextReference = ProfileReference | SessionReference | RoleReference;
 
 const ProfileLinkPayloadSchema = z.object({ serverId: z.string(), profile: AgentProfileSchema });
 const SessionLinkPayloadSchema = SessionReferenceSchema.omit({
@@ -43,7 +63,8 @@ const SessionLinkPayloadSchema = SessionReferenceSchema.omit({
   start: true,
   end: true,
 });
-const TEXT_REFERENCE_LINK = /\[((?:\\.|[^\]\\])*)\]\(paseo-(profile|session):([^\s)]+)\)/g;
+const RoleLinkPayloadSchema = z.object({ serverId: z.string(), role: RoleReferenceSnapshotSchema });
+const TEXT_REFERENCE_LINK = /\[((?:\\.|[^\]\\])*)\]\(paseo-(profile|session|role):([^\s)]+)\)/g;
 
 export interface ProfileReferenceRange {
   start: number;
@@ -86,14 +107,27 @@ export function sessionReferenceLabel(
   return `@${title}`;
 }
 
+export function roleReferenceLabel(role: Pick<AgentRole, "name" | "id">): string {
+  return `%${role.name.trim() || role.id}`;
+}
+
 export function isTextReference(attachment: { kind: string }): attachment is TextReference {
-  return attachment.kind === "profile_reference" || attachment.kind === "session_reference";
+  return (
+    attachment.kind === "profile_reference" ||
+    attachment.kind === "session_reference" ||
+    attachment.kind === "role_reference"
+  );
 }
 
 export function textReferenceLabel(reference: TextReference): string {
-  return reference.kind === "profile_reference"
-    ? profileReferenceLabel(reference.profile)
-    : sessionReferenceLabel(reference);
+  switch (reference.kind) {
+    case "profile_reference":
+      return profileReferenceLabel(reference.profile);
+    case "session_reference":
+      return sessionReferenceLabel(reference);
+    case "role_reference":
+      return roleReferenceLabel(reference.role);
+  }
 }
 
 export function isValidProfileReference(input: {
@@ -288,6 +322,49 @@ export function insertSessionReference(input: {
   });
 }
 
+export function insertRoleReference(input: {
+  text: string;
+  attachments: readonly UserComposerAttachment[];
+  mention: ProfileReferenceRange;
+  role: AgentRole;
+  serverId: string;
+}): {
+  text: string;
+  attachments: UserComposerAttachment[];
+  selection: ProfileReferenceRange;
+} {
+  const role = RoleReferenceSnapshotSchema.parse({
+    id: input.role.id,
+    name: input.role.name,
+    icon: input.role.icon,
+    color: input.role.color,
+    description: input.role.description,
+    defaultProfileId: input.role.defaultProfileId,
+  });
+  const label = roleReferenceLabel(role);
+  const after = input.text.slice(input.mention.end);
+  const separator = after.length === 0 || !/^\s/.test(after) ? " " : "";
+  const text = `${input.text.slice(0, input.mention.start)}${label}${separator}${after}`;
+  const end = input.mention.start + label.length;
+  const reference: RoleReference = {
+    kind: "role_reference",
+    id: `role:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`,
+    serverId: input.serverId,
+    role,
+    start: input.mention.start,
+    end,
+  };
+  return finishReferenceInsert({
+    previousText: input.text,
+    text,
+    attachments: input.attachments,
+    mention: input.mention,
+    reference,
+    end,
+    separator,
+  });
+}
+
 function finishReferenceInsert(input: {
   previousText: string;
   text: string;
@@ -357,6 +434,12 @@ function encodeLinkPayload(payload: unknown): string {
 }
 
 function referenceLink(reference: TextReference, label: string): string {
+  if (reference.kind === "role_reference") {
+    return `[${label}](paseo-role:${encodeLinkPayload({
+      serverId: reference.serverId,
+      role: reference.role,
+    })})`;
+  }
   if (reference.kind === "profile_reference") {
     return `[${label}](paseo-profile:${encodeLinkPayload({
       serverId: reference.serverId,
@@ -404,6 +487,17 @@ function decodeMatchedReference(
   start: number,
 ): TextReference | null {
   const payload = decodeLinkPayload(payloadText);
+  if (kind === "role") {
+    const parsed = RoleLinkPayloadSchema.safeParse(payload);
+    if (!parsed.success || label !== roleReferenceLabel(parsed.data.role)) return null;
+    return {
+      kind: "role_reference",
+      id: `role:${parsed.data.serverId}:${parsed.data.role.id}:${start}`,
+      ...parsed.data,
+      start,
+      end: start + label.length,
+    };
+  }
   if (kind === "profile") {
     const parsed = ProfileLinkPayloadSchema.safeParse(payload);
     if (!parsed.success || label !== profileReferenceLabel(parsed.data.profile)) return null;
@@ -474,6 +568,15 @@ export function textReferenceToAgentAttachment(
   reference: TextReference,
 ): Extract<AgentAttachment, { type: "text" }> {
   if (reference.kind === "profile_reference") return profileReferenceToAgentAttachment(reference);
+  if (reference.kind === "role_reference") {
+    return {
+      type: "text",
+      mimeType: "text/plain",
+      contextKind: "agent_role",
+      title: reference.role.name,
+      text: buildAgentRoleAddressCard(reference.role),
+    };
+  }
   return {
     type: "text",
     mimeType: "text/plain",
