@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
@@ -6,25 +6,24 @@ import { UserRound } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { AgentRole } from "@getpaseo/protocol/messages";
 import { AgentProfileGlyph, useAgentProfiles } from "@/agent-profiles";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuHint,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
+import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { useAgentRoles } from "../internal/use-agent-roles";
-import type { MenuTriggerState } from "@/components/ui/menu";
 
 const ThemedUserRound = withUnistyles(UserRound);
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
+
+// The picker's "no role" row. Created roles get `agent_role_…` ids and built-ins use plain words.
+const NO_ROLE_OPTION_ID = "__no-role__";
+// Matches the other composer pickers: a short list reads faster without a search field.
+const SEARCH_THRESHOLD = 6;
 
 export interface DraftAgentRoleControlProps {
   serverId: string | null;
@@ -65,42 +64,50 @@ function DraftRoleGlyph({
   return <ThemedUserRound size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 }
 
-function RoleMenuItem({
+function RoleOption({
+  option,
   role,
-  selected,
   profileName,
-  onSelect,
+  selected,
+  active,
+  onPress,
 }: {
-  role: AgentRole;
-  selected: boolean;
+  option: ComboboxOption;
+  role: AgentRole | null;
   profileName: string;
-  onSelect: (roleId: string) => void;
+  selected: boolean;
+  active: boolean;
+  onPress: () => void;
 }): ReactElement {
-  const handleSelect = useCallback(() => onSelect(role.id), [onSelect, role.id]);
   const leading = useMemo(
-    () => <AgentProfileGlyph icon={role.icon} color={role.color} size={ICON_SIZE.sm} />,
-    [role.color, role.icon],
+    () =>
+      role ? (
+        <AgentProfileGlyph icon={role.icon} color={role.color} size={ICON_SIZE.sm} />
+      ) : (
+        <ThemedUserRound size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
+      ),
+    [role],
   );
   const trailing = useMemo(
     () =>
       profileName ? (
-        <Text style={styles.menuTrailing} numberOfLines={1}>
+        <Text style={styles.optionTrailing} numberOfLines={1}>
           {profileName}
         </Text>
       ) : null,
     [profileName],
   );
   return (
-    <DropdownMenuItem
-      testID={`draft-role-option-${role.id}`}
-      onSelect={handleSelect}
+    <ComboboxItem
+      testID={`draft-role-option-${role ? role.id : "none"}`}
+      label={option.label}
+      description={option.description}
       selected={selected}
-      leading={leading}
-      trailing={trailing}
-      {...(role.description ? { description: role.description } : {})}
-    >
-      {role.name}
-    </DropdownMenuItem>
+      active={active}
+      onPress={onPress}
+      leadingSlot={leading}
+      trailingSlot={trailing}
+    />
   );
 }
 
@@ -120,6 +127,7 @@ export function DraftAgentRoleControl({
 }: DraftAgentRoleControlProps): ReactElement | null {
   const { t } = useTranslation();
   const router = useRouter();
+  const anchorRef = useRef<View>(null);
   const [open, setOpen] = useState(false);
   const { roles, isSupported } = useAgentRoles(serverId);
   const { profiles } = useAgentProfiles(serverId);
@@ -133,32 +141,98 @@ export function DraftAgentRoleControl({
     () => new Map((profiles ?? []).map((profile) => [profile.id, profile.name])),
     [profiles],
   );
+  const rolesById = useMemo(() => new Map((roles ?? []).map((role) => [role.id, role])), [roles]);
   const isBlocked = selectedRoleId !== null && providerTakesRole === false;
 
-  const handleSelectRole = useCallback(
-    (roleId: string) => {
-      onSelectRole(roleId);
-      const role = roles?.find((entry) => entry.id === roleId);
+  const options = useMemo<ComboboxOption[]>(
+    () => [
+      { id: NO_ROLE_OPTION_ID, label: t("agentControls.role.none") },
+      ...(roles ?? []).map((role) => ({
+        id: role.id,
+        label: role.name,
+        description: role.description,
+      })),
+    ],
+    [roles, t],
+  );
+
+  const handleSelect = useCallback(
+    (optionId: string) => {
+      if (optionId === NO_ROLE_OPTION_ID) {
+        onSelectRole(null);
+        return;
+      }
+      onSelectRole(optionId);
+      const role = rolesById.get(optionId);
       if (role?.defaultProfileId && profileNames.has(role.defaultProfileId)) {
         onApplyProfile?.(role.defaultProfileId);
       }
     },
-    [onApplyProfile, onSelectRole, profileNames, roles],
+    [onApplyProfile, onSelectRole, profileNames, rolesById],
   );
-  const handleClearRole = useCallback(() => onSelectRole(null), [onSelectRole]);
+  const handlePress = useCallback(() => setOpen((current) => !current), []);
   const openRoleSettings = useCallback(() => {
+    setOpen(false);
     if (serverId) router.push(buildSettingsHostSectionRoute(serverId, "agents"));
   }, [router, serverId]);
 
+  const renderOption = useCallback(
+    ({
+      option,
+      selected,
+      active,
+      onPress,
+    }: {
+      option: ComboboxOption;
+      selected: boolean;
+      active: boolean;
+      onPress: () => void;
+    }): ReactElement => {
+      const role = rolesById.get(option.id) ?? null;
+      const profileName = role?.defaultProfileId
+        ? (profileNames.get(role.defaultProfileId) ?? "")
+        : "";
+      return (
+        <RoleOption
+          option={option}
+          role={role}
+          profileName={profileName}
+          selected={selected}
+          active={active}
+          onPress={onPress}
+        />
+      );
+    },
+    [profileNames, rolesById],
+  );
+
+  const stickyHeader = useMemo(
+    () =>
+      isBlocked ? (
+        <Text style={styles.blockedHint} testID="draft-role-unsupported-hint">
+          {t("agentControls.role.unsupportedProvider")}
+        </Text>
+      ) : null,
+    [isBlocked, t],
+  );
+  const footer = useMemo(
+    () => (
+      <Button variant="ghost" size="sm" onPress={openRoleSettings} testID="draft-role-manage">
+        {t("agentControls.role.manage")}
+      </Button>
+    ),
+    [openRoleSettings, t],
+  );
+
   const triggerStyle = useCallback(
-    ({ hovered, pressed, open: isOpen }: MenuTriggerState) => [
+    ({ hovered, pressed }: { hovered: boolean; pressed: boolean }) => [
       styles.trigger,
       !(showLabel && selectedRoleId) && styles.triggerIconOnly,
       hovered && styles.triggerHovered,
-      (pressed || isOpen) && styles.triggerPressed,
+      (pressed || open) && styles.triggerPressed,
       disabled && styles.triggerDisabled,
     ],
-    [disabled, selectedRoleId, showLabel],
+    [disabled, open, selectedRoleId, showLabel],
   );
 
   if (!isSupported || !serverId || roles === null) return null;
@@ -169,13 +243,17 @@ export function DraftAgentRoleControl({
   else if (selectedRoleId) tooltip = t("agentControls.role.selectedTooltip", { name: roleName });
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} compactMode="sheet">
+    <>
       <Tooltip delayDuration={0} enabledOnDesktop={!open} enabledOnMobile={false}>
         <TooltipTrigger asChild>
           <View style={styles.triggerWrapper}>
-            <DropdownMenuTrigger
+            <ComboboxTrigger
+              ref={anchorRef}
+              collapsable={false}
+              chevron={null}
               testID="draft-role-trigger"
               disabled={disabled}
+              onPress={handlePress}
               style={triggerStyle}
               accessibilityRole="button"
               accessibilityLabel={tooltip}
@@ -195,51 +273,29 @@ export function DraftAgentRoleControl({
                   {roleName}
                 </Text>
               ) : null}
-            </DropdownMenuTrigger>
+            </ComboboxTrigger>
           </View>
         </TooltipTrigger>
         <TooltipContent side="top" align="center" offset={8}>
           <Text style={styles.tooltipText}>{tooltip}</Text>
         </TooltipContent>
       </Tooltip>
-      <DropdownMenuContent
-        side="top"
-        align="start"
-        offset={8}
-        width={320}
-        sheetTitle={t("agentControls.role.title")}
-        testID="draft-role-menu"
-      >
-        {isBlocked ? (
-          <DropdownMenuHint testID="draft-role-unsupported-hint">
-            {t("agentControls.role.unsupportedProvider")}
-          </DropdownMenuHint>
-        ) : null}
-        <DropdownMenuItem
-          testID="draft-role-option-none"
-          onSelect={handleClearRole}
-          selected={selectedRoleId === null}
-          muted
-        >
-          {t("agentControls.role.none")}
-        </DropdownMenuItem>
-        {roles.map((role) => (
-          <RoleMenuItem
-            key={role.id}
-            role={role}
-            selected={role.id === selectedRoleId}
-            profileName={
-              role.defaultProfileId ? (profileNames.get(role.defaultProfileId) ?? "") : ""
-            }
-            onSelect={handleSelectRole}
-          />
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem testID="draft-role-manage" onSelect={openRoleSettings} muted>
-          {t("agentControls.role.manage")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      <Combobox
+        anchorRef={anchorRef}
+        open={open}
+        onOpenChange={setOpen}
+        options={options}
+        value={selectedRoleId ?? NO_ROLE_OPTION_ID}
+        onSelect={handleSelect}
+        renderOption={renderOption}
+        searchable={options.length > SEARCH_THRESHOLD}
+        title={t("agentControls.role.title")}
+        desktopPlacement="top-start"
+        desktopMinWidth={420}
+        stickyHeader={stickyHeader}
+        footer={footer}
+      />
+    </>
   );
 }
 
@@ -286,9 +342,15 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.statusDanger,
     fontSize: theme.fontSize.base,
   },
-  menuTrailing: {
+  optionTrailing: {
     maxWidth: 120,
     color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  blockedHint: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    color: theme.colors.statusDanger,
     fontSize: theme.fontSize.sm,
   },
   tooltipText: {
