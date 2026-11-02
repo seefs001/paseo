@@ -107,6 +107,7 @@ function RoleOption({
       onPress={onPress}
       leadingSlot={leading}
       trailingSlot={trailing}
+      wrapDescription
     />
   );
 }

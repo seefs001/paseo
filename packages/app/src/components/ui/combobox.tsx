@@ -228,6 +228,8 @@ export interface ComboboxItemProps {
   label: string;
   description?: string;
   kind?: "directory" | "file";
+  /** Let the description wrap onto more lines instead of truncating it to one. */
+  wrapDescription?: boolean;
   leadingSlot?: ReactNode;
   trailingSlot?: ReactNode;
   selected?: boolean;
@@ -253,21 +255,26 @@ export function ComboboxItem({
   elevated,
   onPress,
   testID,
+  wrapDescription = false,
 }: ComboboxItemProps): ReactElement {
   const { theme } = useUnistyles();
+  // A wrapped row grows downwards, so its icons stay on the first line instead of centring.
+  const leadingSlotStyle = wrapDescription
+    ? styles.comboboxItemLeadingSlotWrapped
+    : styles.comboboxItemLeadingSlot;
 
   let leadingContent: ReactElement | null = null;
   if (leadingSlot) {
-    leadingContent = <View style={styles.comboboxItemLeadingSlot}>{leadingSlot}</View>;
+    leadingContent = <View style={leadingSlotStyle}>{leadingSlot}</View>;
   } else if (kind === "directory") {
     leadingContent = (
-      <View style={styles.comboboxItemLeadingSlot}>
+      <View style={leadingSlotStyle}>
         <Folder size={16} color={theme.colors.foregroundMuted} />
       </View>
     );
   } else if (kind === "file") {
     leadingContent = (
-      <View style={styles.comboboxItemLeadingSlot}>
+      <View style={leadingSlotStyle}>
         <File size={16} color={theme.colors.foregroundMuted} />
       </View>
     );
@@ -276,12 +283,13 @@ export function ComboboxItem({
   const itemPressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.comboboxItem,
+      wrapDescription && styles.comboboxItemWrapped,
       hovered && (elevated ? styles.comboboxItemHoveredElevated : styles.comboboxItemHovered),
       pressed && (elevated ? styles.comboboxItemPressedElevated : styles.comboboxItemPressed),
       active && styles.comboboxItemActive,
       disabled && styles.comboboxItemDisabled,
     ],
-    [elevated, active, disabled],
+    [elevated, active, disabled, wrapDescription],
   );
 
   const itemContentStyle = useMemo(
@@ -300,17 +308,29 @@ export function ComboboxItem({
     >
       {leadingContent}
       <View style={itemContentStyle}>
-        <Text numberOfLines={1} style={styles.comboboxItemLabel}>
+        <Text
+          numberOfLines={1}
+          style={wrapDescription ? styles.comboboxItemLabelWrapped : styles.comboboxItemLabel}
+        >
           {label}
         </Text>
         {description ? (
-          <Text numberOfLines={1} style={styles.comboboxItemDescription}>
+          <Text
+            numberOfLines={wrapDescription ? undefined : 1}
+            style={styles.comboboxItemDescription}
+          >
             {description}
           </Text>
         ) : null}
       </View>
       {selected || trailingSlot ? (
-        <View style={styles.comboboxItemTrailingContainer}>
+        <View
+          style={
+            wrapDescription
+              ? styles.comboboxItemTrailingContainerWrapped
+              : styles.comboboxItemTrailingContainer
+          }
+        >
           <View style={styles.comboboxItemTrailingSlot}>
             {selected ? <Check size={16} color={theme.colors.foregroundMuted} /> : null}
           </View>
@@ -1726,6 +1746,30 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[1],
     marginLeft: "auto",
+  },
+  // A wrapped row aligns to the top, and each slot is one 20pt label line tall so the icons and
+  // the check stay level with the label instead of centring on the whole row.
+  comboboxItemWrapped: {
+    alignItems: "flex-start",
+  },
+  comboboxItemLeadingSlotWrapped: {
+    width: 16,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  comboboxItemTrailingContainerWrapped: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    marginLeft: "auto",
+    height: 20,
+  },
+  comboboxItemLabelWrapped: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.foreground,
+    flexShrink: 0,
+    lineHeight: 20,
   },
   comboboxItemContent: {
     flex: 1,
