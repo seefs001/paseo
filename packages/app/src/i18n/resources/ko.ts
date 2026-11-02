@@ -223,6 +223,18 @@ export const ko: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      title: "역할",
+      none: "역할 없음",
+      manage: "역할 관리...",
+      selectedTooltip: "역할: {{name}}",
+      unsupportedProvider:
+        "이 프로바이더는 역할을 사용할 수 없습니다. 프로바이더를 바꾸거나 역할을 제거하세요.",
+      fixedHint:
+        "이 에이전트의 역할 지침은 생성 시 고정되었습니다. 역할 변경은 새 에이전트에만 적용됩니다.",
+      newAgentWithRole: "이 역할로 새 에이전트",
+      removedName: "{{name}} (제거됨)",
+    },
     provider: {
       fallback: "프로바이더",
       select: "에이전트 프로바이더 선택",
@@ -3657,6 +3669,40 @@ export const ko: TranslationResources = {
         moveDown: "아래로 이동",
         save: "저장",
         emptyState: "아직 프로필이 없습니다. 특정 명령으로 터미널을 실행하려면 하나 추가하세요.",
+      },
+      agentRoles: {
+        sectionTitle: "에이전트 역할",
+        unavailable: "에이전트 역할을 관리하려면 이 호스트에 연결하세요",
+        unsupported: "이 호스트의 데몬은 아직 에이전트 역할을 지원하지 않습니다",
+        emptyState:
+          "아직 역할이 없습니다. 역할을 추가하면 새 에이전트의 작업 방식을 정할 수 있습니다.",
+        addRoleTitle: "에이전트 역할 추가",
+        editRoleTitle: "에이전트 역할 편집",
+        newRole: "새 역할",
+        editRole: "역할 편집",
+        nameLabel: "이름",
+        namePlaceholder: "리뷰어",
+        iconLabel: "아이콘",
+        descriptionLabel: "용도",
+        descriptionPlaceholder: "이 역할의 용도를 한 줄로",
+        instructionsLabel: "지침",
+        instructionsHint:
+          "에이전트를 만들 때 시스템 프롬프트에 기록되며 이후에는 바뀌지 않습니다. 호스트 시스템 프롬프트가 그 뒤에 붙습니다.",
+        instructionsPlaceholder: "이 역할의 에이전트가 일하는 방식",
+        defaultProfileLabel: "기본 에이전트 프로필",
+        noDefaultProfile: "없음",
+        save: "저장",
+        saving: "저장 중...",
+        remove: "제거",
+        removeConfirmTitle: "역할을 제거할까요?",
+        removeConfirmMessage:
+          '"{{name}}"을(를) 제거할까요? 이미 이 역할을 가진 에이전트는 지침을 유지합니다.',
+        restoreDefaults: "기본 역할로 복원",
+        restoreConfirmTitle: "기본 역할로 복원할까요?",
+        restoreConfirmMessage:
+          "이 호스트의 역할을 기본 제공 역할로 바꿀까요? 역할에 대한 변경 사항이 사라집니다.",
+        moveUp: "위로 이동",
+        moveDown: "아래로 이동",
       },
       agentProfiles: {
         sectionTitle: "에이전트 프로필",

@@ -36,10 +36,12 @@ import {
   BoardTaskStageSchema,
   BoardDecisionSchema,
   BoardGoalSchema,
+  type AgentProfile,
   type BoardGoal,
   type BoardTask,
   type BoardTaskCriterion,
 } from "@getpaseo/protocol/messages";
+import { resolveAgentRoles } from "@getpaseo/protocol/agent-role";
 import type { BoardTaskService, BoardTaskUpdateInput } from "../../board/tasks.js";
 import type { BoardTaskStartInput, BoardTaskStartResult } from "../../board/start.js";
 import type { BoardGoalService } from "../../board/goals.js";
@@ -282,6 +284,7 @@ interface ProviderSummary {
   modes: AgentMode[];
   status: string;
   error?: string;
+  supportsSystemPrompt?: boolean;
 }
 
 const WorkspaceAutomationSummarySchema = z.object({
@@ -407,6 +410,7 @@ function toProviderSummary(entry: {
   modes?: AgentMode[];
   status: string;
   error?: string;
+  supportsSystemPrompt?: boolean;
 }): ProviderSummary {
   return {
     id: entry.provider,
@@ -416,6 +420,7 @@ function toProviderSummary(entry: {
     modes: entry.modes ?? [],
     status: entry.status === "ready" ? "available" : entry.status,
     ...(entry.error ? { error: entry.error } : {}),
+    ...(entry.supportsSystemPrompt ? { supportsSystemPrompt: true } : {}),
   };
 }
 
@@ -1055,6 +1060,7 @@ function createToolCatalog(
         ? { featureValues: callerAgent.config.featureValues }
         : {}),
       ...(callerAgent.config.systemPrompt ? { systemPrompt: callerAgent.config.systemPrompt } : {}),
+      ...(callerAgent.config.role ? { role: callerAgent.config.role } : {}),
       ...(callerAgent.config.mcpServers ? { mcpServers: callerAgent.config.mcpServers } : {}),
     };
   };
@@ -1311,6 +1317,13 @@ function createToolCatalog(
       "Required provider/model pair, for example codex/gpt-5.4.",
     ),
     labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
+    role: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Agent role id or name from list_roles. Its instructions become the new agent's system prompt. Local host only.",
+      ),
     settings: CreateAgentSettingsInputSchema.optional().describe(
       "Initial runtime settings for the new agent.",
     ),
@@ -2249,7 +2262,7 @@ function createToolCatalog(
     {
       title: "Create agent",
       description:
-        "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires provider/model (for example codex/gpt-5.4) and an initial prompt. For a different provider, set settings.modeId from inspect_provider; omission is accepted for targets with no modes and for unattended execution supported by the target. Do not guess; call list_providers and list_models first if uncertain.",
+        "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires provider/model (for example codex/gpt-5.4) and an initial prompt. For a different provider, set settings.modeId from inspect_provider; omission is accepted for targets with no modes and for unattended execution supported by the target. Do not guess; call list_providers and list_models first if uncertain. To give the agent a role such as reviewer, pass `role` from list_roles.",
       inputSchema: createAgentInputSchema,
       outputSchema: {
         agentId: z.string(),
@@ -2288,12 +2301,16 @@ function createToolCatalog(
           ...(options.ensureWorkspaceForCreate
             ? { ensureWorkspaceForCreate: options.ensureWorkspaceForCreate }
             : {}),
+          ...(daemonConfigStore
+            ? { agentRoles: () => resolveAgentRoles(daemonConfigStore.get().agentRoles) }
+            : {}),
         },
         {
           kind: "mcp",
           provider: parsedArgs.provider,
           title: parsedArgs.title,
           initialPrompt: parsedArgs.initialPrompt,
+          ...(parsedArgs.role ? { roleId: parsedArgs.role } : {}),
           config: inheritedConfig,
           cwd: resolvedArgs.cwd,
           workspaceId: resolvedArgs.workspaceId,
@@ -3794,6 +3811,53 @@ function createToolCatalog(
       return {
         content: [],
         structuredContent: ensureValidJson({ profiles }),
+      };
+    },
+  );
+
+  registerTool(
+    "list_roles",
+    {
+      title: "List agent roles",
+      description:
+        "List agent roles: named ways of working (for example planner or reviewer) a human " +
+        "configured on this host. Pick the role that fits the work you delegate and pass its " +
+        "`id` as `role` to create_agent; the daemon writes the role's instructions into the new " +
+        "agent's system prompt. `role` does not choose a model: still pass `provider`, and copy " +
+        "the settings from `defaultProfile` when it is present. Only providers with " +
+        "`supportsSystemPrompt` in list_providers accept a role.",
+      inputSchema: {},
+      outputSchema: {
+        roles: z.array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            description: z.string().optional(),
+            defaultProfile: AgentProfileSchema.optional(),
+          }),
+        ),
+      },
+    },
+    async () => {
+      const config = daemonConfigStore?.get();
+      const profiles = config?.agentProfiles ?? [];
+      const roles = config ? resolveAgentRoles(config.agentRoles) : [];
+      // The instructions stay out: an orchestrator picks by purpose, and the daemon applies them.
+      const summaries = roles.map((role) => {
+        const summary: {
+          id: string;
+          name: string;
+          description?: string;
+          defaultProfile?: AgentProfile;
+        } = { id: role.id, name: role.name };
+        if (role.description) summary.description = role.description;
+        const defaultProfile = profiles.find((profile) => profile.id === role.defaultProfileId);
+        if (defaultProfile) summary.defaultProfile = defaultProfile;
+        return summary;
+      });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ roles: summaries }),
       };
     },
   );

@@ -1133,6 +1133,7 @@ function buildScheduleAgentConfig(
     providerOptions: config.providerOptions,
     featureValues: config.featureValues,
     systemPrompt: config.systemPrompt,
+    ...(config.role ? { role: config.role } : {}),
     mcpServers: config.mcpServers as AgentSessionConfig["mcpServers"],
   };
 }

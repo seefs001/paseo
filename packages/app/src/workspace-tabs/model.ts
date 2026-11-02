@@ -11,6 +11,8 @@ export interface WorkspaceDraftTabSetup {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;
+  /** An Agent role the draft starts with. */
+  roleId?: string;
 }
 
 export interface WorkspaceWorkingDiffTabTarget {

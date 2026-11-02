@@ -4,7 +4,12 @@ import { z } from "zod";
 import type { Logger } from "pino";
 
 import { writeJsonFileAtomic } from "../atomic-file.js";
-import { AgentFeatureSchema, AgentMetadataSchema, AgentStatusSchema } from "../messages.js";
+import {
+  AgentFeatureSchema,
+  AgentMetadataSchema,
+  AgentRoleSnapshotSchema,
+  AgentStatusSchema,
+} from "../messages.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
@@ -27,6 +32,7 @@ const SERIALIZABLE_CONFIG_SCHEMA = z
       .nullable()
       .optional(),
     systemPrompt: z.string().nullable().optional(),
+    role: AgentRoleSnapshotSchema.nullable().optional(),
     mcpServers: z.record(z.string(), z.any()).nullable().optional(),
   })
   .nullable()
@@ -89,6 +95,7 @@ export type SerializableAgentConfig = Pick<
   | "providerOptions"
   | "toolPolicy"
   | "systemPrompt"
+  | "role"
   | "mcpServers"
 >;
 

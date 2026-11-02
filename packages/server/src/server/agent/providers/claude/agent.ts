@@ -371,6 +371,7 @@ type ClaudeConversationRewindTarget =
 
 const CLAUDE_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
+  supportsSystemPrompt: true,
   supportsSessionPersistence: true,
   supportsSessionListing: true,
   supportsDynamicModes: true,

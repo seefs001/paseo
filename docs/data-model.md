@@ -214,6 +214,7 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
     appendSystemPrompt: string,    // appended to supported provider system/developer prompts
     terminalProfiles: TerminalProfile[],  // named shell commands; omitted means DEFAULT_TERMINAL_PROFILES
     agentProfiles: AgentProfile[],        // named agent launch bundles; omitted means none
+    agentRoles: AgentRole[],              // named ways of working; omitted means DEFAULT_AGENT_ROLES
     cors: { allowedOrigins: string[] },
     relay: { enabled: boolean, endpoint: string, publicEndpoint: string, useTls: boolean, publicUseTls: boolean }, // new homes materialize enabled: false
     auth: { password: string }    // bcrypt hash, optional
@@ -269,13 +270,15 @@ there is no startup migration or persistent update policy.
 
 ### Profile lists
 
-`terminalProfiles` and `agentProfiles` are both whole-list fields: a config patch replaces the
-array, never merges entries, so a client sends the complete next list on every add, edit, reorder
-and remove. List order is the display order.
+`terminalProfiles`, `agentProfiles` and `agentRoles` are whole-list fields: a config patch replaces
+the array, never merges entries, so a client sends the complete next list on every add, edit,
+reorder and remove. List order is the display order.
 
-Absent and empty mean different things for terminal profiles — omitting the key falls back to
-`DEFAULT_TERMINAL_PROFILES`, while `[]` means the user removed them all. Agent profiles have no
-defaults, so both mean none.
+Absent and empty mean different things for terminal profiles and agent roles — omitting the key
+falls back to `DEFAULT_TERMINAL_PROFILES` or `DEFAULT_AGENT_ROLES`, while `[]` means the user
+removed them all. A patch cannot remove a key, so the first edit writes the defaults into the file
+and later changes to the built-in roles no longer reach that host; "Restore default roles" writes
+the current defaults again. Agent profiles have no defaults, so both mean none.
 
 `PersistedConfigSchema` parses strictly, so a daemon that predates a field drops it on write
 rather than storing something it cannot describe. That is why the client gates the agent profiles

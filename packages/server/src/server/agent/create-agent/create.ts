@@ -1,3 +1,4 @@
+import { findAgentRole, toAgentRoleSnapshot, type AgentRole } from "@getpaseo/protocol/agent-role";
 import type { FinishSubscriptions } from "../finish-subscriptions/index.js";
 import type { AgentPromptSource } from "../agent-messages/index.js";
 import type { Logger } from "pino";
@@ -35,6 +36,8 @@ export interface CreateAgentCommandDependencies {
   createPaseoWorktree?: CreatePaseoWorktreeWorkflowFn;
   // Mints a fresh directory workspace for a cwd and returns its id.
   ensureWorkspaceForCreate?: EnsureWorkspaceForCreate;
+  /** The host's Agent roles, built-in defaults included. Absent where roles are not offered. */
+  agentRoles?: () => readonly AgentRole[];
 }
 
 export type EnsureWorkspaceForCreate = (
@@ -50,6 +53,8 @@ export interface CreateAgentFromSessionInput {
   config: AgentSessionConfig;
   workspaceId: string;
   initialPrompt?: string;
+  /** An Agent role id; its instructions become the new agent's system prompt. */
+  roleId?: string;
   source?: AgentPromptSource;
   clientMessageId?: string;
   outputSchema?: Record<string, unknown>;
@@ -66,6 +71,8 @@ export interface CreateAgentFromMcpInput {
   provider: string;
   title: string;
   initialPrompt?: string;
+  /** An Agent role id or name; its instructions become the new agent's system prompt. */
+  roleId?: string;
   config?: Partial<AgentSessionConfig>;
   cwd?: string;
   workspaceId?: string;
@@ -157,13 +164,18 @@ export async function createAgentCommand(
   dependencies: CreateAgentCommandDependencies,
   input: CreateAgentCommandInput,
 ): Promise<CreateAgentCommandResult> {
+  // Checked before anything is created, so a bad role leaves no workspace behind.
+  const role = resolveRequestedAgentRole(dependencies, input);
   const resolved =
     input.kind === "session"
       ? await resolveSessionCreateAgent(dependencies, input)
       : await resolveMcpCreateAgent(dependencies, input);
+  const config: AgentSessionConfig = role
+    ? { ...resolved.config, systemPrompt: role.instructions, role: toAgentRoleSnapshot(role) }
+    : resolved.config;
 
   const snapshot = await dependencies.agentManager.createAgent(
-    resolved.config,
+    config,
     input.kind === "session" ? input.agentId : undefined,
     resolved.createOptions,
   );
@@ -211,6 +223,29 @@ export async function createAgentCommand(
     initialPromptError,
     ...(resolved.createdWorktree ? { createdWorktree: resolved.createdWorktree } : {}),
   };
+}
+
+function resolveRequestedAgentRole(
+  dependencies: CreateAgentCommandDependencies,
+  input: CreateAgentCommandInput,
+): AgentRole | null {
+  if (input.roleId === undefined) return null;
+  if (!dependencies.agentRoles) throw new Error("Agent roles are not available here");
+  const role = findAgentRole(dependencies.agentRoles(), input.roleId);
+  if (!role) throw new Error(`Agent role not found: ${input.roleId}`);
+  if (input.config?.systemPrompt) {
+    throw new Error("Choose an Agent role or a system prompt, not both");
+  }
+  const provider =
+    input.kind === "session"
+      ? input.config.provider
+      : resolveProviderModel(input.provider).provider;
+  if (!dependencies.agentManager.supportsSystemPrompt(provider)) {
+    throw new Error(
+      `Provider ${provider} cannot take an Agent role because it has no per-agent system prompt`,
+    );
+  }
+  return role;
 }
 
 async function resolveSessionCreateAgent(

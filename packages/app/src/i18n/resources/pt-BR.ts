@@ -224,6 +224,18 @@ export const ptBR: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      title: "Função",
+      none: "Sem função",
+      manage: "Gerenciar funções...",
+      selectedTooltip: "Função: {{name}}",
+      unsupportedProvider:
+        "Este provedor não aceita funções. Troque o provedor ou remova a função.",
+      fixedHint:
+        "As instruções da função deste agente foram fixadas na criação. Alterações na função valem só para novos agentes.",
+      newAgentWithRole: "Novo agente com esta função",
+      removedName: "{{name}} (removida)",
+    },
     provider: {
       fallback: "Provedor",
       select: "Selecionar provedor do agente",
@@ -3688,6 +3700,39 @@ export const ptBR: TranslationResources = {
         save: "Salvar",
         emptyState:
           "Nenhum perfil ainda. Adicione um para abrir terminais com um comando específico.",
+      },
+      agentRoles: {
+        sectionTitle: "Funções de agente",
+        unavailable: "Conecte-se a este host para gerenciar as funções de agente",
+        unsupported: "O daemon deste host ainda não oferece suporte a funções de agente",
+        emptyState: "Ainda não há funções. Adicione uma para definir como novos agentes trabalham.",
+        addRoleTitle: "Adicionar função de agente",
+        editRoleTitle: "Editar função de agente",
+        newRole: "Nova função",
+        editRole: "Editar função",
+        nameLabel: "Nome",
+        namePlaceholder: "Revisor",
+        iconLabel: "Ícone",
+        descriptionLabel: "Finalidade",
+        descriptionPlaceholder: "Para que serve esta função, em uma linha",
+        instructionsLabel: "Instruções",
+        instructionsHint:
+          "Escritas no prompt de sistema do agente quando ele é criado e fixas depois disso. O prompt de sistema do host vem em seguida.",
+        instructionsPlaceholder: "Como um agente com esta função trabalha",
+        defaultProfileLabel: "Perfil de agente padrão",
+        noDefaultProfile: "Nenhum",
+        save: "Salvar",
+        saving: "Salvando...",
+        remove: "Remover",
+        removeConfirmTitle: "Remover função?",
+        removeConfirmMessage:
+          'Remover "{{name}}"? Agentes que já têm esta função mantêm as instruções.',
+        restoreDefaults: "Restaurar funções padrão",
+        restoreConfirmTitle: "Restaurar funções padrão?",
+        restoreConfirmMessage:
+          "Substituir as funções deste host pelas funções integradas? Suas alterações nas funções serão perdidas.",
+        moveUp: "Mover para cima",
+        moveDown: "Mover para baixo",
       },
       agentProfiles: {
         sectionTitle: "Perfis de agente",

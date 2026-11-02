@@ -1,6 +1,7 @@
 import type { AgentCapabilityFlags } from "../../../agent-sdk-types.js";
 export const V2_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
+  supportsSystemPrompt: true,
   supportsSessionPersistence: true,
   supportsSessionListing: true,
   supportsDynamicModes: true,

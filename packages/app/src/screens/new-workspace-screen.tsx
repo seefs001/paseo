@@ -275,6 +275,7 @@ interface WorkspaceDraftSubmissionConfig {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown> | undefined;
+  roleId: string | null;
   target: WorkspaceTabTarget;
 }
 
@@ -378,6 +379,7 @@ function buildWorkspaceDraftSetupFromComposer(input: {
     model: input.composerState.effectiveModelId || null,
     thinkingOptionId: input.composerState.effectiveThinkingOptionId || null,
     featureValues: input.composerState.featureValues ?? {},
+    ...(input.composerState.roleId ? { roleId: input.composerState.roleId } : {}),
   };
 }
 
@@ -461,6 +463,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       thinkingOptionId: composerState.effectiveThinkingOptionId || undefined,
       featureValues: composerState.featureValues,
     },
+    ...(composerState.roleId ? { roleId: composerState.roleId } : {}),
     initialPrompt: wirePayload.text,
     clientMessageId: `${input.draftId}:initial-message`,
     images: images?.length ? images : undefined,
@@ -517,6 +520,8 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       execute({
         ...initialAgent,
         config: { ...request.config!, cwd },
+        // The draft tab owns the role after handoff; it may have cleared it.
+        roleId: request.roleId,
         initialPrompt: request.initialPrompt ?? "",
         clientMessageId: initialAgent.clientMessageId,
         images: request.images,
@@ -540,6 +545,7 @@ function buildComposerConfig(input: {
     initialServerId: serverId || null,
     initialValues: buildComposerInitialValues({ initialSetup }),
     initialFeatureValues: initialSetup?.featureValues,
+    ...(initialSetup?.roleId ? { initialRoleId: initialSetup.roleId } : {}),
     isVisible: true,
     lockedWorkingDir: workingDir,
   };
@@ -573,6 +579,7 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
       model: initialSetup.model,
       thinkingOptionId: initialSetup.thinkingOptionId,
       featureValues: initialSetup.featureValues,
+      roleId: initialSetup.roleId ?? null,
       target: { kind: "draft", draftId, setup: initialSetup },
     };
   }
@@ -583,6 +590,7 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
     model: composerState.effectiveModelId || null,
     thinkingOptionId: composerState.effectiveThinkingOptionId || null,
     featureValues: composerState.featureValues,
+    roleId: composerState.roleId,
     target: { kind: "draft", draftId },
   };
 }
@@ -649,6 +657,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     ...(submission.model ? { model: submission.model } : {}),
     ...(submission.thinkingOptionId ? { thinkingOptionId: submission.thinkingOptionId } : {}),
     ...(submission.featureValues ? { featureValues: submission.featureValues } : {}),
+    ...(submission.roleId ? { roleId: submission.roleId } : {}),
     allowEmptyText: true,
     agentCreation: input.agentCreation,
   });

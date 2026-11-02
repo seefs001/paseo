@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ReactElement,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -95,6 +96,10 @@ import {
   type DraftAgentProfileControls,
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { AgentRoleBadge, DraftAgentRoleControl } from "@/agent-roles";
+import { buildDraftAgentSetup } from "@/client-slash-commands";
+import { generateDraftId } from "@/stores/draft-keys";
+import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 
 interface AgentControlOption {
   id: string;
@@ -134,6 +139,8 @@ interface ControlledAgentControlsProps {
   modeControl?: AgentModeControlValue | null;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  /** Drawn before every other control, such as the Agent role chip. */
+  leadingControl?: ReactNode;
 }
 
 export interface DraftAgentControlsProps {
@@ -153,6 +160,9 @@ export interface DraftAgentControlsProps {
   selectedThinkingOptionId: string;
   onSelectThinkingOption: (thinkingOptionId: string) => void;
   onApplyAgentProfile: DraftAgentProfileControls["applyProfile"];
+  /** The draft's Agent role; omitted where the composer does not offer roles. */
+  selectedRoleId?: string | null;
+  onSelectRole?: (roleId: string | null) => void;
   profileInitializationError?: string | null;
   onRetryProfileInitialization?: () => void;
   features?: AgentFeature[];
@@ -507,6 +517,7 @@ function ControlledAgentControls({
   modeControl,
   modelSelectorServerId = null,
   isCompactLayout,
+  leadingControl,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -739,6 +750,7 @@ function ControlledAgentControls({
   return (
     <ComposerControlLayoutProvider value={layoutContextValue}>
       <View style={styles.container} onLayout={handleLayout}>
+        {leadingControl}
         {!isCompact ? (
           <DesktopAgentControlsContent
             provider={provider}
@@ -1554,6 +1566,47 @@ function ThinkingComboboxOption({
   );
 }
 
+/** A running agent's role chip. Its menu can open a new draft with the same role and settings. */
+function useAgentRoleBadge(input: {
+  serverId: string;
+  agentId: string;
+  isCompactLayout: boolean | undefined;
+}): ReactElement | null {
+  const { serverId, agentId, isCompactLayout } = input;
+  // Shallow, so a fresh snapshot of the same role does not redraw the chip.
+  const role = useSessionStore(
+    useShallow((state) => state.sessions[serverId]?.agents?.get(agentId)?.role ?? null),
+  );
+  const isCompactFormFactor = useIsCompactFormFactor();
+  const showLabel = !(isCompactLayout ?? isCompactFormFactor);
+  const roleId = role?.id;
+  const handleNewAgentWithRole = useCallback(() => {
+    const current = useSessionStore.getState().sessions[serverId]?.agents?.get(agentId);
+    if (!current?.workspaceId || !roleId) return;
+    navigateToWorkspace({
+      serverId,
+      workspaceId: current.workspaceId,
+      target: {
+        kind: "draft",
+        draftId: generateDraftId(),
+        setup: { ...buildDraftAgentSetup(current), roleId },
+      },
+    });
+  }, [agentId, roleId, serverId]);
+  return useMemo(
+    () =>
+      role ? (
+        <AgentRoleBadge
+          serverId={serverId}
+          role={role}
+          onNewAgentWithRole={handleNewAgentWithRole}
+          showLabel={showLabel}
+        />
+      ) : null,
+    [handleNewAgentWithRole, role, serverId, showLabel],
+  );
+}
+
 export const AgentControls = memo(function AgentControls({
   agentId,
   serverId,
@@ -1795,6 +1848,8 @@ export const AgentControls = memo(function AgentControls({
     [refreshSnapshot],
   );
 
+  const roleBadge = useAgentRoleBadge({ serverId, agentId, isCompactLayout });
+
   if (!agent) {
     return null;
   }
@@ -1828,6 +1883,7 @@ export const AgentControls = memo(function AgentControls({
         modeControl={modeControl}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
+        leadingControl={roleBadge}
       />
     </>
   );
@@ -1850,6 +1906,8 @@ export function DraftAgentControls({
   selectedThinkingOptionId,
   onSelectThinkingOption,
   onApplyAgentProfile,
+  selectedRoleId = null,
+  onSelectRole,
   profileInitializationError,
   onRetryProfileInitialization,
   features,
@@ -1920,6 +1978,32 @@ export function DraftAgentControls({
         : null,
     [selectedProvider, providerDefinitions, modeOptions, selectedMode, onSelectMode, disabled],
   );
+  const isCompactFormFactor = useIsCompactFormFactor();
+  const showRoleLabel = !(isCompactLayout ?? isCompactFormFactor);
+  const applyProfile = agentProfiles?.applyProfile;
+  const roleControl = useMemo(
+    () =>
+      onSelectRole ? (
+        <DraftAgentRoleControl
+          serverId={modelSelectorServerId}
+          provider={selectedProvider}
+          selectedRoleId={selectedRoleId}
+          onSelectRole={onSelectRole}
+          onApplyProfile={applyProfile}
+          disabled={disabled}
+          showLabel={showRoleLabel}
+        />
+      ) : null,
+    [
+      applyProfile,
+      disabled,
+      modelSelectorServerId,
+      onSelectRole,
+      selectedProvider,
+      selectedRoleId,
+      showRoleLabel,
+    ],
+  );
 
   return (
     <>
@@ -1962,6 +2046,7 @@ export function DraftAgentControls({
         modeControl={modeControl}
         modelSelectorServerId={modelSelectorServerId}
         isCompactLayout={isCompactLayout}
+        leadingControl={roleControl}
       />
     </>
   );

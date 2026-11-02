@@ -42,6 +42,8 @@ interface AgentInputDraftComposerOptions {
   initialServerId: string | null;
   initialValues?: CreateAgentInitialValues;
   initialFeatureValues?: Record<string, unknown>;
+  /** The Agent role the draft opens with. Roles are never restored from preferences. */
+  initialRoleId?: string;
   isVisible?: boolean;
   lockedWorkingDir?: string;
 }
@@ -57,6 +59,8 @@ type DraftComposerState = UseAgentFormStateResult & {
   effectiveModelId: string;
   effectiveThinkingOptionId: string;
   featureValues: Record<string, unknown> | undefined;
+  /** The Agent role id sent as `roleId` on create. */
+  roleId: string | null;
   agentControls: DraftAgentControlsProps;
   commandDraft: DraftCommandTarget;
 };
@@ -348,6 +352,8 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     initialFeatureValues: composerOptions?.initialFeatureValues ?? formState.initialFeatureValues,
   });
 
+  const [roleId, setRoleId] = useState<string | null>(composerOptions?.initialRoleId ?? null);
+
   const applyDraftAgentProfile = useCallback(
     (profile: Parameters<typeof formState.applyProfileFromUser>[0], profileId?: string) => {
       formState.applyProfileFromUser(profile, profileId);
@@ -386,15 +392,19 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       effectiveModelId,
       effectiveThinkingOptionId,
       featureValues: draftFeatureValues,
+      roleId,
       agentControls: buildDraftAgentControls({
         formState,
         features: draftFeatures,
         onSetFeature: setDraftFeatureValue,
         onApplyAgentProfile: applyDraftAgentProfile,
+        selectedRoleId: roleId,
+        onSelectRole: setRoleId,
       }),
       commandDraft,
     };
   }, [
+    roleId,
     commandDraft,
     composerOptions,
     effectiveModeId,

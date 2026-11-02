@@ -115,6 +115,7 @@ import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
 const OMP_PROVIDER = "omp";
 const OMP_CORE_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
+  supportsSystemPrompt: true,
   supportsSessionPersistence: true,
   supportsSessionListing: true,
   supportsDynamicModes: true,

@@ -20,6 +20,7 @@ import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Logger } from "pino";
 import { z } from "zod";
+import { resolveAgentRoles } from "@getpaseo/protocol/agent-role";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
 
 export type ListenTarget =
@@ -199,6 +200,7 @@ import { resolveDaemonVersion } from "./daemon-version.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
 import type {
   AgentProfile,
+  AgentRole,
   AgentSkillSelection,
   FirstAgentContext,
   PluginSource,
@@ -438,6 +440,7 @@ export interface PaseoDaemonConfig {
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
+  agentRoles?: AgentRole[];
   skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
@@ -632,6 +635,10 @@ function createInitialMutableDaemonConfig(
 
   if (config.agentProfiles !== undefined) {
     initialConfig.agentProfiles = config.agentProfiles;
+  }
+
+  if (config.agentRoles !== undefined) {
+    initialConfig.agentRoles = config.agentRoles;
   }
 
   return initialConfig;
@@ -1349,6 +1356,7 @@ export async function createPaseoDaemon(
     providerSnapshotManager,
     createPaseoWorktree: createPaseoWorktreeForTools,
     ensureWorkspaceForCreate: ensureWorkspaceForCreateAndBroadcastExternal,
+    agentRoles: () => resolveAgentRoles(daemonConfigStore.get().agentRoles),
   };
   const createAgent = (input: Parameters<typeof createAgentCommand>[1]) =>
     createAgentCommand(createAgentCommandDependencies, input);

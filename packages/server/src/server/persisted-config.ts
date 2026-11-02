@@ -17,6 +17,7 @@ import {
   writePrivateFileAtomicSync,
 } from "./private-files.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "@getpaseo/protocol/agent-profile";
+import { AgentRoleSchema } from "@getpaseo/protocol/agent-role";
 import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-config";
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
@@ -279,6 +280,7 @@ export const PersistedConfigSchema = z
         appendSystemPrompt: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
+        agentRoles: z.array(AgentRoleSchema).optional(),
         cors: z
           .object({
             allowedOrigins: z.array(z.string()).optional(),

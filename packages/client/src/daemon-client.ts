@@ -501,6 +501,8 @@ export interface CreateAgentRequestOptions extends AgentConfigOverrides {
   workspaceId?: string;
   callerAgentId?: string;
   initialPrompt?: string;
+  /** An Agent role id. Requires `server_info.features.agentRoles`. */
+  roleId?: string;
   idempotencyKey?: string;
   clientMessageId?: string;
   outputSchema?: Record<string, unknown>;
@@ -3443,6 +3445,7 @@ export class DaemonClient {
       ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
       ...(options.callerAgentId !== undefined ? { callerAgentId: options.callerAgentId } : {}),
       ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
+      ...(options.roleId ? { roleId: options.roleId } : {}),
       idempotencyKey: options.idempotencyKey,
       ...(options.clientMessageId ? { clientMessageId: options.clientMessageId } : {}),
       ...(options.outputSchema ? { outputSchema: options.outputSchema } : {}),
@@ -7868,6 +7871,7 @@ function resolveAgentConfig(options: CreateAgentRequestOptions): AgentSessionCon
     env: _env,
     workspaceId: _workspaceId,
     initialPrompt: _initialPrompt,
+    roleId: _roleId,
     images: _images,
     git: _git,
     worktreeName: _worktreeName,

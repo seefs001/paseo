@@ -218,6 +218,7 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
   if (record.config.systemPrompt != null) {
     config.systemPrompt = record.config.systemPrompt;
   }
+  if (record.config.role != null) config.role = record.config.role;
   if (record.config.mcpServers != null) config.mcpServers = record.config.mcpServers;
   return stripInternalPaseoMcpServer(config);
 }
@@ -1171,6 +1172,11 @@ export class AgentManager {
     return true;
   }
 
+  /** Whether the provider gives a system prompt to one agent alone, which Agent roles need. */
+  supportsSystemPrompt(provider: AgentProvider): boolean {
+    return this.clients.get(provider)?.capabilities.supportsSystemPrompt === true;
+  }
+
   async listProviderAvailability(): Promise<ProviderAvailability[]> {
     return Promise.all(
       Array.from(this.clients.keys()).map((provider) => this.getProviderAvailability(provider)),
@@ -1364,7 +1370,8 @@ export class AgentManager {
         config,
         env: options.env,
       });
-      config = { ...request.config, internal: config.internal };
+      // The hook payload is the wire config, which has no `internal` or `role`; both stay daemon-owned.
+      config = { ...request.config, internal: config.internal, role: config.role };
       options = { ...options, env: request.env };
     }
     await this.deleteAgentState(resolvedAgentId);

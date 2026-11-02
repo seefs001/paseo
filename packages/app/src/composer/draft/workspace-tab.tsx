@@ -70,6 +70,7 @@ interface AutoSubmitConfig {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;
+  roleId: string | null;
 }
 
 function resolveAutoSubmitConfig(
@@ -79,6 +80,7 @@ function resolveAutoSubmitConfig(
     model?: string | null;
     thinkingOptionId?: string | null;
     featureValues?: Record<string, unknown>;
+    roleId?: string;
   } | null,
 ): AutoSubmitConfig | null {
   if (!pending) return null;
@@ -88,6 +90,7 @@ function resolveAutoSubmitConfig(
     model: pending.model ?? null,
     thinkingOptionId: pending.thinkingOptionId ?? null,
     featureValues: pending.featureValues ?? {},
+    roleId: pending.roleId ?? null,
   };
 }
 
@@ -103,6 +106,15 @@ function resolveDraftModeIdOverride(input: {
     return { modeId: effectiveModeId };
   }
   return {};
+}
+
+/** A pending handoff carries the role chosen on New workspace; otherwise the composer owns it. */
+function resolveDraftRoleId(
+  autoSubmitConfig: AutoSubmitConfig | null,
+  composerState: { roleId: string | null },
+): string | undefined {
+  const roleId = autoSubmitConfig ? autoSubmitConfig.roleId : composerState.roleId;
+  return roleId ?? undefined;
 }
 
 function resolveDraftModeId(input: {
@@ -137,6 +149,7 @@ async function submitDraftCreateRequest(input: {
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
     featureValues: Record<string, unknown> | undefined;
+    roleId: string | null;
   };
   hostDisconnectedMessage: string;
   selectModelMessage: string;
@@ -185,6 +198,7 @@ async function submitDraftCreateRequest(input: {
     config,
     workspaceId,
     initialPrompt: text,
+    roleId: resolveDraftRoleId(autoSubmitConfig, composerState),
     clientMessageId: attempt.clientMessageId,
     ...(input.metadata ? { metadata: input.metadata } : {}),
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
@@ -264,6 +278,13 @@ function buildDraftInitialValues(input: {
     model: input.initialSetup.model,
     thinkingOptionId: input.initialSetup.thinkingOptionId,
   };
+}
+
+function resolveDraftInitialRoleId(
+  pendingRoleId: string | undefined,
+  setup: WorkspaceDraftTabSetup | null,
+): string | undefined {
+  return pendingRoleId ?? setup?.roleId;
 }
 
 function resolveDraftWorkingDirectory(input: {
@@ -354,6 +375,11 @@ export function WorkspaceDraftAgentTab({
   const draftInitialValues = buildDraftInitialValues({
     initialSetup: draftSetup,
   });
+  // Read once: the composer seeds its role on mount and owns it from then on.
+  const pendingRoleId = useWorkspaceDraftSubmissionStore(
+    (state) => state.pendingByDraftId[draftId]?.roleId,
+  );
+  const draftInitialRoleId = resolveDraftInitialRoleId(pendingRoleId, draftSetup);
   const draftStoreKey = useMemo(
     () =>
       buildDraftStoreKey({
@@ -369,6 +395,7 @@ export function WorkspaceDraftAgentTab({
       initialServerId: serverId,
       initialValues: draftInitialValues,
       initialFeatureValues: draftSetup?.featureValues,
+      initialRoleId: draftInitialRoleId,
       isVisible: true,
       lockedWorkingDir: draftWorkingDirectory ?? undefined,
     },

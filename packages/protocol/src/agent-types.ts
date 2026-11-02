@@ -127,6 +127,7 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  supportsSystemPrompt?: boolean;
 }
 
 export interface AgentFeatureToggle {

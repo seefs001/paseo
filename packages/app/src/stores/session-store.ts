@@ -34,6 +34,7 @@ import type {
   AgentPersistenceHandle,
 } from "@getpaseo/protocol/agent-types";
 import type {
+  AgentRoleSnapshot,
   ServerInfoStatusPayload,
   ProjectPlacementPayload,
   ServerCapabilities,
@@ -99,6 +100,8 @@ export interface Agent {
   archivedAt?: Date | null;
   parentAgentId: string | null;
   labels: Record<string, string>;
+  /** The Agent role the agent was created with. */
+  role?: AgentRoleSnapshot;
   projectPlacement?: ProjectPlacementPayload | null;
 }
 

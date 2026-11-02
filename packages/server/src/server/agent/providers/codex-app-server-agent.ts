@@ -256,6 +256,7 @@ function formatOutOfBandStatusMessage(text: string): string {
 
 const CODEX_APP_SERVER_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
+  supportsSystemPrompt: true,
   supportsSessionPersistence: true,
   supportsSessionListing: true,
   supportsDynamicModes: false,

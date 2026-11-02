@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentRoleSnapshotSchema } from "../agent-role.js";
 import { AgentProviderSchema } from "../provider-manifest.js";
 
 export const ScheduleStatusSchema = z.enum(["active", "paused", "completed"]);
@@ -36,6 +37,8 @@ export const ScheduleTargetSchema = z.discriminatedUnion("type", [
       providerOptions: z.record(z.string(), z.unknown()).optional(),
       featureValues: z.record(z.string(), z.unknown()).optional(),
       systemPrompt: z.string().optional(),
+      // The Agent role behind systemPrompt, inherited from the agent that made the schedule.
+      role: AgentRoleSnapshotSchema.optional(),
       mcpServers: z.record(z.string(), z.unknown()).optional(),
     }),
   }),

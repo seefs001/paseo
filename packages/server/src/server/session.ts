@@ -23,6 +23,7 @@ import { v4 as uuidv4 } from "uuid";
 import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import { join, resolve, sep } from "path";
 import { homedir } from "node:os";
+import { resolveAgentRoles } from "@getpaseo/protocol/agent-role";
 import { CLIENT_CAPS, type ClientCapability } from "@getpaseo/protocol/client-capabilities";
 import { formatPluginSourceReference } from "@getpaseo/protocol/plugin-source-reference";
 import {
@@ -4552,6 +4553,7 @@ export class Session {
           paseoHome: this.paseoHome,
           worktreesRoot: this.worktreesRoot,
           providerSnapshotManager: this.providerSnapshotManager,
+          agentRoles: () => resolveAgentRoles(this.daemonConfigStore.get().agentRoles),
         },
         {
           kind: "session",
@@ -4563,6 +4565,7 @@ export class Session {
           config: resolvedIntent.config,
           workspaceId: resolvedIntent.intent.workspaceId,
           initialPrompt,
+          ...(msg.roleId !== undefined ? { roleId: msg.roleId } : {}),
           source: msg.callerAgentId
             ? { kind: "agent-message", agentId: msg.callerAgentId }
             : undefined,

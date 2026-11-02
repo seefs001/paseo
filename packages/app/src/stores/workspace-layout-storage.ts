@@ -10,6 +10,7 @@ const WorkspaceDraftTabSetupStorageSchema = z.strictObject({
   model: z.string().nullable(),
   thinkingOptionId: z.string().nullable(),
   featureValues: z.record(z.string(), z.union([z.boolean(), z.string(), z.null()])),
+  roleId: z.string().optional(),
 });
 const WorkspaceTabTargetStorageSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("new_tab") }),

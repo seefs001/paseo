@@ -51,6 +51,6 @@ export const GROK_ACP_OPTIONS = {
 
 export class GrokACPAgentClient extends GenericACPAgentClient {
   constructor(options: GenericACPAgentClientOptions) {
-    super({ ...options, providerId: "grok", ...GROK_ACP_OPTIONS });
+    super({ ...options, providerId: "grok", ...GROK_ACP_OPTIONS, supportsSystemPrompt: true });
   }
 }

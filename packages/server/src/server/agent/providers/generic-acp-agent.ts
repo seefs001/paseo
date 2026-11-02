@@ -61,6 +61,8 @@ export interface GenericACPAgentClientOptions extends Pick<
   configFeatureOptions?: ACPConfigFeatureOption[];
   extensionCommandsParser?: ACPExtensionCommandsParser;
   catalogModelResolver?: ACPCatalogModelResolver;
+  /** Set by wrappers that hand the system prompt to the agent's own session. */
+  supportsSystemPrompt?: boolean;
   now?: () => number;
 }
 
@@ -86,7 +88,7 @@ export class GenericACPAgentClient extends ACPAgentClient {
       configOptionsTransformer: options.configOptionsTransformer,
       modeIdTransformer: options.modeIdTransformer,
       providerModeWriter: options.providerModeWriter,
-      capabilities: buildGenericACPCapabilities(providerParams),
+      capabilities: buildGenericACPCapabilities(providerParams, options.supportsSystemPrompt),
       // ACP agents advertise slash commands with available_commands_update after
       // session/new, so the first listCommands() waits for that batch.
       waitForInitialCommands: options.waitForInitialCommands ?? true,
@@ -183,10 +185,14 @@ export class GenericACPAgentClient extends ACPAgentClient {
   }
 }
 
-function buildGenericACPCapabilities(params: GenericACPProviderParams): AgentCapabilityFlags {
+function buildGenericACPCapabilities(
+  params: GenericACPProviderParams,
+  supportsSystemPrompt: boolean | undefined,
+): AgentCapabilityFlags {
   return {
     ...DEFAULT_ACP_CAPABILITIES,
     supportsMcpServers: params.supportsMcpServers ?? DEFAULT_ACP_CAPABILITIES.supportsMcpServers,
+    ...(supportsSystemPrompt ? { supportsSystemPrompt } : {}),
   };
 }
 

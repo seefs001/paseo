@@ -226,6 +226,17 @@ export const es: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      title: "Rol",
+      none: "Sin rol",
+      manage: "Gestionar roles...",
+      selectedTooltip: "Rol: {{name}}",
+      unsupportedProvider: "Este proveedor no admite roles. Cambia de proveedor o quita el rol.",
+      fixedHint:
+        "Las instrucciones del rol de este agente se fijaron al crearlo. Los cambios en el rol solo afectan a agentes nuevos.",
+      newAgentWithRole: "Nuevo agente con este rol",
+      removedName: "{{name}} (eliminado)",
+    },
     provider: {
       fallback: "Proveedor",
       select: "Seleccionar proveedor de agente",
@@ -3709,6 +3720,39 @@ export const es: TranslationResources = {
         moveDown: "Move down",
         save: "Save",
         emptyState: "No profiles yet. Add one to launch terminals with a specific command.",
+      },
+      agentRoles: {
+        sectionTitle: "Roles de agente",
+        unavailable: "Conéctate a este host para gestionar los roles de agente",
+        unsupported: "El daemon de este host aún no admite roles de agente",
+        emptyState: "Aún no hay roles. Añade uno para indicar a los agentes nuevos cómo trabajar.",
+        addRoleTitle: "Añadir rol de agente",
+        editRoleTitle: "Editar rol de agente",
+        newRole: "Nuevo rol",
+        editRole: "Editar rol",
+        nameLabel: "Nombre",
+        namePlaceholder: "Revisor",
+        iconLabel: "Icono",
+        descriptionLabel: "Propósito",
+        descriptionPlaceholder: "Para qué sirve este rol, en una línea",
+        instructionsLabel: "Instrucciones",
+        instructionsHint:
+          "Se escriben en el prompt de sistema del agente al crearlo y no cambian después. El prompt de sistema del host va a continuación.",
+        instructionsPlaceholder: "Cómo trabaja un agente con este rol",
+        defaultProfileLabel: "Perfil de agente predeterminado",
+        noDefaultProfile: "Ninguno",
+        save: "Guardar",
+        saving: "Guardando...",
+        remove: "Quitar",
+        removeConfirmTitle: "¿Quitar el rol?",
+        removeConfirmMessage:
+          "¿Quitar «{{name}}»? Los agentes que ya lo tienen conservan sus instrucciones.",
+        restoreDefaults: "Restaurar roles predeterminados",
+        restoreConfirmTitle: "¿Restaurar roles predeterminados?",
+        restoreConfirmMessage:
+          "¿Reemplazar los roles de este host por los integrados? Se perderán tus cambios en los roles.",
+        moveUp: "Subir",
+        moveDown: "Bajar",
       },
       agentProfiles: {
         sectionTitle: "Perfiles de agente",

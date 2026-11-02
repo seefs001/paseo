@@ -225,6 +225,18 @@ export const ja: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      title: "ロール",
+      none: "ロールなし",
+      manage: "ロールを管理...",
+      selectedTooltip: "ロール: {{name}}",
+      unsupportedProvider:
+        "このプロバイダーはロールに対応していません。プロバイダーを変更するか、ロールを外してください。",
+      fixedHint:
+        "このエージェントのロールの指示は作成時に固定されました。ロールへの変更は新しいエージェントにのみ適用されます。",
+      newAgentWithRole: "このロールで新しいエージェント",
+      removedName: "{{name}}（削除済み）",
+    },
     provider: {
       fallback: "プロバイダー",
       select: "エージェントプロバイダーを選択",
@@ -3673,6 +3685,40 @@ export const ja: TranslationResources = {
         save: "保存",
         emptyState:
           "プロファイルがまだありません。特定のコマンドでターミナルを起動するために追加してください。",
+      },
+      agentRoles: {
+        sectionTitle: "エージェントロール",
+        unavailable: "エージェントロールを管理するには、このホストに接続してください",
+        unsupported: "このホストのデーモンはまだエージェントロールに対応していません",
+        emptyState:
+          "ロールはまだありません。追加すると、新しいエージェントに作業の進め方を指定できます。",
+        addRoleTitle: "エージェントロールを追加",
+        editRoleTitle: "エージェントロールを編集",
+        newRole: "新しいロール",
+        editRole: "ロールを編集",
+        nameLabel: "名前",
+        namePlaceholder: "レビュアー",
+        iconLabel: "アイコン",
+        descriptionLabel: "用途",
+        descriptionPlaceholder: "このロールの用途を1行で",
+        instructionsLabel: "指示",
+        instructionsHint:
+          "エージェントの作成時にシステムプロンプトへ書き込まれ、その後は変わりません。ホストのシステムプロンプトはその後に続きます。",
+        instructionsPlaceholder: "このロールのエージェントの作業方法",
+        defaultProfileLabel: "デフォルトのエージェントプロファイル",
+        noDefaultProfile: "なし",
+        save: "保存",
+        saving: "保存中...",
+        remove: "削除",
+        removeConfirmTitle: "ロールを削除しますか？",
+        removeConfirmMessage:
+          "「{{name}}」を削除しますか？このロールを持つ既存のエージェントは指示をそのまま保持します。",
+        restoreDefaults: "デフォルトのロールに戻す",
+        restoreConfirmTitle: "デフォルトのロールに戻しますか？",
+        restoreConfirmMessage:
+          "このホストのロールを組み込みのロールに置き換えますか？ロールへの変更は失われます。",
+        moveUp: "上へ移動",
+        moveDown: "下へ移動",
       },
       agentProfiles: {
         sectionTitle: "エージェントプロファイル",

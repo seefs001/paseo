@@ -49,6 +49,7 @@ export const PASEO_AGENT_TOOL_NAMES = [
   "list_providers",
   "list_models",
   "list_profiles",
+  "list_roles",
   "inspect_provider",
   "get_agent_activity",
   "set_agent_mode",

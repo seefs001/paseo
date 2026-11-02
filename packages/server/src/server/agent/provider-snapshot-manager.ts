@@ -1053,6 +1053,7 @@ export class ProviderSnapshotManager {
         enabled: true,
         models,
         modes: catalog.modes,
+        supportsSystemPrompt: client.capabilities.supportsSystemPrompt === true,
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {

@@ -151,6 +151,7 @@ export function toAgentPayload(
     title: options?.title ?? null,
     labels: agent.labels,
     archivedAt: options?.archivedAt ?? null,
+    ...(agent.config.role ? { role: { ...agent.config.role } } : {}),
     ...(agent.internal ? { internal: true } : {}),
   };
 
@@ -208,6 +209,11 @@ function buildStoredPersistenceHandle(
   return toAgentPersistenceHandle(validProviders, record.persistence);
 }
 
+function buildStoredRole(record: StoredAgentRecord): Pick<AgentSnapshotPayload, "role"> {
+  const role = record.config?.role;
+  return role ? { role: { ...role } } : {};
+}
+
 export function buildStoredAgentPayload(
   record: StoredAgentRecord,
   validProviders: Iterable<AgentProvider>,
@@ -262,6 +268,7 @@ export function buildStoredAgentPayload(
     attentionReason: record.attentionReason ?? null,
     attentionTimestamp: record.attentionTimestamp ?? null,
     archivedAt: record.archivedAt ?? null,
+    ...buildStoredRole(record),
     ...(record.internal ? { internal: true } : {}),
     labels: normalizeLabels(record.labels),
     ...(typeof record.lastError === "string" ? { lastError: record.lastError } : {}),
@@ -398,6 +405,9 @@ function buildSerializableConfig(config: AgentSessionConfig): SerializableAgentC
   }
   if (config.systemPrompt) {
     serializable.systemPrompt = config.systemPrompt;
+  }
+  if (config.role) {
+    serializable.role = { ...config.role };
   }
   if (config.mcpServers) {
     serializable.mcpServers = config.mcpServers;

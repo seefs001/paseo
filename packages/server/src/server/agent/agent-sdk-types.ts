@@ -13,6 +13,7 @@ import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type {
   AgentAttachment,
   AgentMetadata as AgentSessionMetadata,
+  AgentRoleSnapshot,
   AgentSessionShareResult,
 } from "@getpaseo/protocol/messages";
 import type { PaseoToolCatalog } from "./tools/types.js";
@@ -142,6 +143,7 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  supportsSystemPrompt?: boolean;
 }
 
 export interface AgentCreateConfigParent {
@@ -185,6 +187,11 @@ export interface AgentCapabilityFlags {
   supportsSessionSharing?: boolean;
   supportsRewindFiles?: boolean;
   supportsRewindBoth?: boolean;
+  /**
+   * The provider gives `AgentSessionConfig.systemPrompt` to this session alone.
+   * Agent roles require it; a prompt shared through a workspace file does not count.
+   */
+  supportsSystemPrompt?: boolean;
 }
 
 export interface AgentPersistenceHandle {
@@ -616,6 +623,8 @@ export interface AgentSessionConfig {
    * persisted into agent config so daemon setting changes apply cleanly.
    */
   daemonAppendSystemPrompt?: string;
+  /** The Agent role whose instructions became `systemPrompt`. Set only at creation. */
+  role?: AgentRoleSnapshot;
   modeId?: string;
   model?: string;
   thinkingOptionId?: string;

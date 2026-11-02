@@ -227,6 +227,18 @@ export const fr: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      title: "Rôle",
+      none: "Aucun rôle",
+      manage: "Gérer les rôles...",
+      selectedTooltip: "Rôle : {{name}}",
+      unsupportedProvider:
+        "Ce fournisseur ne prend pas en charge les rôles. Changez de fournisseur ou retirez le rôle.",
+      fixedHint:
+        "Les instructions du rôle de cet agent ont été figées à sa création. Les modifications du rôle ne concernent que les nouveaux agents.",
+      newAgentWithRole: "Nouvel agent avec ce rôle",
+      removedName: "{{name}} (supprimé)",
+    },
     provider: {
       fallback: "Fournisseur",
       select: "Choisir le fournisseur d’agent",
@@ -3711,6 +3723,40 @@ export const fr: TranslationResources = {
         save: "Enregistrer",
         emptyState:
           "Aucun profil pour le moment. Ajoutez-en un pour lancer des terminaux avec une commande précise.",
+      },
+      agentRoles: {
+        sectionTitle: "Rôles d’agent",
+        unavailable: "Connectez-vous à cet hôte pour gérer les rôles d’agent",
+        unsupported: "Le daemon de cet hôte ne prend pas encore en charge les rôles d’agent",
+        emptyState:
+          "Aucun rôle pour l’instant. Ajoutez-en un pour indiquer aux nouveaux agents comment travailler.",
+        addRoleTitle: "Ajouter un rôle d’agent",
+        editRoleTitle: "Modifier le rôle d’agent",
+        newRole: "Nouveau rôle",
+        editRole: "Modifier le rôle",
+        nameLabel: "Nom",
+        namePlaceholder: "Relecteur",
+        iconLabel: "Icône",
+        descriptionLabel: "Objectif",
+        descriptionPlaceholder: "À quoi sert ce rôle, en une ligne",
+        instructionsLabel: "Instructions",
+        instructionsHint:
+          "Écrites dans le prompt système de l’agent à sa création, puis figées. Le prompt système de l’hôte vient ensuite.",
+        instructionsPlaceholder: "Comment travaille un agent avec ce rôle",
+        defaultProfileLabel: "Profil d’agent par défaut",
+        noDefaultProfile: "Aucun",
+        save: "Enregistrer",
+        saving: "Enregistrement...",
+        remove: "Retirer",
+        removeConfirmTitle: "Retirer le rôle ?",
+        removeConfirmMessage:
+          "Retirer « {{name}} » ? Les agents qui l’ont déjà gardent leurs instructions.",
+        restoreDefaults: "Restaurer les rôles par défaut",
+        restoreConfirmTitle: "Restaurer les rôles par défaut ?",
+        restoreConfirmMessage:
+          "Remplacer les rôles de cet hôte par les rôles intégrés ? Vos modifications des rôles seront perdues.",
+        moveUp: "Monter",
+        moveDown: "Descendre",
       },
       agentProfiles: {
         sectionTitle: "Profils d’agent",

@@ -225,6 +225,18 @@ export const ru: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      title: "Роль",
+      none: "Без роли",
+      manage: "Управление ролями...",
+      selectedTooltip: "Роль: {{name}}",
+      unsupportedProvider:
+        "Этот провайдер не поддерживает роли. Смените провайдера или уберите роль.",
+      fixedHint:
+        "Инструкции роли этого агента зафиксированы при его создании. Изменения роли действуют только для новых агентов.",
+      newAgentWithRole: "Новый агент с этой ролью",
+      removedName: "{{name}} (удалена)",
+    },
     provider: {
       fallback: "Провайдер",
       select: "Выбрать провайдера агента",
@@ -3696,6 +3708,39 @@ export const ru: TranslationResources = {
         save: "Сохранить",
         emptyState:
           "Профилей пока нет. Добавьте профиль, чтобы запускать терминалы с заданной командой.",
+      },
+      agentRoles: {
+        sectionTitle: "Роли агентов",
+        unavailable: "Подключитесь к этому хосту, чтобы управлять ролями агентов",
+        unsupported: "Демон этого хоста пока не поддерживает роли агентов",
+        emptyState: "Ролей пока нет. Добавьте роль, чтобы задать новым агентам способ работы.",
+        addRoleTitle: "Добавить роль агента",
+        editRoleTitle: "Изменить роль агента",
+        newRole: "Новая роль",
+        editRole: "Изменить роль",
+        nameLabel: "Название",
+        namePlaceholder: "Ревьюер",
+        iconLabel: "Значок",
+        descriptionLabel: "Назначение",
+        descriptionPlaceholder: "Для чего нужна эта роль, в одну строку",
+        instructionsLabel: "Инструкции",
+        instructionsHint:
+          "Записываются в системный промпт агента при его создании и потом не меняются. Системный промпт хоста идёт после них.",
+        instructionsPlaceholder: "Как работает агент с этой ролью",
+        defaultProfileLabel: "Профиль агента по умолчанию",
+        noDefaultProfile: "Нет",
+        save: "Сохранить",
+        saving: "Сохранение...",
+        remove: "Удалить",
+        removeConfirmTitle: "Удалить роль?",
+        removeConfirmMessage:
+          "Удалить «{{name}}»? Агенты, у которых уже есть эта роль, сохранят свои инструкции.",
+        restoreDefaults: "Восстановить роли по умолчанию",
+        restoreConfirmTitle: "Восстановить роли по умолчанию?",
+        restoreConfirmMessage:
+          "Заменить роли этого хоста встроенными? Ваши изменения ролей будут потеряны.",
+        moveUp: "Переместить вверх",
+        moveDown: "Переместить вниз",
       },
       agentProfiles: {
         sectionTitle: "Профили агентов",

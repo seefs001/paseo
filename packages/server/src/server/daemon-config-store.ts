@@ -37,6 +37,7 @@ interface SupportedMutableConfigPatch {
   appendSystemPrompt?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
+  agentRoles?: MutableDaemonConfig["agentRoles"];
   skills?: MutableDaemonConfig["skills"];
   pluginsEnabled?: boolean;
   plugins?: MutableDaemonConfig["plugins"];
@@ -198,6 +199,7 @@ const RELOADABLE_PATHS = [
   "daemon.appendSystemPrompt",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
+  "daemon.agentRoles",
   "app.baseUrl",
   "agents.idleRuntimeCleanup",
   "agents.resumeOnStartup",
@@ -227,6 +229,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.appendSystemPrompt", "appendSystemPrompt"],
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
+  ["daemon.agentRoles", "agentRoles"],
   ["app.baseUrl", "app.baseUrl"],
   ["agents.idleRuntimeCleanup", "idleRuntimeCleanup"],
   ["agents.resumeOnStartup", "resumeOnStartup"],
@@ -328,6 +331,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       : {}),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
+    ...(patch.agentRoles !== undefined ? { agentRoles: patch.agentRoles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
     ...(patch.features !== undefined ? { features: patch.features } : {}),
@@ -778,6 +782,16 @@ function mergeMutableAgentPatch(
   return Object.keys(next).length > 0 ? (next as PersistedConfig["agents"]) : undefined;
 }
 
+// Whole-list fields: a patch replaces the stored list rather than merging entries.
+function assignPersistedLists(
+  next: NonNullable<PersistedConfig["daemon"]>,
+  patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
+): void {
+  if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
+  if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
+  if (patch.agentRoles !== undefined) next.agentRoles = patch.agentRoles;
+}
+
 function mergeMutableDaemonPatch(
   persistedDaemon: PersistedConfig["daemon"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
@@ -810,8 +824,7 @@ function mergeMutableDaemonPatch(
     next.enableTerminalAgentHooks = patch.enableTerminalAgentHooks;
   }
   if (patch.appendSystemPrompt !== undefined) next.appendSystemPrompt = patch.appendSystemPrompt;
-  if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
-  if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
+  assignPersistedLists(next, patch);
   return Object.keys(next).length > 0 ? next : undefined;
 }
 

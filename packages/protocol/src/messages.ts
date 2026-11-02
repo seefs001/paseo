@@ -38,6 +38,13 @@ export {
   type AgentProfile,
   type AgentSkillSelection,
 } from "./agent-profile.js";
+import { AgentRoleSchema, AgentRoleSnapshotSchema } from "./agent-role.js";
+export {
+  AgentRoleSchema,
+  AgentRoleSnapshotSchema,
+  type AgentRole,
+  type AgentRoleSnapshot,
+} from "./agent-role.js";
 import { PluginIdSchema, PluginRequirementsSchema, PluginSourceSchema } from "./plugin-config.js";
 export {
   PluginIdSchema,
@@ -263,6 +270,8 @@ export const MutableDaemonConfigSchema = z
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    // Absent means the built-in DEFAULT_AGENT_ROLES; [] means the user removed them all.
+    agentRoles: z.array(AgentRoleSchema).optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
@@ -301,6 +310,7 @@ export const MutableDaemonConfigPatchSchema = z
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    agentRoles: z.array(AgentRoleSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     features: SpeechSettingsPatchSchema.optional(),
@@ -416,6 +426,9 @@ export const ProviderSnapshotEntrySchema = z.object({
   description: z.string().optional(),
   iconSvg: z.string().optional(),
   defaultModeId: z.string().nullable().optional(),
+  // Set once the provider is ready. Agent roles need it: the role's instructions
+  // become the new agent's system prompt.
+  supportsSystemPrompt: z.boolean().optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({
@@ -948,6 +961,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
+  // The Agent role the agent was created with. Fixed at creation.
+  role: AgentRoleSnapshotSchema.optional(),
   // Private helper marker, retained for exact-ID snapshots and older wire messages.
   internal: z.boolean().optional(),
 });
@@ -2145,6 +2160,9 @@ export const CreateAgentRequestMessageSchema = z.object({
   callerAgentId: z.string().optional(),
   worktreeName: z.string().optional(),
   initialPrompt: z.string().optional(),
+  // An Agent role id. The daemon writes the role's instructions into the new
+  // agent's system prompt; it rejects a request that also sets config.systemPrompt.
+  roleId: z.string().optional(),
   clientMessageId: z.string().optional(),
   outputSchema: z.record(z.string(), z.unknown()).optional(),
   images: z.array(ImageAttachmentSchema).optional(),
@@ -4279,6 +4297,10 @@ export const ServerInfoStatusPayloadSchema = z
         // agentProfiles to one is silently dropped. The client hides the feature
         // rather than letting a save appear to succeed.
         agentProfiles: z.boolean().optional(),
+        // COMPAT(agentRoles): added in v0.14.1, remove gate after 2027-05-01.
+        // Older daemons drop agentRoles from config and ignore roleId on create,
+        // so the client hides roles rather than creating an agent without one.
+        agentRoles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
         // COMPAT(daemonHostnames): added in v0.13.2, remove gate after 2027-05-01.

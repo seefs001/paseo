@@ -97,6 +97,7 @@ export function normalizeWorkspaceDraftTabSetup(
       typeof record.thinkingOptionId === "string" ? record.thinkingOptionId : null,
     ),
     featureValues: isPlainRecord(record.featureValues) ? { ...record.featureValues } : {},
+    ...(typeof record.roleId === "string" && record.roleId ? { roleId: record.roleId } : {}),
   };
 }
 
@@ -175,6 +176,7 @@ function workspaceDraftTabSetupsEqual(
     left.modeId === right.modeId &&
     left.model === right.model &&
     left.thinkingOptionId === right.thinkingOptionId &&
+    left.roleId === right.roleId &&
     equal(left.metadata, right.metadata) &&
     recordsShallowEqual(left.featureValues, right.featureValues)
   );

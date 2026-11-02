@@ -23,9 +23,19 @@ export function buildDraftAgentControls(input: {
   features?: DraftAgentControlsProps["features"];
   onSetFeature?: DraftAgentControlsProps["onSetFeature"];
   onApplyAgentProfile: DraftAgentControlsProps["onApplyAgentProfile"];
+  selectedRoleId?: DraftAgentControlsProps["selectedRoleId"];
+  onSelectRole?: DraftAgentControlsProps["onSelectRole"];
   onDropdownClose?: DraftAgentControlsProps["onDropdownClose"];
 }): DraftAgentControlsProps {
-  const { formState, features, onSetFeature, onApplyAgentProfile, onDropdownClose } = input;
+  const {
+    formState,
+    features,
+    onSetFeature,
+    onApplyAgentProfile,
+    selectedRoleId,
+    onSelectRole,
+    onDropdownClose,
+  } = input;
   return {
     providerDefinitions: formState.providerDefinitions,
     selectedProvider: formState.selectedProvider,
@@ -43,6 +53,7 @@ export function buildDraftAgentControls(input: {
     selectedThinkingOptionId: formState.selectedThinkingOptionId,
     onSelectThinkingOption: formState.setThinkingOptionFromUser,
     onApplyAgentProfile,
+    ...(onSelectRole ? { selectedRoleId: selectedRoleId ?? null, onSelectRole } : {}),
     features,
     onSetFeature,
     onDropdownClose,

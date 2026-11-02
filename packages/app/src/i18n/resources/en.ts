@@ -219,6 +219,18 @@ export const en = {
     },
   },
   agentControls: {
+    role: {
+      title: "Role",
+      none: "No role",
+      manage: "Manage roles...",
+      selectedTooltip: "Role: {{name}}",
+      unsupportedProvider:
+        "This provider cannot take a role. Change the provider or remove the role.",
+      fixedHint:
+        "This agent's role instructions were fixed when it was created. Changes to the role apply only to new agents.",
+      newAgentWithRole: "New agent with this role",
+      removedName: "{{name}} (removed)",
+    },
     provider: {
       fallback: "Provider",
       select: "Select agent provider",
@@ -3773,6 +3785,39 @@ export const en = {
         moveDown: "Move down",
         save: "Save",
         emptyState: "No profiles yet. Add one to launch terminals with a specific command.",
+      },
+      agentRoles: {
+        sectionTitle: "Agent roles",
+        unavailable: "Connect to this host to manage agent roles",
+        unsupported: "This host's daemon does not support agent roles yet",
+        emptyState: "No roles yet. Add one to give new agents a way of working.",
+        addRoleTitle: "Add agent role",
+        editRoleTitle: "Edit agent role",
+        newRole: "New role",
+        editRole: "Edit role",
+        nameLabel: "Name",
+        namePlaceholder: "Reviewer",
+        iconLabel: "Icon",
+        descriptionLabel: "Purpose",
+        descriptionPlaceholder: "What this role is for, in one line",
+        instructionsLabel: "Instructions",
+        instructionsHint:
+          "Written into the agent's system prompt when the agent is created, then fixed. The host system prompt follows it.",
+        instructionsPlaceholder: "How an agent in this role works",
+        defaultProfileLabel: "Default agent profile",
+        noDefaultProfile: "None",
+        save: "Save",
+        saving: "Saving...",
+        remove: "Remove",
+        removeConfirmTitle: "Remove role?",
+        removeConfirmMessage:
+          'Remove "{{name}}"? Agents that already have it keep their instructions.',
+        restoreDefaults: "Restore default roles",
+        restoreConfirmTitle: "Restore default roles?",
+        restoreConfirmMessage:
+          "Replace this host's roles with the built-in roles? Your changes to roles are lost.",
+        moveUp: "Move up",
+        moveDown: "Move down",
       },
       agentProfiles: {
         sectionTitle: "Agent profiles",

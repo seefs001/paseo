@@ -129,6 +129,7 @@ function formatOpenCodeEventStreamDiagnostics(diagnostics: OpenCodeEventStreamDi
 
 const OPENCODE_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
+  supportsSystemPrompt: true,
   supportsSessionPersistence: true,
   supportsSessionListing: true,
   supportsDynamicModes: true,

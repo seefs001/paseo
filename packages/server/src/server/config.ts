@@ -540,6 +540,7 @@ function resolveProfileLists(persisted: ReturnType<typeof loadPersistedConfig>) 
   return {
     terminalProfiles: persisted.daemon?.terminalProfiles,
     agentProfiles: persisted.daemon?.agentProfiles,
+    agentRoles: persisted.daemon?.agentRoles,
   };
 }
 
@@ -600,6 +601,7 @@ export type ResolvedDaemonSettings = Pick<
   | "appendSystemPrompt"
   | "terminalProfiles"
   | "agentProfiles"
+  | "agentRoles"
   | "skillSelection"
   | "pluginsEnabled"
   | "plugins"
