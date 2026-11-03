@@ -6,7 +6,13 @@ import React, {
   useReducer,
   useState,
 } from "react";
-import { Text, TextInput } from "react-native";
+import {
+  Text,
+  TextInput,
+  UIManager,
+  findNodeHandle,
+  type TextInputChangeEvent,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import PasteInput, {
@@ -25,7 +31,7 @@ type NativeInput = (TextInput | PasteTextInputInstance) & {
   replaceText?(text: string, selection?: { start: number; end: number }): void;
   setNativeProps?(props: { text?: string; selection?: { start: number; end: number } }): void;
   setSelection?(start: number, end: number): void;
-  getNativeRef?(): unknown;
+  getNativeRef?(): TextInput | PasteTextInputInstance | null;
 };
 
 export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextInputProps>(
@@ -35,6 +41,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
       initialValue = "",
       highlights,
       onHighlightPress,
+      onChange,
       onChangeText,
       onPasteImages,
       onPasteError,
@@ -46,6 +53,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     const inputRef = useRef<NativeInput | null>(null);
     const initialTextRef = useRef(initialValue);
     const textRef = useRef(initialTextRef.current);
+    const nativeEventCountRef = useRef(0);
     // Resetting the editor swaps the native input to reset intrinsic multiline
     // sizing. Text replacement (including an empty buffer) keeps the input mounted.
     // Until React commits that swap, `inputRef` still points at the doomed
@@ -95,19 +103,22 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
         replaceText: (nextText, selection) => {
           textRef.current = nextText;
           bumpTextRevision();
-          if (inputRef.current?.replaceText) {
-            inputRef.current.replaceText(nextText, selection);
-            return;
-          }
           if (nextText === "") {
             inputRef.current?.clear?.();
             return;
           }
-          inputRef.current?.setNativeProps?.({
-            text: nextText,
-            ...(selection ? { selection } : {}),
-          });
-          if (selection) inputRef.current?.setSelection?.(selection.start, selection.end);
+          const nativeInput = inputRef.current?.getNativeRef?.();
+          if (!nativeInput) return;
+          const nativeTag = findNodeHandle(nativeInput);
+          if (nativeTag === null) return;
+          // setNativeProps({ text }) changes Fabric's text source, which is prepended to
+          // highlighted children. Use the text command so replacement doesn't duplicate them.
+          UIManager.dispatchViewManagerCommand(nativeTag, "setTextAndSelection", [
+            nativeEventCountRef.current,
+            nextText,
+            selection?.start ?? -1,
+            selection?.end ?? -1,
+          ]);
         },
         setSelection: (selection) => {
           if (inputRef.current?.setSelection) {
@@ -124,6 +135,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
           } else {
             inputRef.current?.clear?.();
           }
+          nativeEventCountRef.current = 0;
           isAwaitingReplacementRef.current = true;
           setReplacement((current) => ({ revision: current.revision + 1, autoFocus }));
         },
@@ -132,6 +144,13 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
       [setReplacementFocus],
     );
 
+    const handleChange = useCallback(
+      (event: TextInputChangeEvent) => {
+        nativeEventCountRef.current = event.nativeEvent.eventCount;
+        onChange?.(event);
+      },
+      [onChange],
+    );
     const handleChangeText = useCallback(
       (nextText: string) => {
         textRef.current = nextText;
@@ -178,6 +197,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
           key={replacement.revision}
           ref={assignInputRef as React.Ref<PasteTextInputInstance>}
           {...contentProps}
+          onChange={handleChange}
           onChangeText={handleChangeText}
           onPaste={handlePaste}
         />
@@ -191,6 +211,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
           key={replacement.revision}
           ref={assignInputRef as unknown as React.Ref<never>}
           {...contentProps}
+          onChange={handleChange}
           onChangeText={handleChangeText}
         />
       );
@@ -202,6 +223,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
         key={replacement.revision}
         ref={assignInputRef as React.Ref<TextInput>}
         {...contentProps}
+        onChange={handleChange}
         onChangeText={handleChangeText}
       />
     );
