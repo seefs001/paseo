@@ -13,6 +13,7 @@ import { workspaceFileAttachmentToAgentAttachment } from "@/attachments/workspac
 import { pluginResourceAttachmentToAgentAttachment } from "@/plugins/attachments";
 import {
   encodeProfileReferences,
+  findTextReferenceLinks,
   isTextReference,
   isValidTextReference,
   textReferenceToAgentAttachment,
@@ -22,6 +23,8 @@ export type ComposerAttachmentSubmitFormat = "forge" | "legacy-github";
 
 interface SplitComposerAttachmentsOptions {
   format?: ComposerAttachmentSubmitFormat;
+  /** Host the message is sent to; a role reference from another host is marked unusable. */
+  serverId?: string;
 }
 
 export function resolveComposerAttachmentSubmitFormat(input: {
@@ -57,7 +60,7 @@ export function splitComposerAttachmentsForSubmit(
     }
 
     if (isTextReference(attachment)) {
-      agentAttachments.push(textReferenceToAgentAttachment(attachment));
+      agentAttachments.push(textReferenceToAgentAttachment(attachment, options.serverId));
       continue;
     }
 
@@ -130,13 +133,26 @@ interface PrepareComposerMessageInput extends SplitComposerAttachmentsOptions {
 }
 
 export function prepareComposerMessageForSubmit(input: PrepareComposerMessageInput) {
-  const attachments = input.attachments.filter(
-    (attachment) =>
-      !isTextReference(attachment) ||
-      isValidTextReference({ text: input.text, reference: attachment }),
-  );
+  // Drafts saved before references were written as links still bind them by range; encode
+  // those first. The sent text is then the only source of references, so a link that was
+  // pasted or recalled gets the same resource card as one picked from autocomplete.
+  const text = encodeProfileReferences({
+    text: input.text,
+    attachments: input.attachments.filter(
+      (attachment) =>
+        isTextReference(attachment) &&
+        isValidTextReference({ text: input.text, reference: attachment }),
+    ),
+  });
+  const attachments = [
+    ...findTextReferenceLinks(text),
+    ...input.attachments.filter((attachment) => !isTextReference(attachment)),
+  ];
   return {
-    text: encodeProfileReferences({ text: input.text, attachments }),
-    ...splitComposerAttachmentsForSubmit(attachments, { format: input.format }),
+    text,
+    ...splitComposerAttachmentsForSubmit(attachments, {
+      format: input.format,
+      serverId: input.serverId,
+    }),
   };
 }

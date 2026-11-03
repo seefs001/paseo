@@ -392,16 +392,14 @@ function useProfileReferenceHighlights(
   textSource: ComposerTextSource,
   attachments: readonly UserComposerAttachment[],
 ): readonly ProfileReferenceRange[] | undefined {
-  const hasReferences = attachments.some(isTextReference);
   const cacheRef = useRef<readonly ProfileReferenceRange[] | undefined>(undefined);
   const getSnapshot = useCallback(() => {
-    if (!hasReferences) return undefined;
     const next = getProfileReferenceHighlights({ text: textSource.getSnapshot(), attachments });
     const current = cacheRef.current;
     if (current && haveSameRanges(current, next)) return current;
     cacheRef.current = next.length > 0 ? next : undefined;
     return cacheRef.current;
-  }, [attachments, hasReferences, textSource]);
+  }, [attachments, textSource]);
   return useSyncExternalStore(textSource.subscribe, getSnapshot, getSnapshot);
 }
 
@@ -1808,6 +1806,7 @@ function ComposerContentImpl({
       }
       await dispatchComposerAgentMessage({
         client,
+        serverId,
         agentId: targetAgentId,
         text,
         attachments: sendAttachments,

@@ -4,6 +4,7 @@ import {
   applyProfileReferenceEdit,
   decodeProfileReferences,
   encodeProfileReferences,
+  findTextReferenceLinks,
   getProfileReferenceHighlights,
   insertProfileReference,
   insertSessionReference,
@@ -11,7 +12,7 @@ import {
   textReferenceToAgentAttachment,
   updateProfileReferences,
   type ProfileReference,
-  type SessionReference,
+  type TextReference,
 } from "./model";
 
 const profile: AgentProfile = {
@@ -36,17 +37,42 @@ function insert(text = "请用 #cla 帮忙") {
   });
 }
 
-function referenceOf(attachments: ReturnType<typeof insert>["attachments"]): ProfileReference {
-  const reference = attachments.find((attachment) => attachment.kind === "profile_reference");
+/** The profile reference a link in `text` resolves to. */
+function linkedProfileOf(text: string): ProfileReference {
+  const [reference, ...rest] = findTextReferenceLinks(text);
+  if (reference?.kind !== "profile_reference" || rest.length > 0) {
+    throw new Error("Expected exactly one profile link");
+  }
+  return reference;
+}
+
+/**
+ * A draft saved before references were written as links: the visible label in the text and the
+ * reference bound to its range. Those drafts still load, edit and send.
+ */
+function legacyDraft(text: string): { text: string; attachments: TextReference[] } {
+  const decoded = decodeProfileReferences(text);
+  return { text: decoded.text, attachments: decoded.references };
+}
+
+function referenceOf(attachments: readonly { kind: string }[]): ProfileReference {
+  const reference = attachments.find(
+    (attachment): attachment is ProfileReference => attachment.kind === "profile_reference",
+  );
   if (!reference) throw new Error("Expected a profile reference");
   return reference;
 }
 
 describe("profile references", () => {
-  it("inserts display text and a selected configuration snapshot, with the cursor after it", () => {
+  it("inserts a Markdown link carrying the selected configuration snapshot, with the cursor after it", () => {
     const selected = insert();
-    expect(selected.text).toBe("请用 #Claude Opus 5.5 帮忙");
-    const reference = referenceOf(selected.attachments);
+    expect(selected.attachments).toEqual([]);
+    const reference = linkedProfileOf(selected.text);
+    expect(selected.text).toBe(`请用 ${selected.text.slice(reference.start, reference.end)} 帮忙`);
+    expect(selected.text.slice(reference.start, reference.end)).toMatch(
+      /^\[#Claude Opus 5\.5\]\(paseo-profile:[^\s)]+\)$/,
+    );
+    expect(decodeProfileReferences(selected.text).text).toBe("请用 #Claude Opus 5.5 帮忙");
     expect(reference.profile).toEqual(profile);
     expect(reference.profile).not.toBe(profile);
     expect(reference.profile.featureValues).not.toBe(profile.featureValues);
@@ -59,14 +85,18 @@ describe("profile references", () => {
 
   it("does not bind plain occurrences of the same name or a longer profile name", () => {
     const selected = insert("#cla and #Claude Opus 5.5 and #Claude Opus 5.5 Fast");
-    expect(getProfileReferenceHighlights(selected)).toEqual([{ start: 0, end: 16 }]);
-    const encoded = encodeProfileReferences(selected);
-    expect(encoded.match(/paseo-profile:/g)).toHaveLength(1);
-    expect(decodeProfileReferences(encoded).text).toBe(selected.text);
+    const reference = linkedProfileOf(selected.text);
+    expect(reference.start).toBe(0);
+    expect(getProfileReferenceHighlights(selected)).toEqual([{ start: 0, end: reference.end }]);
+    expect(encodeProfileReferences(selected)).toBe(selected.text);
+    expect(selected.text.match(/paseo-profile:/g)).toHaveLength(1);
+    const decoded = decodeProfileReferences(selected.text);
+    expect(decoded.text).toBe("#Claude Opus 5.5 and #Claude Opus 5.5 and #Claude Opus 5.5 Fast");
+    expect(decoded.references.map(({ start, end }) => [start, end])).toEqual([[0, 16]]);
   });
 
   it("shifts an exact reference when text is inserted before it and keeps it after appending", () => {
-    const selected = insert();
+    const selected = legacyDraft(insert().text);
     const before = updateProfileReferences({
       previousText: selected.text,
       text: `先 ${selected.text}`,
@@ -82,13 +112,16 @@ describe("profile references", () => {
   });
 
   it("uses the edited selection to avoid transferring a deleted reference to repeated text", () => {
-    const selected = insertProfileReference({
-      text: "#a #A",
-      attachments: [],
-      mention: { start: 0, end: 2 },
-      profile: { id: "a", name: "A", provider: "pi" },
-      serverId: "host-a",
-    });
+    const selected = legacyDraft(
+      insertProfileReference({
+        text: "#a #A",
+        attachments: [],
+        mention: { start: 0, end: 2 },
+        profile: { id: "a", name: "A", provider: "pi" },
+        serverId: "host-a",
+      }).text,
+    );
+    expect(selected.text).toBe("#A #A");
     const edited = applyProfileReferenceEdit({
       previousText: selected.text,
       text: "#A",
@@ -113,17 +146,20 @@ describe("profile references", () => {
       profile: { id: "a", name: "A", provider: "pi" },
       serverId: "host-a",
     });
+    const firstLink = linkedProfileOf(first.text);
     const second = insertProfileReference({
       ...first,
-      mention: { start: 0, end: 2 },
+      mention: { start: firstLink.start, end: firstLink.end },
       profile: { id: "b", name: "A", provider: "claude", model: "opus" },
       serverId: "host-b",
     });
-    expect(second.text).toBe(first.text);
-    expect(second.attachments).toHaveLength(1);
-    const replaced = decodeProfileReferences(encodeProfileReferences(second)).references[0];
-    if (replaced?.kind !== "profile_reference") throw new Error("expected a profile reference");
-    expect(replaced.profile.id).toBe("b");
+    expect(second.attachments).toEqual([]);
+    expect(decodeProfileReferences(second.text).text).toBe(
+      decodeProfileReferences(first.text).text,
+    );
+    const replaced = linkedProfileOf(second.text);
+    expect(replaced.serverId).toBe("host-b");
+    expect(replaced.profile).toEqual({ id: "b", name: "A", provider: "claude", model: "opus" });
   });
 
   it("keeps the selected occurrence distinct from another same-named profile", () => {
@@ -136,7 +172,7 @@ describe("profile references", () => {
       profile: { ...profile, id: "other", model: "another-model" },
       serverId: "host-b",
     });
-    const decoded = decodeProfileReferences(encodeProfileReferences(second));
+    const decoded = decodeProfileReferences(second.text);
     expect(
       decoded.references.map((reference) => {
         if (reference.kind !== "profile_reference") throw new Error("expected a profile reference");
@@ -149,7 +185,8 @@ describe("profile references", () => {
   });
 
   it("unbinds when editing inside a reference rather than attaching to a matching name elsewhere", () => {
-    const selected = insert("#cla and #Claude Opus 5.5");
+    const selected = legacyDraft(insert("#cla and #Claude Opus 5.5").text);
+    expect(selected.attachments).toHaveLength(1);
     const text = selected.text.replace("#Claude", "#Cllaude");
     const attachments = updateProfileReferences({
       previousText: selected.text,
@@ -160,8 +197,22 @@ describe("profile references", () => {
     expect(encodeProfileReferences({ text, attachments })).toBe(text);
   });
 
-  it("deletes a selected token atomically with backspace and drops its metadata", () => {
-    const selected = insert();
+  it("edits a written link as plain Markdown, and still deletes a legacy draft token atomically", () => {
+    // A link is ordinary text: backspace removes one character and a broken link is plain text.
+    const linked = insert();
+    const link = linkedProfileOf(linked.text);
+    const labelEnd = link.start + "[#Claude Opus 5.5".length;
+    const backspaced = linked.text.slice(0, labelEnd - 1) + linked.text.slice(labelEnd);
+    expect(
+      applyProfileReferenceEdit({
+        previousText: linked.text,
+        text: backspaced,
+        attachments: linked.attachments,
+      }),
+    ).toEqual({ text: backspaced, attachments: [], selection: null });
+    expect(findTextReferenceLinks(backspaced)).toEqual([]);
+
+    const selected = legacyDraft(linked.text);
     const reference = referenceOf(selected.attachments);
     const text = selected.text.slice(0, reference.end - 1) + selected.text.slice(reference.end);
     const edited = applyProfileReferenceEdit({
@@ -175,7 +226,7 @@ describe("profile references", () => {
   });
 
   it("does not turn an insertion or replacement inside a reference into an atomic deletion", () => {
-    const selected = insert();
+    const selected = legacyDraft(insert().text);
     const text = selected.text.replace("Opus", "奥普斯");
     expect(
       applyProfileReferenceEdit({
@@ -191,7 +242,11 @@ describe("profile references", () => {
   });
 
   it("keeps references when both sides of a message are trimmed", () => {
-    const selected = insert(" \n #cla \n ");
+    const linked = insert(" \n #cla \n ");
+    expect(getProfileReferenceHighlights({ text: linked.text.trim(), attachments: [] })).toEqual([
+      { start: 0, end: linkedProfileOf(linked.text.trim()).end },
+    ]);
+    const selected = legacyDraft(linked.text);
     const text = selected.text.trim();
     const attachments = updateProfileReferences({
       previousText: selected.text,
@@ -204,7 +259,7 @@ describe("profile references", () => {
   });
 
   it("does not rebind a deleted reference when undo or plain-text paste brings its name back", () => {
-    const selected = insert();
+    const selected = legacyDraft(insert().text);
     const removed = updateProfileReferences({
       previousText: selected.text,
       text: "",
@@ -217,8 +272,9 @@ describe("profile references", () => {
 
   it("retains complete snapshot semantics in history without live configuration or attachments", () => {
     const selected = insert();
-    const decoded = decodeProfileReferences(encodeProfileReferences(selected));
-    expect(decoded.text).toBe(selected.text);
+    expect(encodeProfileReferences(selected)).toBe(selected.text);
+    const decoded = decodeProfileReferences(selected.text);
+    expect(decoded.text).toBe("请用 #Claude Opus 5.5 帮忙");
     expect(decoded.references).toHaveLength(1);
     const reference = decoded.references[0];
     if (reference?.kind !== "profile_reference") throw new Error("expected a profile reference");
@@ -243,8 +299,12 @@ describe("profile references", () => {
       profile: specialProfile,
       serverId: "host-a",
     });
-    const decoded = decodeProfileReferences(encodeProfileReferences(selected));
-    expect(decoded.text).toBe(selected.text);
+    expect(selected.text.startsWith("😀 [#专家 \\[Opus\\] (5.5) \\\\ 编程](paseo-profile:")).toBe(
+      true,
+    );
+    expect(linkedProfileOf(selected.text).profile).toEqual(specialProfile);
+    const decoded = decodeProfileReferences(selected.text);
+    expect(decoded.text).toBe("😀 #专家 [Opus] (5.5) \\ 编程 !");
     const reference = decoded.references[0];
     if (reference?.kind !== "profile_reference") throw new Error("expected a profile reference");
     expect(reference.profile).toEqual(specialProfile);
@@ -262,12 +322,12 @@ describe("profile references", () => {
   });
 
   it("does not hide a forged label on a link with different metadata", () => {
-    const encoded = encodeProfileReferences(insert()).replace("[#Claude Opus 5.5]", "[#Other]");
+    const encoded = insert().text.replace("[#Claude Opus 5.5]", "[#Other]");
     expect(decodeProfileReferences(encoded)).toEqual({ text: encoded, references: [] });
   });
 
   it("does not encode stale ranges or duplicate overlapping references", () => {
-    const selected = insert();
+    const selected = legacyDraft(insert().text);
     expect(encodeProfileReferences({ text: "changed", attachments: selected.attachments })).toBe(
       "changed",
     );
@@ -293,41 +353,46 @@ describe("profile references", () => {
         workspaceId: "ws_1",
       },
     });
-    expect(selected.text).toBe("问 @Auth fix 进度");
-    const reference = selected.attachments.find(
-      (attachment): attachment is SessionReference => attachment.kind === "session_reference",
-    );
-    if (!reference) throw new Error("expected a session reference");
-    expect(reference).toMatchObject({
+    expect(selected.attachments).toEqual([]);
+    const [link, ...others] = findTextReferenceLinks(selected.text);
+    if (link?.kind !== "session_reference" || others.length > 0) {
+      throw new Error("expected one session link");
+    }
+    expect(link).toMatchObject({
+      serverId: "local",
       title: "Auth fix",
       agentId: "agt_auth_fix_123456",
       start: 2,
     });
-    expect(selected.selection).toEqual({ start: reference.end, end: reference.end });
-    expect(getProfileReferenceHighlights(selected)).toEqual([
-      { start: reference.start, end: reference.end },
-    ]);
+    expect(selected.text).toBe(`问 ${selected.text.slice(link.start, link.end)} 进度`);
+    expect(selected.selection).toEqual({ start: link.end, end: link.end });
+    expect(getProfileReferenceHighlights(selected)).toEqual([{ start: link.start, end: link.end }]);
 
+    const legacy = legacyDraft(selected.text);
+    expect(legacy.text).toBe("问 @Auth fix 进度");
+    const reference = legacy.attachments[0];
+    if (reference?.kind !== "session_reference") throw new Error("expected a session reference");
     const shifted = updateProfileReferences({
-      previousText: selected.text,
-      text: `先${selected.text}`,
-      attachments: selected.attachments,
+      previousText: legacy.text,
+      text: `先${legacy.text}`,
+      attachments: legacy.attachments,
     });
     expect(shifted.find((attachment) => attachment.kind === "session_reference")).toMatchObject({
       start: 3,
     });
 
     const deleted = applyProfileReferenceEdit({
-      previousText: selected.text,
-      text: selected.text.slice(0, reference.start + 1) + selected.text.slice(reference.start + 2),
-      attachments: selected.attachments,
+      previousText: legacy.text,
+      text: legacy.text.slice(0, reference.start + 1) + legacy.text.slice(reference.start + 2),
+      attachments: legacy.attachments,
       selectionBefore: { start: reference.start + 1, end: reference.start + 1 },
     });
     expect(deleted.text).toBe("问  进度");
     expect(deleted.attachments).toEqual([]);
 
-    const decoded = decodeProfileReferences(encodeProfileReferences(selected));
-    expect(decoded.text).toBe(selected.text);
+    expect(encodeProfileReferences(legacy)).toBe(selected.text);
+    const decoded = decodeProfileReferences(selected.text);
+    expect(decoded.text).toBe(legacy.text);
     const restored = decoded.references[0];
     if (restored?.kind !== "session_reference") throw new Error("expected a session reference");
     expect(restored.agentId).toBe("agt_auth_fix_123456");

@@ -204,8 +204,23 @@ export function rankAgentRoleMentions<T extends AgentRoleMention>(input: {
 
 // The role's instructions stay out of the card: the daemon reads them by id when the agent is
 // created, and an agent that reads them here may take them as instructions for itself.
-export function buildAgentRoleAddressCard(input: AgentRoleMention): string {
+/**
+ * `create_agent` resolves `role` only on the host that runs it, so a role from another host
+ * must not be passed by id: the same id there can name a different role.
+ */
+export function buildAgentRoleAddressCard(
+  input: AgentRoleMention,
+  source?: { serverId: string; targetServerId?: string },
+): string {
   const lines = ["Referenced agent role", `- roleId: ${input.id}`, `- name: ${input.name}`];
+  if (source) lines.push(`- host: ${source.serverId}`);
+  if (source?.targetServerId && source.targetServerId !== source.serverId) {
+    lines.push(
+      "",
+      `This role belongs to host ${source.serverId}, not the host this message was sent to (${source.targetServerId}). Roles cannot be used across hosts: do not pass this roleId or a same-named role to create_agent. Tell the user the role is unavailable here.`,
+    );
+    return lines.join("\n");
+  }
   if (input.description?.trim()) lines.push(`- description: ${input.description.trim()}`);
   if (input.defaultProfileId?.trim()) {
     lines.push(`- defaultProfileId: ${input.defaultProfileId.trim()}`);

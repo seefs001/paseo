@@ -30,7 +30,6 @@ import type { ComposerTextSource } from "@/composer/text-source";
 import { isWeb } from "@/constants/platform";
 import {
   applyProfileReferenceEdit,
-  decodeProfileReferences,
   isTextReference,
   type ProfileReferenceRange,
 } from "@/composer/profile-reference/model";
@@ -238,23 +237,11 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
 
   const replaceText = useCallback(
     (nextText: string) => {
-      const decoded = decodeProfileReferences(nextText);
-      if (decoded.references.length > 0) {
-        const current = useDraftStore.getState().getDraftInput(draftKey);
-        const otherAttachments = (current?.attachments ?? []).filter(
-          (attachment) => !isTextReference(attachment),
-        );
-        replaceInput({
-          text: decoded.text,
-          attachments: [...otherAttachments, ...decoded.references],
-        });
-        return;
-      }
       textPublication.cancel();
       useDraftStore.getState().editDraftText({ draftKey, text: nextText });
       publishTextReplacement("replace", nextText);
     },
-    [draftKey, publishTextReplacement, replaceInput, textPublication],
+    [draftKey, publishTextReplacement, textPublication],
   );
 
   const setAttachments = useCallback(

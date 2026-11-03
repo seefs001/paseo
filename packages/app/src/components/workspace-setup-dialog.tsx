@@ -322,6 +322,7 @@ export function WorkspaceSetupDialog() {
         const wirePayload = prepareComposerMessageForSubmit({
           text,
           attachments,
+          serverId,
           format: resolveComposerAttachmentSubmitFormat({
             supportsForgeAttachments: supportsForgeSearch,
           }),

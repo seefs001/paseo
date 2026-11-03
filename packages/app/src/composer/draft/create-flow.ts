@@ -296,6 +296,7 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
       const wirePayload = prepareComposerMessageForSubmit({
         text: trimmedPrompt,
         attachments: trimmedAttachments,
+        serverId: pendingServerId,
         format: resolveComposerAttachmentSubmitFormat({
           supportsForgeAttachments: supportsForgeSearch,
         }),

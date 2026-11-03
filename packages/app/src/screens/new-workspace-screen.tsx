@@ -449,6 +449,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
   const wirePayload = prepareComposerMessageForSubmit({
     text,
     attachments,
+    serverId,
     format: attachmentSubmitFormat,
   });
   const images = await encodeImages(wirePayload.images);
@@ -620,6 +621,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
   const wirePayload = prepareComposerMessageForSubmit({
     text: trimmedText,
     attachments: trimmedAttachments,
+    serverId,
     format: resolveComposerAttachmentSubmitFormat({
       supportsForgeAttachments: input.supportsForgeSearch,
     }),

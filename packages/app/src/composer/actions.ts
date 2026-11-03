@@ -192,6 +192,8 @@ export interface DispatchComposerAgentMessageInput {
   text: string;
   attachments: ComposerAttachment[];
   attachmentSubmitFormat?: ComposerAttachmentSubmitFormat;
+  /** Host that runs the agent. */
+  serverId?: string;
   encodeImages: (
     images: AttachmentMetadata[],
   ) => Promise<Array<{ data: string; mimeType: string }> | undefined>;
@@ -207,6 +209,7 @@ export async function dispatchComposerAgentMessage(
     text: input.text,
     attachments: input.attachments,
     format: input.attachmentSubmitFormat,
+    serverId: input.serverId,
   });
   const clientMessageId = generateMessageId();
   const userMessage = createUserMessage({

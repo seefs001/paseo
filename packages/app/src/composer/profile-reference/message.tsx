@@ -1,8 +1,8 @@
-import { Fragment, useCallback } from "react";
+import { Fragment, useCallback, useMemo } from "react";
 import { Text } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
-import { textReferenceToAgentAttachment, type TextReference } from "./model";
+import { textReferenceMarkdown, textReferenceToAgentAttachment, type TextReference } from "./model";
 
 interface ProfileReferenceMessageProps {
   text: string;
@@ -49,12 +49,20 @@ function ProfileReferenceText({ reference, label, onOpenMention }: ProfileRefere
   const handlePress = useCallback(() => {
     onOpenMention(textReferenceToAgentAttachment(reference));
   }, [onOpenMention, reference]);
+  const dataSet = useMemo(
+    () => ({
+      paseoReferenceMarkdown: textReferenceMarkdown(reference),
+      paseoReferenceLabel: label,
+    }),
+    [label, reference],
+  );
 
   return (
     <Text
       style={styles.reference}
       onPress={handlePress}
       accessibilityRole="button"
+      dataSet={dataSet}
       testID={`user-message-${reference.kind.replace("_reference", "")}-reference`}
     >
       {label}

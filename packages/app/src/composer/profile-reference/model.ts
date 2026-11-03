@@ -158,7 +158,9 @@ export function textReferenceContainsIndex(
 export function getProfileReferenceHighlights<T extends ComposerAttachment>(
   input: ReferenceTextInput<T>,
 ): ProfileReferenceRange[] {
-  return validReferences(input).map(({ start, end }) => ({ start, end }));
+  return [...validReferences(input), ...findTextReferenceLinks(input.text)]
+    .map(({ start, end }) => ({ start, end }))
+    .sort((left, right) => left.start - right.start);
 }
 
 function validReferences<T extends ComposerAttachment>(
@@ -248,27 +250,19 @@ export function insertProfileReference(input: {
   selection: ProfileReferenceRange;
 } {
   const profile = AgentProfileSchema.parse(JSON.parse(JSON.stringify(input.profile)));
-  const label = profileReferenceLabel(profile);
-  const after = input.text.slice(input.mention.end);
-  const separator = after.length === 0 || !/^\s/.test(after) ? " " : "";
-  const text = `${input.text.slice(0, input.mention.start)}${label}${separator}${after}`;
-  const end = input.mention.start + label.length;
   const reference: ProfileReference = {
     kind: "profile_reference",
     id: `profile:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`,
     serverId: input.serverId,
     profile,
     start: input.mention.start,
-    end,
+    end: input.mention.start,
   };
   return finishReferenceInsert({
     previousText: input.text,
-    text,
     attachments: input.attachments,
     mention: input.mention,
     reference,
-    end,
-    separator,
   });
 }
 
@@ -293,11 +287,6 @@ export function insertSessionReference(input: {
     cwd: input.session.cwd,
     workspaceId: input.session.workspaceId?.trim() || null,
   };
-  const label = sessionReferenceLabel({ title: session.title ?? "", agentId: session.agentId });
-  const after = input.text.slice(input.mention.end);
-  const separator = after.length === 0 || !/^\s/.test(after) ? " " : "";
-  const text = `${input.text.slice(0, input.mention.start)}${label}${separator}${after}`;
-  const end = input.mention.start + label.length;
   const reference: SessionReference = {
     kind: "session_reference",
     id: `session:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`,
@@ -309,16 +298,13 @@ export function insertSessionReference(input: {
     cwd: session.cwd,
     workspaceId: session.workspaceId,
     start: input.mention.start,
-    end,
+    end: input.mention.start,
   };
   return finishReferenceInsert({
     previousText: input.text,
-    text,
     attachments: input.attachments,
     mention: input.mention,
     reference,
-    end,
-    separator,
   });
 }
 
@@ -341,59 +327,53 @@ export function insertRoleReference(input: {
     description: input.role.description,
     defaultProfileId: input.role.defaultProfileId,
   });
-  const label = roleReferenceLabel(role);
-  const after = input.text.slice(input.mention.end);
-  const separator = after.length === 0 || !/^\s/.test(after) ? " " : "";
-  const text = `${input.text.slice(0, input.mention.start)}${label}${separator}${after}`;
-  const end = input.mention.start + label.length;
   const reference: RoleReference = {
     kind: "role_reference",
     id: `role:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`,
     serverId: input.serverId,
     role,
     start: input.mention.start,
-    end,
+    end: input.mention.start,
   };
   return finishReferenceInsert({
     previousText: input.text,
-    text,
     attachments: input.attachments,
     mention: input.mention,
     reference,
-    end,
-    separator,
   });
 }
 
+/**
+ * Replaces the typed mention with the reference's full Markdown link, the same way a `$` skill
+ * is written. The link text carries everything Paseo needs, so copying, pasting and recalling
+ * it keeps the resource without any side metadata.
+ */
 function finishReferenceInsert(input: {
   previousText: string;
-  text: string;
   attachments: readonly UserComposerAttachment[];
   mention: ProfileReferenceRange;
   reference: TextReference;
-  end: number;
-  separator: string;
 }): {
   text: string;
   attachments: UserComposerAttachment[];
   selection: ProfileReferenceRange;
 } {
+  const link = textReferenceMarkdown(input.reference);
+  const after = input.previousText.slice(input.mention.end);
+  const separator = after.length === 0 || !/^\s/.test(after) ? " " : "";
+  const text = `${input.previousText.slice(0, input.mention.start)}${link}${separator}${after}`;
   const retainedAttachments = input.attachments.filter((attachment) => {
     if (!isTextReference(attachment)) return true;
     return attachment.end <= input.mention.start || attachment.start >= input.mention.end;
   });
   const attachments = updateProfileReferences({
     previousText: input.previousText,
-    text: input.text,
+    text,
     attachments: retainedAttachments,
     selectionBefore: input.mention,
   });
-  const cursor = input.end + input.separator.length;
-  return {
-    text: input.text,
-    attachments: [...attachments, input.reference],
-    selection: { start: cursor, end: cursor },
-  };
+  const cursor = input.mention.start + link.length + separator.length;
+  return { text, attachments, selection: { start: cursor, end: cursor } };
 }
 
 export function applyProfileReferenceEdit(input: ReferenceEditInput<UserComposerAttachment>): {
@@ -431,6 +411,11 @@ function encodeLinkPayload(payload: unknown): string {
     /[!'()*]/g,
     (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
   );
+}
+
+/** The Markdown link Paseo writes for a reference: its visible label and its resource address. */
+export function textReferenceMarkdown(reference: TextReference): string {
+  return referenceLink(reference, textReferenceLabel(reference).replace(/[\\[\]]/g, "\\$&"));
 }
 
 function referenceLink(reference: TextReference, label: string): string {
@@ -540,13 +525,28 @@ export function decodeProfileReferences(text: string): ProfileReferenceDraft {
   return { text: parts.join(""), references };
 }
 
+/**
+ * Valid reference links written in the text itself, with `start`/`end` spanning the whole
+ * link. Links whose label no longer matches their resource stay plain text.
+ */
+export function findTextReferenceLinks(text: string): TextReference[] {
+  if (!text.includes("](paseo-")) return [];
+  const references: TextReference[] = [];
+  for (const match of text.matchAll(TEXT_REFERENCE_LINK)) {
+    const label = match[1].replace(/\\([\\[\]])/g, "$1");
+    const reference = decodeMatchedReference(match[2], match[3], label, match.index);
+    if (reference) references.push({ ...reference, end: match.index + match[0].length });
+  }
+  return references;
+}
+
 export function findTextReferenceAt<T extends ComposerAttachment>(input: {
   text: string;
   attachments: readonly T[];
   index: number;
 }): TextReference | null {
   return (
-    validReferences(input).find((reference) =>
+    [...validReferences(input), ...findTextReferenceLinks(input.text)].find((reference) =>
       textReferenceContainsIndex(reference, input.index),
     ) ?? null
   );
@@ -564,8 +564,10 @@ export function profileReferenceToAgentAttachment(
   };
 }
 
+/** `targetServerId` is the host the message goes to, when the caller knows it. */
 export function textReferenceToAgentAttachment(
   reference: TextReference,
+  targetServerId?: string,
 ): Extract<AgentAttachment, { type: "text" }> {
   if (reference.kind === "profile_reference") return profileReferenceToAgentAttachment(reference);
   if (reference.kind === "role_reference") {
@@ -574,7 +576,10 @@ export function textReferenceToAgentAttachment(
       mimeType: "text/plain",
       contextKind: "agent_role",
       title: reference.role.name,
-      text: buildAgentRoleAddressCard(reference.role),
+      text: buildAgentRoleAddressCard(reference.role, {
+        serverId: reference.serverId,
+        targetServerId,
+      }),
     };
   }
   return {

@@ -8,7 +8,6 @@ import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-d
 import type { MarkdownClipboardEnvironment } from "@/utils/rich-clipboard";
 import {
   decodeProfileReferences,
-  encodeProfileReferences,
   insertSessionReference,
   profileReferenceToAgentAttachment,
   textReferenceToAgentAttachment,
@@ -108,14 +107,22 @@ describe("sent profile references", () => {
     expect(view.getByRole("dialog").textContent).not.toContain(profile.model);
   });
 
-  it("copies only the displayed text, with no serialized profile payload", async () => {
+  it("copies the sent Markdown, keeping each reference's resource link", async () => {
     const writePlainText = vi.fn<MarkdownClipboardEnvironment["writePlainText"]>();
     vi.mocked(getDefaultMarkdownClipboardEnvironment).mockReturnValue({ writePlainText });
     const view = render(<UserMessage message={message} timestamp={1} />);
 
     fireEvent.click(view.getByRole("button", { name: "Copy message" }));
 
-    await waitFor(() => expect(writePlainText).toHaveBeenCalledExactlyOnceWith(plainText));
+    await waitFor(() => expect(writePlainText).toHaveBeenCalledExactlyOnceWith(message));
+    const copied = decodeProfileReferences(writePlainText.mock.calls[0]![0]);
+    expect(copied.text).toBe(plainText);
+    const copiedReference = copied.references[0];
+    if (copiedReference?.kind !== "profile_reference") {
+      throw new Error("expected a profile reference");
+    }
+    expect(copiedReference.serverId).toBe("host-original");
+    expect(copiedReference.profile).toEqual(profile);
   });
 
   it("hides only profile pills for inline references and preserves session details", () => {
@@ -208,24 +215,27 @@ describe("sent profile references", () => {
         workspaceId: "ws_1",
       },
     });
-    const reference = selected.attachments.find(
-      (attachment) => attachment.kind === "session_reference",
-    );
+    // The link is written into the text itself; the sent message is that text unchanged.
+    expect(selected.attachments).toEqual([]);
+    const decoded = decodeProfileReferences(selected.text);
+    const reference = decoded.references[0];
     if (!reference || reference.kind !== "session_reference") {
       throw new Error("expected a session reference");
     }
+    expect(reference).toMatchObject({ serverId: "local", agentId: "agt_auth_fix_123456" });
     const sessionCard = textReferenceToAgentAttachment(reference);
     const view = render(
       <UserMessage
-        message={encodeProfileReferences(selected)}
+        message={selected.text}
         attachments={[sessionCard, profileAttachment]}
         timestamp={1}
       />,
     );
 
     expect(view.container.querySelector('[data-message-text="true"]')?.textContent).toBe(
-      selected.text,
+      "看 @Auth fix ",
     );
+    expect(decoded.text).toBe("看 @Auth fix ");
     expect(view.queryByTestId("user-message-session-reference")).not.toBeNull();
     const pills = view.getAllByTestId("user-message-agent-mention-pill");
     expect(pills).toHaveLength(1);

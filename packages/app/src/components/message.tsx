@@ -17,6 +17,7 @@ import {
   decodeProfileReferences,
   textReferenceToAgentAttachment,
 } from "@/composer/profile-reference/model";
+import { ReferenceCopySurface } from "@/composer/profile-reference/copy-surface";
 import { ProfileReferenceMessage } from "@/composer/profile-reference/message";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { TaskListRow } from "@/components/task-list-row";
@@ -486,7 +487,8 @@ export const UserMessage = memo(function UserMessage({
       (attachment) =>
         attachment.type !== "text" ||
         (attachment.contextKind !== "agent_profile" &&
-          attachment.contextKind !== "agent_session") ||
+          attachment.contextKind !== "agent_session" &&
+          attachment.contextKind !== "agent_role") ||
         !inlineCards.has(attachment.text),
     );
   }, [attachments, references]);
@@ -502,7 +504,8 @@ export const UserMessage = memo(function UserMessage({
 
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
-  const getMessageContent = useCallback(() => displayText, [displayText]);
+  // Copy the sent Markdown, not the rendered labels, so reference links survive a paste.
+  const getMessageContent = useCallback(() => message, [message]);
   const handleRewind = useCallback(
     (input: { mode: RewindMode; rewoundText: string }) => {
       return rewindMutation.rewindAgent(input);
@@ -579,13 +582,15 @@ export const UserMessage = memo(function UserMessage({
               </View>
             ) : null}
             {hasText ? (
-              <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
-                <ProfileReferenceMessage
-                  text={displayText}
-                  references={references}
-                  onOpenMention={handleOpenMention}
-                />
-              </Text>
+              <ReferenceCopySurface>
+                <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
+                  <ProfileReferenceMessage
+                    text={displayText}
+                    references={references}
+                    onOpenMention={handleOpenMention}
+                  />
+                </Text>
+              </ReferenceCopySurface>
             ) : null}
           </MessagePreview>
         </View>
