@@ -49,6 +49,7 @@ async function getRecentActivityTranscript(
   try {
     const timelineItems = await fetchAgentTimelineItems(client, agentId, {
       timeoutMs: WAIT_ACTIVITY_PREVIEW_TIMEOUT_MS,
+      tailCount: WAIT_ACTIVITY_PREVIEW_COUNT,
     });
     return formatAgentActivityTranscript(timelineItems, WAIT_ACTIVITY_PREVIEW_COUNT);
   } catch {

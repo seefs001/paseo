@@ -123,6 +123,8 @@ import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { submitAgentInput } from "@/composer/submit";
+import type { AgentInputDraftSubmission } from "@/composer/draft/input-draft";
+import { FailedSubmissions } from "@/composer/draft/failed-submissions";
 import { ComposerRecall } from "@/composer/recall";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
@@ -1042,6 +1044,7 @@ interface ComposerProps {
   onForgeChangeRequestAutoAttach?: (item: ForgeSearchItem) => void;
   cwd: string;
   clearDraft: (lifecycle: "sent" | "abandoned") => void;
+  submissionDraft?: AgentInputDraftSubmission;
   /** When true, auto-focuses the text input on web. */
   autoFocus?: boolean;
   /** Changing this value requests focus again while autoFocus remains true. */
@@ -1354,6 +1357,7 @@ function ComposerContentImpl({
   onForgeChangeRequestAutoAttach,
   cwd,
   clearDraft,
+  submissionDraft,
   autoFocus = false,
   autoFocusKey,
   onFocusInput,
@@ -1485,6 +1489,7 @@ function ComposerContentImpl({
   const [lightboxMetadata, setLightboxMetadata] = useState<AttachmentMetadata | null>(null);
   const attachButtonRef = useRef<View | null>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
+  const focusMessageInput = useCallback(() => messageInputRef.current?.focus(), []);
   const pluginAttachments = usePluginAttachmentPicker({
     serverId,
     client,
@@ -1891,6 +1896,16 @@ function ComposerContentImpl({
       forceSend?: boolean,
     ) => {
       const result = await submitAgentInput({
+        draft: submissionDraft
+          ? {
+              capture: submissionDraft.capture,
+              retainFailed: ({ message, attachments: failedAttachments }) =>
+                submissionDraft.retainFailed({
+                  message,
+                  attachments: composerWorkspaceAttachment.userAttachmentsOnly(failedAttachments),
+                }),
+            }
+          : undefined,
         message: outgoingMessage,
         attachments: outgoingAttachments,
         hasExternalContent,
@@ -1938,6 +1953,7 @@ function ComposerContentImpl({
       allowEmptySubmit,
       beginSubmit,
       clearDraft,
+      submissionDraft,
       completeSubmit,
       hasExternalContent,
       isAgentRunning,
@@ -2735,15 +2751,42 @@ function ComposerContentImpl({
   // Focusing the composer on a touch screen raises the on-screen keyboard over the conversation.
   const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint && hasFinePointer;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
-  const sendErrorNode = useMemo(
-    () =>
-      sendError ? (
-        <Text accessibilityRole="alert" style={styles.sendErrorText}>
-          {sendError}
-        </Text>
-      ) : null,
-    [sendError],
-  );
+  const sendErrorNode = useMemo(() => {
+    const hasFailedDrafts =
+      submissionDraft && Object.keys(submissionDraft.failures ?? {}).length > 0;
+    if (!sendError && !hasFailedDrafts) return null;
+    return (
+      <>
+        {sendError ? (
+          <Text accessibilityRole="alert" style={styles.sendErrorText}>
+            {sendError}
+          </Text>
+        ) : null}
+        {hasFailedDrafts ? (
+          <FailedSubmissions
+            draft={submissionDraft}
+            disabled={
+              hasText ||
+              attachments.length > 0 ||
+              isProcessing ||
+              isSubmitLoading ||
+              isUploadingFile
+            }
+            onRestored={focusMessageInput}
+          />
+        ) : null}
+      </>
+    );
+  }, [
+    sendError,
+    submissionDraft,
+    focusMessageInput,
+    hasText,
+    attachments.length,
+    isProcessing,
+    isSubmitLoading,
+    isUploadingFile,
+  ]);
   const githubEmptyText = githubSearchResultsQuery.isFetching
     ? t("composer.github.searching")
     : t("composer.github.noResults");

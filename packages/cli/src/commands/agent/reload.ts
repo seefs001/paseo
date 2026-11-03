@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { connectToDaemon, resolveAgentId } from "../../utils/client.js";
+import { fetchAllAgents } from "../../utils/agent-directory.js";
 import type {
   CommandOptions,
   SingleResult,
@@ -51,8 +52,7 @@ export async function runReloadCommand(
   const client = await connectToDaemon({ target: options.daemonTarget });
 
   try {
-    const agentsPayload = await client.fetchAgents({ filter: { includeArchived: true } });
-    const agents = agentsPayload.entries.map((entry) => entry.agent);
+    const agents = await fetchAllAgents(client, { filter: { includeArchived: true } });
     const agentId = resolveAgentId(agentIdArg, agents);
     if (!agentId) {
       const error: CommandError = {

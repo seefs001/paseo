@@ -456,6 +456,7 @@ export function WorkspaceSetupDialog() {
             onChangeAttachments={chatDraft.setAttachments}
             cwd={sourceDirectory}
             clearDraft={chatDraft.clear}
+            submissionDraft={chatDraft.submission}
             autoFocus
             commandDraft={composerState?.commandDraft}
             agentControls={agentControlsWithDisabled}

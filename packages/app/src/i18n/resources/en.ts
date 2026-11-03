@@ -124,6 +124,11 @@ export const en = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "Failed message saved",
+      restore: "Restore draft",
+      waitForEmpty: "Failed message saved. Finish the current draft before restoring it.",
+    },
     placeholders: {
       desktop: "Message the agent, tag @files, or use /commands and /skills",
       mobile: "Message, @files, /commands",

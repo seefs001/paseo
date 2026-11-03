@@ -1614,6 +1614,7 @@ export function NewWorkspaceScreen({
       onForgeChangeRequestAutoAttach={handleForgeChangeRequestAutoAttach}
       cwd={selectedSourceDirectory ?? ""}
       clearDraft={handleClearDraft}
+      submissionDraft={chatDraft.submission}
       autoFocus
       autoFocusKey={launchFocusKey}
       commandDraft={composerState?.commandDraft}

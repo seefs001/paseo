@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { connectToDaemon, resolveAgentId } from "../../utils/client.js";
+import { fetchAllAgents } from "../../utils/agent-directory.js";
 import type {
   CommandError,
   CommandOptions,
@@ -28,11 +29,8 @@ export async function runDetachCommand(
   const client = await connectToDaemon({ target: options.daemonTarget });
 
   try {
-    const payload = await client.fetchAgents({ filter: { includeArchived: true } });
-    const agentId = resolveAgentId(
-      agentIdArg,
-      payload.entries.map((entry) => entry.agent),
-    );
+    const agents = await fetchAllAgents(client, { filter: { includeArchived: true } });
+    const agentId = resolveAgentId(agentIdArg, agents);
     if (!agentId) {
       throw {
         code: "AGENT_NOT_FOUND",

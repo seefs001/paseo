@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { connectToDaemon } from "../../utils/client.js";
+import { fetchAllAgents } from "../../utils/agent-directory.js";
 import { isSameOrDescendantPath } from "../../utils/paths.js";
 import type {
   CommandOptions,
@@ -54,8 +55,10 @@ export async function runStopCommand(
   const client = await connectToDaemon({ target: options.daemonTarget });
 
   try {
-    const fetchPayload = await client.fetchAgents({ filter: { includeArchived: true } });
-    let agents = fetchPayload.entries.map((entry) => entry.agent);
+    let agents =
+      options.all || options.cwd
+        ? await fetchAllAgents(client, { filter: { includeArchived: true } })
+        : [];
     const stoppedIds: string[] = [];
 
     if (options.all) {

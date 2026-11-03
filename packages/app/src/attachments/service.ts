@@ -113,15 +113,12 @@ export async function encodeAttachmentsForSend(
           id: attachment.id,
           error,
         });
-        return null;
+        throw error;
       }
     }),
   );
 
-  const valid = encoded.filter(
-    (entry): entry is { data: string; mimeType: string } => entry !== null,
-  );
-  return valid.length > 0 ? valid : undefined;
+  return encoded;
 }
 
 export async function resolveAttachmentPreviewUrl(attachment: AttachmentMetadata): Promise<string> {

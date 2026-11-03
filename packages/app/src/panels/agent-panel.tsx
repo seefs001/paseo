@@ -1148,6 +1148,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     isHydrated,
     attachmentFocusRequestId,
     composerState,
+    submission,
   } = rawAgentInputDraft;
   const agentInputDraft = useMemo(
     (): AgentInputDraft => ({
@@ -1162,6 +1163,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       isHydrated,
       attachmentFocusRequestId,
       composerState,
+      submission,
     }),
     [
       textSource,
@@ -1175,6 +1177,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       isHydrated,
       attachmentFocusRequestId,
       composerState,
+      submission,
     ],
   );
   const parentCallout = parentAgentId ? (
@@ -1644,6 +1647,7 @@ function ActiveAgentComposer({
         onChangeAttachments={agentInputDraft.setAttachments}
         cwd={cwd}
         clearDraft={agentInputDraft.clear}
+        submissionDraft={agentInputDraft.submission}
         editingSession={editingSession}
         autoFocus
         autoFocusKey={String(agentInputDraft.attachmentFocusRequestId)}

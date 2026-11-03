@@ -35,6 +35,8 @@ export const NO_ACTIVITY_MESSAGE = "No activity to display.";
 interface FetchAgentTimelineItemsOptions {
   timeoutMs?: number;
   sinceTimestampMs?: number;
+  tailCount?: number;
+  filter?: string;
 }
 
 interface FollowModeInput {
@@ -54,6 +56,8 @@ export async function fetchAgentTimelineItems(
     agentId,
     timeoutMs: options?.timeoutMs,
     sinceTimestampMs: options?.sinceTimestampMs,
+    tailCount: options?.tailCount,
+    filter: options?.filter ? (item) => matchesFilter(item, options.filter) : undefined,
   });
 }
 
@@ -330,16 +334,6 @@ export async function runLogsCommand(
       return;
     }
 
-    // Fetch timeline directly via cursor RPC.
-    let timelineItems = await fetchAgentTimelineItems(client, resolvedId, {
-      sinceTimestampMs,
-    });
-
-    // Apply filter
-    if (options.filter) {
-      timelineItems = timelineItems.filter((item) => matchesFilter(item, options.filter));
-    }
-
     const tailCount = parseTailCount(options.tail);
     if (options.tail !== undefined && tailCount === undefined) {
       console.error(`Error: Invalid --tail value: ${options.tail}`);
@@ -348,6 +342,11 @@ export async function runLogsCommand(
       process.exit(1);
     }
 
+    const timelineItems = await fetchAgentTimelineItems(client, resolvedId, {
+      sinceTimestampMs,
+      tailCount,
+      filter: options.filter,
+    });
     await client.close();
 
     if (usesJsonOutput(options)) {
@@ -400,6 +399,8 @@ async function runFollowMode({
         fetchAgentTimelineItems(client, agentId, {
           timeoutMs: LIVE_HISTORY_FETCH_TIMEOUT_MS,
           sinceTimestampMs,
+          tailCount,
+          filter: options.filter,
         }),
         stopped,
       ]);
@@ -407,11 +408,6 @@ async function runFollowMode({
       existingItems = history;
     } catch (error) {
       console.warn("Warning: failed to fetch existing timeline", error);
-    }
-
-    // Apply filter to existing items
-    if (options.filter) {
-      existingItems = existingItems.filter((item) => matchesFilter(item, options.filter));
     }
 
     // Print existing transcript (tail-like behavior)

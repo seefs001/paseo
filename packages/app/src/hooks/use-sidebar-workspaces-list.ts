@@ -1,4 +1,5 @@
 import { useHostFeatureMap } from "@/runtime/host-features";
+import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useCallback, useEffect, useMemo } from "react";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -13,7 +14,7 @@ import {
   createSidebarWorkspacePlacementSelector,
   computeSidebarOrderUpdates,
   createSidebarWorkspaceEntry,
-  deriveProjectStatusBucket,
+  createSidebarProjectStatusSelector,
   deriveSidebarLoadingState,
   type ProjectStatusSession,
   type SidebarProjectEntry,
@@ -58,28 +59,31 @@ export function useSidebarProjectStatusBucket(input: {
   workspaces: readonly SidebarWorkspacePlacement[];
   enabled: boolean;
 }): SidebarStateBucket | null {
-  const { workspaces, enabled } = input;
+  const { workspaces } = input;
+  const isActive = useRetainedPanelActive();
+  const enabled = input.enabled && isActive;
   const pendingCreateAttempts = useStoreWithEqualityFn(
     useCreateFlowStore,
-    (state) => state.pendingByDraftId,
+    (state) => (enabled ? state.pendingByDraftId : EMPTY_PENDING_CREATE_ATTEMPTS),
     workspaceEqualityFns.deep,
   );
+  const selectStatus = useMemo(() => createSidebarProjectStatusSelector(workspaces), [workspaces]);
 
   const selector = useCallback(
     (state: { sessions: Record<string, ProjectStatusSession | undefined> }) => {
       if (!enabled) return null;
-      return deriveProjectStatusBucket({
-        workspaces,
+      return selectStatus({
         sessions: state.sessions,
         pendingCreateAttempts,
       });
     },
-    [enabled, pendingCreateAttempts, workspaces],
+    [enabled, pendingCreateAttempts, selectStatus],
   );
 
   return useStoreWithEqualityFn(useSessionStore, selector, Object.is);
 }
 
+const EMPTY_PENDING_CREATE_ATTEMPTS = {};
 const EMPTY_ORDER: string[] = [];
 const EMPTY_PROJECTS: SidebarProjectEntry[] = [];
 const EMPTY_WORKSPACES: SidebarWorkspacePlacement[] = [];

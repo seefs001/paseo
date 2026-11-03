@@ -8,16 +8,7 @@ import {
   type WorktreeArchiveWarningLabels,
 } from "@/git/worktree-archive-warning";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
-import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { archiveWorkspaceOptimistically } from "@/workspace/workspace-archive";
-
-function purgeArchivedWorkspaceState(input: { serverId: string; workspaceId: string }): void {
-  const workspaceKey = buildWorkspaceTabPersistenceKey(input);
-  if (workspaceKey) {
-    useWorkspaceLayoutStore.getState().purgeWorkspace(workspaceKey);
-  }
-}
 
 export interface ArchiveWorkspaceInput {
   serverId: string;
@@ -68,7 +59,6 @@ export function useWorkspaceArchive(input: ArchiveWorkspaceInput): WorkspaceArch
           workspaceId,
         },
       });
-      purgeArchivedWorkspaceState({ serverId, workspaceId });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("sidebar.workspace.toasts.archiveFailed"),

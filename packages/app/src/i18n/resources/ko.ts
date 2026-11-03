@@ -128,6 +128,11 @@ export const ko: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "전송하지 못한 메시지가 저장되었습니다",
+      restore: "초안 복원",
+      waitForEmpty: "전송하지 못한 메시지가 저장되었습니다. 현재 초안을 처리한 후 복원하세요.",
+    },
     placeholders: {
       desktop: "에이전트에게 메시지를 보내거나 @files 태그, /commands, /skills를 사용하세요",
       mobile: "메시지, @files, /commands",

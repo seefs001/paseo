@@ -157,7 +157,7 @@ export function prepareMarkdownSource(
   if (
     !source.includes("![") &&
     !source.includes("||") &&
-    !source.includes("&") &&
+    !/&(?:#(?:[xX][\da-fA-F]+|\d+)|[a-zA-Z][a-zA-Z\d]+);/.test(source) &&
     // Match content, header, and delimiter lines; quote-only lines count as blank.
     !/^[\t >]*[^\t >\r\n][^\r\n]*(?:\r\n|\r|\n)[^\r\n]+(?:\r\n|\r|\n)(?=[\t >:|-]*\|)[\t >|]*:?-[-\t :|]*$/m.test(
       source,

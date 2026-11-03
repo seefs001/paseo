@@ -148,7 +148,6 @@ import { createSpeechService } from "./speech/speech-runtime.js";
 import { createSpeechSettingsOwner } from "./speech/speech-settings.js";
 import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage } from "./agent/agent-storage.js";
-import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import { getMcpCallLog, recordMcpRequestBody, resolveCallLabels } from "./agent/mcp-call-log.js";
 import { mergeHostDisabledTools } from "./agent/paseo-tool-policy.js";
@@ -1094,11 +1093,6 @@ export async function createPaseoDaemon(
     agentManager.invalidatePluginSessions();
   });
 
-  const detachAgentStoragePersistence = attachAgentStoragePersistence(
-    logger,
-    agentManager,
-    agentStorage,
-  );
   await agentStorage.initialize();
   const restartRecovery = createRestartRecovery({
     storage: agentStorage,
@@ -2177,7 +2171,6 @@ export async function createPaseoDaemon(
       label: "drain plugin lifecycle events",
     }).catch((error) => logger.warn({ err: error }, "Plugin lifecycle events did not finish"));
     await agentManager.flushForShutdown().catch(() => undefined);
-    detachAgentStoragePersistence();
     await agentStorage.flush().catch(() => undefined);
     await agentProviderRuntime.shutdown();
     await pluginRuntime.stopAllPlugins();

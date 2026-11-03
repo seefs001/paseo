@@ -3,6 +3,7 @@ import { isLegacyNewWorkspaceDraftKey, NEW_WORKSPACE_DRAFT_KEY } from "@/stores/
 import { z } from "zod";
 import {
   AttachmentMetadataSchema,
+  FailedDraftSubmissionsSchema,
   LegacyDraftImageSchema,
   normalizeAttachmentMetadata,
   normalizeComposerAttachment,
@@ -101,6 +102,7 @@ const PersistedDraftRecordSchema = z.union([NestedDraftRecordSchema, FlatDraftRe
 export const PersistedDraftStoreSchema = z.strictObject({
   drafts: z.record(z.string(), PersistedDraftRecordSchema).optional(),
   createModalDraft: PersistedDraftRecordSchema.nullable().optional(),
+  failedSubmissions: FailedDraftSubmissionsSchema.optional(),
 });
 type PersistedDraftRecord = z.infer<typeof PersistedDraftRecordSchema>;
 
@@ -252,5 +254,6 @@ export async function migratePersistedState(
     // COMPAT(newWorkspaceDraftSingleton): migrated in v0.1.108; remove after 2027-01-13.
     drafts: migrateNewWorkspaceDraftKeys(nextDrafts),
     createModalDraft,
+    ...(input.failedSubmissions ? { failedSubmissions: input.failedSubmissions } : {}),
   };
 }

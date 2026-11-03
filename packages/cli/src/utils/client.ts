@@ -15,6 +15,7 @@ import {
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { getOrCreateCliClientId } from "./client-id.js";
 import { resolveCliVersion } from "../version.js";
+import type { CommandError } from "../output/index.js";
 
 export interface ConnectOptions {
   target: DaemonTarget;
@@ -276,10 +277,14 @@ export function resolveAgentId(idOrName: string, agents: AgentLike[]): string | 
     return partialTitleMatches[0].id;
   }
 
-  // If we have multiple prefix matches and no unique title match, return first prefix match
-  const firstPrefixMatch = prefixMatches[0];
-  if (firstPrefixMatch) {
-    return firstPrefixMatch.id;
+  const ambiguousMatches =
+    [prefixMatches, titleMatches, partialTitleMatches].find((matches) => matches.length > 1) ?? [];
+  if (ambiguousMatches.length > 1) {
+    throw {
+      code: "AMBIGUOUS_AGENT",
+      message: `Multiple agents match: ${idOrName}`,
+      details: `Use a full agent ID: ${ambiguousMatches.map((agent) => agent.id).join(", ")}`,
+    } satisfies CommandError;
   }
 
   return null;

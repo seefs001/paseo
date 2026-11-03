@@ -114,7 +114,7 @@ export class AgentStorage {
   private daemonExecutionKeysByAgentId: Map<string, string> = new Map();
   private loaded = false;
   private baseDir: string;
-  private loadPromise: Promise<StoredAgentRecord[]> | null = null;
+  private loadPromise: Promise<void> | null = null;
   private logger: Logger;
 
   constructor(baseDir: string, logger: Logger) {
@@ -291,9 +291,9 @@ export class AgentStorage {
     await Promise.allSettled(writes);
   }
 
-  private async load(): Promise<StoredAgentRecord[]> {
+  private async load(): Promise<void> {
     if (this.loaded) {
-      return Array.from(this.cache.values());
+      return;
     }
 
     if (!this.loadPromise) {
@@ -303,7 +303,7 @@ export class AgentStorage {
     return this.loadPromise;
   }
 
-  private async doLoad(): Promise<StoredAgentRecord[]> {
+  private async doLoad(): Promise<void> {
     this.cache.clear();
     this.pathById.clear();
     this.pathsById.clear();
@@ -311,17 +311,15 @@ export class AgentStorage {
     this.daemonExecutionKeysByAgentId.clear();
 
     try {
-      const records = await this.scanDisk();
+      await this.scanDisk();
       this.loaded = true;
-      return records;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         this.loaded = true;
-        return [];
+        return;
       }
       this.logger.error({ err: error }, "Failed to load agents");
       this.loaded = true;
-      return [];
     }
   }
 

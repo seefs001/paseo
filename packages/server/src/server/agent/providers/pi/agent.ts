@@ -1029,7 +1029,6 @@ function createPiPaseoExtensionFile({
 
 	  pi.on("turn_end", async (_event, ctx) => {
 	    emitSubmittedUserEntries(ctx);
-	    emitEntryCapture(ctx, "turn_end");
 	  });
 
 	  pi.registerCommand("${PASEO_PI_FAST_MODE_EXTENSION_COMMAND}", {

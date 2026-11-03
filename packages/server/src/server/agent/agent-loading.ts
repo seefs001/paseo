@@ -80,7 +80,7 @@ export async function ensureAgentLoaded(
   }
 
   const existing = deps.agentManager.getAgent(agentId);
-  if (existing) {
+  if (existing?.historyPrimed) {
     return existing;
   }
 
@@ -99,45 +99,49 @@ export async function ensureAgentLoaded(
     broadcastTimeline: deps.broadcastTimeline === true,
   };
   const initPromise = (async () => {
-    const record = await deps.agentStorage.get(agentId);
-    if (!record) {
-      throw new AgentNotFoundError(agentId);
-    }
+    let snapshot = deps.agentManager.getAgent(agentId);
+    if (!snapshot) {
+      const record = await deps.agentStorage.get(agentId);
+      if (!record) {
+        throw new AgentNotFoundError(agentId);
+      }
 
-    const validProviders = deps.validProviders ?? deps.agentManager.getRegisteredProviderIds();
-    if (!isStoredAgentProviderAvailable(record, validProviders)) {
-      throw new Error(`Agent ${agentId} references unavailable provider '${record.provider}'`);
-    }
-
-    const handle = toAgentPersistenceHandle(validProviders, record.persistence);
-
-    let snapshot: ManagedAgent;
-    if (handle) {
-      snapshot = await deps.agentManager.resumeAgentFromPersistence(
-        handle,
-        buildConfigOverrides(record),
-        agentId,
-        { ...extractTimestamps(record), attention: extractAttention(record) },
-        record.archivedAt ? { purpose: "history" } : undefined,
-      );
-      deps.logger.info({ agentId, provider: record.provider }, "Agent resumed from persistence");
-    } else {
-      // No provider handle to resume: this starts the agent's first session rather than
-      // bringing one back, so it stamps activity and carries no stored attention. Records
-      // without a handle never got far enough to accumulate either.
-      const config = buildSessionConfig(record, {
-        validProviders,
-      });
-      if (!config) {
+      const validProviders = deps.validProviders ?? deps.agentManager.getRegisteredProviderIds();
+      if (!isStoredAgentProviderAvailable(record, validProviders)) {
         throw new Error(`Agent ${agentId} references unavailable provider '${record.provider}'`);
       }
-      snapshot = await deps.agentManager.createAgent(config, agentId, {
-        labels: record.labels,
-        workspaceId: record.workspaceId,
-        owner: record.owner,
-        env: record.launchEnv,
-      });
-      deps.logger.info({ agentId, provider: record.provider }, "Agent created from stored config");
+
+      const handle = toAgentPersistenceHandle(validProviders, record.persistence);
+      if (handle) {
+        snapshot = await deps.agentManager.resumeAgentFromPersistence(
+          handle,
+          buildConfigOverrides(record),
+          agentId,
+          { ...extractTimestamps(record), attention: extractAttention(record) },
+          record.archivedAt ? { purpose: "history" } : undefined,
+        );
+        deps.logger.info({ agentId, provider: record.provider }, "Agent resumed from persistence");
+      } else {
+        // No provider handle to resume: this starts the agent's first session rather than
+        // bringing one back, so it stamps activity and carries no stored attention. Records
+        // without a handle never got far enough to accumulate either.
+        const config = buildSessionConfig(record, {
+          validProviders,
+        });
+        if (!config) {
+          throw new Error(`Agent ${agentId} references unavailable provider '${record.provider}'`);
+        }
+        snapshot = await deps.agentManager.createAgent(config, agentId, {
+          labels: record.labels,
+          workspaceId: record.workspaceId,
+          owner: record.owner,
+          env: record.launchEnv,
+        });
+        deps.logger.info(
+          { agentId, provider: record.provider },
+          "Agent created from stored config",
+        );
+      }
     }
 
     await deps.agentManager.hydrateTimelineFromProvider(agentId, {

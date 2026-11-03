@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { generateMessageId } from "@/types/stream";
 import { persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {
@@ -45,6 +46,8 @@ export type { DraftInput, DraftLifecycleState } from "./state";
 
 interface DraftStoreActions {
   getDraftInput: (draftKey: string) => DraftInput | undefined;
+  retainFailedSubmission: (input: { draftKey: string; draft: DraftInput }) => void;
+  restoreFailedSubmission: (input: { draftKey: string; id: string }) => DraftInput | undefined;
   hydrateDraftInput: (input: { draftKey: string }) => Promise<DraftInput | undefined>;
   saveDraftInput: (input: { draftKey: string; draft: DraftInput }) => void;
   editDraftText: (input: { draftKey: string; text: string }) => void;
@@ -309,6 +312,55 @@ export const useDraftStore = create<DraftStore>()(
         return migratedDraft;
       },
 
+      retainFailedSubmission: ({ draftKey, draft }) => {
+        const id = generateMessageId();
+        set((state) => ({
+          failedSubmissions: {
+            ...state.failedSubmissions,
+            [draftKey]: {
+              ...state.failedSubmissions?.[draftKey],
+              [id]: {
+                text: draft.text,
+                attachments: draft.attachments.map(normalizeComposerAttachment),
+              },
+            },
+          },
+        }));
+      },
+
+      restoreFailedSubmission: ({ draftKey, id }) => {
+        let restored: DraftInput | undefined;
+        set((state) => {
+          const current = state.drafts[draftKey];
+          const failures = state.failedSubmissions?.[draftKey];
+          const draft = failures?.[id];
+          if (
+            !draft ||
+            (current?.lifecycle === "active" &&
+              (current.input.text.trim().length > 0 || current.input.attachments.length > 0))
+          )
+            return state;
+          const remaining = { ...failures };
+          delete remaining[id];
+          const failedSubmissions = { ...state.failedSubmissions };
+          if (Object.keys(remaining).length > 0) failedSubmissions[draftKey] = remaining;
+          else delete failedSubmissions[draftKey];
+          restored = draft;
+          return {
+            failedSubmissions,
+            drafts: {
+              ...state.drafts,
+              [draftKey]: createDraftRecord({
+                draft,
+                lifecycle: "active",
+                previousVersion: current?.version,
+              }),
+            },
+          };
+        });
+        return restored;
+      },
+
       saveDraftInput: ({ draftKey, draft }) => {
         set((state) => {
           const existing = state.drafts[draftKey];
@@ -460,7 +512,11 @@ export const useDraftStore = create<DraftStore>()(
       name: "paseo-drafts",
       version: DRAFT_STORE_VERSION,
       storage: draftPersistStorage,
-      partialize: ({ drafts, createModalDraft }) => ({ drafts, createModalDraft }),
+      partialize: ({ drafts, createModalDraft, failedSubmissions }) => ({
+        drafts,
+        createModalDraft,
+        ...(failedSubmissions ? { failedSubmissions } : {}),
+      }),
       migrate: (state) =>
         migratePersistedState(state, {
           migrateLegacyImages,

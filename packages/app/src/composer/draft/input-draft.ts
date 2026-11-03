@@ -22,7 +22,8 @@ import {
   resolveEffectiveComposerThinkingOptionId,
   type ProviderSelectionState,
 } from "@/provider-selection/provider-selection";
-import { useDraftStore } from "@/stores/draft-store";
+import { useDraftStore, type DraftInput } from "@/stores/draft-store";
+import type { AgentInputSubmissionDraft } from "@/composer/submit";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { useShallow } from "zustand/shallow";
 import type { ComposerTextSource } from "@/composer/text-source";
@@ -65,7 +66,13 @@ type DraftComposerState = UseAgentFormStateResult & {
   commandDraft: DraftCommandTarget;
 };
 
+export interface AgentInputDraftSubmission extends AgentInputSubmissionDraft<UserComposerAttachment> {
+  failures: Readonly<Record<string, DraftInput>> | undefined;
+  restore: (id: string) => boolean;
+}
+
 export interface AgentInputDraft {
+  submission: AgentInputDraftSubmission;
   textSource: ComposerTextSource;
   editText: (text: string, selectionBefore?: ProfileReferenceRange) => void;
   replaceText: (text: string) => void;
@@ -105,6 +112,10 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       }),
     [formState.selectedServerId, input.draftKey],
   );
+  const currentDraftKeyRef = useRef(draftKey);
+  currentDraftKeyRef.current = draftKey;
+  const editRevisionRef = useRef(0);
+  const failedSubmissions = useDraftStore((state) => state.failedSubmissions?.[draftKey]);
   const attachments = useDraftStore(
     useShallow((state) =>
       state.drafts[draftKey]?.lifecycle === "active"
@@ -196,6 +207,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
 
   const editText = useCallback(
     (nextText: string, selectionBefore?: ProfileReferenceRange) => {
+      editRevisionRef.current += 1;
       const store = useDraftStore.getState();
       const record = store.drafts[draftKey];
       const current = record?.lifecycle === "active" ? record.input : undefined;
@@ -261,6 +273,55 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       useDraftStore.getState().clearDraftInput({ draftKey, lifecycle });
     },
     [draftKey, textPublication],
+  );
+
+  const captureSubmissionDraft = useCallback(() => {
+    // Publish our own immediate clear before capturing the version. Subsequent editor
+    // events invalidate it synchronously, even before their after-paint publication.
+    textPublication.flush();
+    const record = useDraftStore.getState().drafts[draftKey];
+    const revision = editRevisionRef.current;
+    return () =>
+      currentDraftKeyRef.current === draftKey &&
+      editRevisionRef.current === revision &&
+      useDraftStore.getState().drafts[draftKey] === record;
+  }, [draftKey, textPublication]);
+
+  const retainFailedSubmission = useCallback(
+    ({
+      message,
+      attachments: failedAttachments,
+    }: {
+      message: string;
+      attachments: UserComposerAttachment[];
+    }) => {
+      useDraftStore.getState().retainFailedSubmission({
+        draftKey,
+        draft: { text: message, attachments: failedAttachments },
+      });
+    },
+    [draftKey],
+  );
+
+  const restoreFailedSubmission = useCallback(
+    (id: string) => {
+      textPublication.flush();
+      const restored = useDraftStore.getState().restoreFailedSubmission({ draftKey, id });
+      if (!restored) return false;
+      publishTextReplacement("replace", restored.text);
+      return true;
+    },
+    [draftKey, publishTextReplacement, textPublication],
+  );
+
+  const submission = useMemo<AgentInputDraftSubmission>(
+    () => ({
+      capture: captureSubmissionDraft,
+      retainFailed: retainFailedSubmission,
+      failures: failedSubmissions,
+      restore: restoreFailedSubmission,
+    }),
+    [captureSubmissionDraft, retainFailedSubmission, failedSubmissions, restoreFailedSubmission],
   );
 
   useEffect(() => {
@@ -419,6 +480,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   ]);
 
   return {
+    submission,
     textSource,
     editText,
     replaceText,

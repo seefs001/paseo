@@ -42,6 +42,7 @@ import {
   type ForgeResolver,
 } from "../services/forge-resolver.js";
 import { parseGitRevParsePath } from "../utils/git-rev-parse-path.js";
+import { unquoteGitPath } from "../utils/git-quoted-path.js";
 import { isPathInsideRoot, looksLikeDefiniteWindowsPath } from "../utils/path.js";
 import {
   createRunGitCommand,
@@ -3154,10 +3155,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         { cwd: rootPath, env: READ_ONLY_GIT_ENV },
       );
       for (const raw of result.stdout.split("\n")) {
-        if (!raw.endsWith("/")) {
+        const directory = unquoteGitPath(raw);
+        if (!directory.endsWith("/")) {
           continue;
         }
-        const rel = raw.replace(/\/+$/, "");
+        const rel = directory.replace(/\/+$/, "");
         if (!rel) {
           continue;
         }

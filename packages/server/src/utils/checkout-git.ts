@@ -3702,7 +3702,16 @@ async function readCheckoutDiff(
 
   for (const change of untrackedChanges) {
     if (diffBytes >= TOTAL_DIFF_MAX_BYTES) {
-      break;
+      if (!compare.includeStructured) break;
+      if (
+        !appendStructuredFile(
+          structured,
+          buildPlaceholderParsedDiffFile(change, { status: "too_large" }),
+        )
+      ) {
+        return { diff: "", structured: [], diffTooLarge: true };
+      }
+      continue;
     }
     const didAppendUntrackedDiff = await processUntrackedChange({
       signal,

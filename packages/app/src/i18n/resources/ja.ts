@@ -129,6 +129,12 @@ export const ja: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "送信に失敗したメッセージを保存しました",
+      restore: "下書きを復元",
+      waitForEmpty:
+        "送信に失敗したメッセージを保存しました。現在の下書きを処理してから復元してください。",
+    },
     placeholders: {
       desktop: "エージェントにメッセージ、@ファイル、/コマンドや/スキルを入力",
       mobile: "メッセージ、@ファイル、/コマンド",

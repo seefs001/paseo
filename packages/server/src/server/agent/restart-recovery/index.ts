@@ -26,14 +26,17 @@ export function createRestartRecovery(deps: Dependencies) {
           deps.settings().enabled &&
           (record.resumeOnStartup === true || record.lastStatus === "running") &&
           (await eligible(record));
-        await deps.storage.upsert({
-          ...record,
-          resumeOnStartup: pending,
-          lastStatus:
-            record.lastStatus === "running" || record.lastStatus === "initializing"
-              ? "closed"
-              : record.lastStatus,
-        });
+        const lastStatus =
+          record.lastStatus === "running" || record.lastStatus === "initializing"
+            ? "closed"
+            : record.lastStatus;
+        if ((record.resumeOnStartup === true) !== pending || record.lastStatus !== lastStatus) {
+          await deps.storage.upsert({
+            ...record,
+            resumeOnStartup: pending,
+            lastStatus,
+          });
+        }
         if (pending) {
           let resolve!: () => void;
           const promise = new Promise<void>((settle) => {

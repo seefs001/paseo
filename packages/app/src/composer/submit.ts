@@ -2,7 +2,13 @@ import { i18n } from "@/i18n/i18next";
 
 export type AgentInputSubmitResult = "noop" | "queued" | "submitted" | "failed";
 
+export interface AgentInputSubmissionDraft<TAttachment> {
+  capture: () => () => boolean;
+  retainFailed: (input: { message: string; attachments: TAttachment[] }) => void;
+}
+
 export interface AgentInputSubmitActionInput<TAttachment> {
+  draft?: AgentInputSubmissionDraft<TAttachment>;
   message: string;
   attachments: TAttachment[];
   hasExternalContent?: boolean;
@@ -56,17 +62,20 @@ export async function submitAgentInput<TAttachment>(
     input.setUserInput("");
     input.setAttachments([]);
   }
+  const isDraftCurrent = input.draft?.capture() ?? (() => true);
   input.setSendError(null);
   input.setIsProcessing(true);
 
   try {
     await input.submitMessage({ message: trimmedMessage, attachments });
-    input.clearDraft("sent");
+    if (isDraftCurrent()) input.clearDraft("sent");
     input.setIsProcessing(false);
     return "submitted";
   } catch (error) {
     input.onSubmitError?.(error);
-    if (shouldClearOnSubmit) {
+    if (!isDraftCurrent()) {
+      input.draft?.retainFailed({ message: trimmedMessage, attachments });
+    } else if (shouldClearOnSubmit) {
       input.setUserInput(trimmedMessage);
       input.setAttachments(attachments);
     }

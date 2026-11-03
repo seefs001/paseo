@@ -129,6 +129,11 @@ export const es: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "Mensaje fallido guardado",
+      restore: "Restaurar borrador",
+      waitForEmpty: "Mensaje fallido guardado. Termina el borrador actual antes de restaurarlo.",
+    },
     placeholders: {
       desktop: "Envíe un mensaje al agente, etiquete@fileso use/commandsy/skills",
       mobile: "Mensaje,@files,/commands",

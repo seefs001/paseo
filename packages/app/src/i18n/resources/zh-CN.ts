@@ -126,6 +126,11 @@ export const zhCN: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "发送失败的消息已保留",
+      restore: "恢复草稿",
+      waitForEmpty: "发送失败的消息已保留。处理完当前草稿后可恢复。",
+    },
     placeholders: {
       desktop: "给 Agent 发消息，标记 @files，或使用 /commands 和 /skills",
       mobile: "发消息，@files，/commands",

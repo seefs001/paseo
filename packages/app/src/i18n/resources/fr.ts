@@ -130,6 +130,12 @@ export const fr: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "Message non envoyé conservé",
+      restore: "Restaurer le brouillon",
+      waitForEmpty:
+        "Message non envoyé conservé. Terminez le brouillon actuel avant de le restaurer.",
+    },
     placeholders: {
       desktop: "Écrivez à l’agent, mentionnez des @fichiers ou utilisez les /commandes et /skills",
       mobile: "Message, @fichiers, /commandes",

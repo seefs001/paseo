@@ -40,6 +40,7 @@ export function normalizeMarkdownHtml(source: string): string {
     } else if ("children" in node) node.children.forEach(findHtml);
   }
   findHtml(fromMarkdown(source));
+  if (htmlRanges.length === 0) return source;
   const codeRanges: { start: number; end: number }[] = [];
   // Disable HTML parsing so code inside <details> remains visible to the Markdown parser.
   const tree = fromMarkdown(source, {

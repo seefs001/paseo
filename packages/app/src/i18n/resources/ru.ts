@@ -129,6 +129,12 @@ export const ru: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "Неотправленное сообщение сохранено",
+      restore: "Восстановить черновик",
+      waitForEmpty:
+        "Неотправленное сообщение сохранено. Завершите текущий черновик перед восстановлением.",
+    },
     placeholders: {
       desktop: "Напишите агенту сообщение, отметьте @files или используйте /commands и /skills.",
       mobile: "Сообщение,@files,/commands",

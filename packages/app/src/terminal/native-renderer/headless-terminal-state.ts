@@ -106,6 +106,7 @@ interface HeadlessTerminalWithCore {
 }
 
 interface TerminalCoordinateStorage {
+  lines: object;
   oldestRow: number;
   trimSubscription: { dispose(): void } | null;
 }
@@ -309,23 +310,37 @@ export function createNativeHeadlessTerminal(
   }
   const decoder = new TextDecoder();
   let coordinateEpoch = 0;
-  const coordinateStorage = new Map<object, TerminalCoordinateStorage>();
+  const coordinateStorage = new Map<"normal" | "alternate", TerminalCoordinateStorage>();
+
+  function clearCoordinateStorage(): void {
+    for (const storage of coordinateStorage.values()) {
+      storage.trimSubscription?.dispose();
+    }
+    coordinateStorage.clear();
+  }
 
   function getActiveCoordinateStorage(): TerminalCoordinateStorage {
     const lines = activeBufferLines(terminal);
     if (!lines) {
       throw new Error("Native terminal buffer storage is unavailable");
     }
-    const existing = coordinateStorage.get(lines);
-    if (existing) {
+    const bufferType = terminal.buffer.active.type;
+    if (bufferType === "normal") {
+      // xterm clears the alternate buffer on exit; only normal scrollback survives.
+      coordinateStorage.get("alternate")?.trimSubscription?.dispose();
+      coordinateStorage.delete("alternate");
+    }
+    const existing = coordinateStorage.get(bufferType);
+    if (existing?.lines === lines) {
       return existing;
     }
-    const storage: TerminalCoordinateStorage = { oldestRow: 0, trimSubscription: null };
+    existing?.trimSubscription?.dispose();
+    const storage: TerminalCoordinateStorage = { lines, oldestRow: 0, trimSubscription: null };
     storage.trimSubscription =
       lines.onTrim?.((amount) => {
         storage.oldestRow += amount;
       }) ?? null;
-    coordinateStorage.set(lines, storage);
+    coordinateStorage.set(bufferType, storage);
     return storage;
   }
 
@@ -371,14 +386,13 @@ export function createNativeHeadlessTerminal(
     reset(): void {
       coordinateEpoch += 1;
       decoder.decode();
+      clearCoordinateStorage();
       terminal.reset();
       getActiveCoordinateStorage().oldestRow = 0;
     },
     dispose(): void {
       bufferChangeSubscription.dispose();
-      for (const storage of coordinateStorage.values()) {
-        storage.trimSubscription?.dispose();
-      }
+      clearCoordinateStorage();
       terminal.dispose();
     },
   };

@@ -128,6 +128,11 @@ export const ar: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "تم حفظ الرسالة التي تعذّر إرسالها",
+      restore: "استعادة المسودة",
+      waitForEmpty: "تم حفظ الرسالة التي تعذّر إرسالها. أكمل المسودة الحالية قبل استعادتها.",
+    },
     placeholders: {
       desktop: "أرسل رسالة إلى الوكيل أو ضع علامة على @files أو استخدم /commands و /skills",
       mobile: "الرسالة، @files ، /commands",

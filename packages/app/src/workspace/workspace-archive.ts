@@ -1,4 +1,9 @@
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
+import { getDesktopHost } from "@/desktop/host";
+import { removeResidentBrowserWebview } from "@/desktop/browser/resident-webviews";
+import { useBrowserStore } from "@/desktop/browser/store";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import {
   clearWorkspaceArchivePending,
   markWorkspaceArchivePending,
@@ -79,6 +84,30 @@ async function archiveWorkspaceOrThrow(input: {
   }
 }
 
+function purgeArchivedWorkspaceState(workspace: WorkspaceArchiveTarget): void {
+  const workspaceKey = buildWorkspaceTabPersistenceKey(workspace);
+  if (!workspaceKey) return;
+
+  const layout = useWorkspaceLayoutStore.getState();
+  const tabs = [
+    ...layout.getWorkspaceTabs(workspaceKey),
+    ...(layout.sheetsByWorkspace[workspaceKey] ?? []).map((sheet) => sheet.tab),
+  ];
+  const browserIds = new Set(
+    tabs.flatMap((tab) => (tab.target.kind === "browser" ? [tab.target.browserId] : [])),
+  );
+  for (const browserId of browserIds) {
+    useBrowserStore.getState().removeBrowser(browserId);
+    removeResidentBrowserWebview(browserId);
+    void getDesktopHost()
+      ?.browser?.unregisterWorkspaceBrowser?.(browserId)
+      .catch((error) => {
+        console.error("[workspace-archive] browser unregister failed", error);
+      });
+  }
+  layout.purgeWorkspace(workspaceKey);
+}
+
 export async function archiveWorkspaceOptimistically(input: {
   client: WorkspaceArchiveClient;
   workspace: WorkspaceArchiveTarget;
@@ -98,6 +127,7 @@ export async function archiveWorkspaceOptimistically(input: {
     });
     throw error;
   }
+  purgeArchivedWorkspaceState(input.workspace);
 }
 
 export async function archiveWorkspacesOptimistically(input: {

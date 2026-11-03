@@ -129,6 +129,11 @@ export const ptBR: TranslationResources = {
     },
   },
   composer: {
+    failedSubmission: {
+      saved: "Mensagem não enviada salva",
+      restore: "Restaurar rascunho",
+      waitForEmpty: "Mensagem não enviada salva. Conclua o rascunho atual antes de restaurá-la.",
+    },
     placeholders: {
       desktop: "Envie uma mensagem ao agente, marque @files ou use /commands e /skills",
       mobile: "Mensagem, @files, /commands",

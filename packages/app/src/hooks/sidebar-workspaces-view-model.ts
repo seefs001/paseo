@@ -239,6 +239,47 @@ export function deriveProjectStatusBucket(input: {
   return aggregateSidebarStateBuckets(buckets);
 }
 
+/** Stream-only updates keep these directory/activity maps unchanged. Cache one result per row. */
+export function createSidebarProjectStatusSelector(
+  workspaces: readonly SidebarWorkspacePlacement[],
+): (input: {
+  sessions: Record<string, ProjectStatusSession | undefined>;
+  pendingCreateAttempts?: Record<string, PendingCreateAttempt>;
+}) => SidebarStateBucket {
+  const serverIds = [...new Set(workspaces.map((workspace) => workspace.serverId))];
+  let previousSources: (ProjectStatusSession | undefined)[] | null = null;
+  let previousPending: Record<string, PendingCreateAttempt> | undefined;
+  let previousBucket: SidebarStateBucket = "done";
+
+  return (input) => {
+    const unchanged =
+      previousSources !== null &&
+      previousPending === input.pendingCreateAttempts &&
+      previousSources.every((source, index) => {
+        const session = input.sessions[serverIds[index]];
+        return (
+          source?.workspaces === session?.workspaces &&
+          source?.workspaceAgentActivity === session?.workspaceAgentActivity
+        );
+      });
+    if (!unchanged) {
+      previousBucket = deriveProjectStatusBucket({ workspaces, ...input });
+      // Retain only the two inputs, not a session snapshot containing old stream data.
+      previousSources = serverIds.map((serverId) => {
+        const session = input.sessions[serverId];
+        return session
+          ? {
+              workspaces: session.workspaces,
+              workspaceAgentActivity: session.workspaceAgentActivity,
+            }
+          : undefined;
+      });
+      previousPending = input.pendingCreateAttempts;
+    }
+    return previousBucket;
+  };
+}
+
 /** One bounded projection per sidebar; unchanged placements survive project reordering. */
 export function createSidebarWorkspacePlacementSelector(): (
   projects: readonly HostProjectListItem[],

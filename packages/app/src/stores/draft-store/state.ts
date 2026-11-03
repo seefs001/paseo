@@ -62,6 +62,7 @@ export function editDraftRecordText(
 export interface DraftStoreState {
   drafts: Record<string, DraftRecord>;
   createModalDraft: DraftRecord | null;
+  failedSubmissions?: Record<string, Record<string, DraftInput>>;
 }
 
 export const AttachmentMetadataSchema = z.strictObject({
@@ -156,9 +157,14 @@ const DraftRecordSchema: z.ZodType<DraftRecord> = z.strictObject({
   updatedAt: z.number(),
   version: z.number().int().positive(),
 });
+export const FailedDraftSubmissionsSchema = z.record(
+  z.string(),
+  z.record(z.string(), CanonicalDraftInputSchema),
+);
 export const DraftStoreStateSchema: z.ZodType<DraftStoreState> = z.strictObject({
   drafts: z.record(z.string(), DraftRecordSchema),
   createModalDraft: DraftRecordSchema.nullable(),
+  failedSubmissions: FailedDraftSubmissionsSchema.optional(),
 });
 
 export function isAttachmentMetadata(value: unknown): value is AttachmentMetadata {
@@ -243,6 +249,14 @@ export function collectReferencedAttachmentIdsFromState(state: DraftStoreState):
     for (const attachment of draftRecord.input.attachments) {
       if (attachment.kind === "image") {
         referencedIds.add(attachment.metadata.id);
+      }
+    }
+  }
+
+  for (const failures of Object.values(state.failedSubmissions ?? {})) {
+    for (const draft of Object.values(failures)) {
+      for (const attachment of draft.attachments) {
+        if (attachment.kind === "image") referencedIds.add(attachment.metadata.id);
       }
     }
   }
