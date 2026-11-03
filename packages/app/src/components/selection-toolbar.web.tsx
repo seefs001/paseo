@@ -229,7 +229,7 @@ export function SelectionToolbar<Selection extends AnchoredSelection>({
             <Button
               key={action.id}
               variant="ghost"
-              size="xs"
+              size="sm"
               leftIcon={action.icon}
               testID={action.id}
               loading={pendingActionId === action.id}

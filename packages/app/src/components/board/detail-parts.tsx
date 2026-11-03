@@ -226,7 +226,7 @@ export function CopyButton({ text, label }: { text: string; label: string }): Re
   return (
     <Button
       variant="ghost"
-      size="xs"
+      size="sm"
       leftIcon={Copy}
       onPress={copy}
       accessibilityLabel={t("board.detail.copy", { label })}

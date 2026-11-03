@@ -8,7 +8,7 @@ import type { DeskGoalSheetTarget } from "@/board/goal-sheet";
 import { createBoardGoal, deleteBoardGoal, updateBoardGoal, useBoardTasks } from "@/board/tasks";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
-import type { FieldControlSize } from "@/components/ui/control-geometry";
+import type { ControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import {
@@ -17,7 +17,6 @@ import {
   type SelectFieldOption,
 } from "@/components/ui/select-field";
 import { Switch } from "@/components/ui/switch";
-import { useIsCompactFormFactor } from "@/constants/layout";
 import type { Agent } from "@/stores/session-store";
 import { useHostDirectories } from "@/stores/session-store-hooks";
 import { confirmDialog } from "@/utils/confirm-dialog";
@@ -178,7 +177,7 @@ export function DeskGoalSheet({
   onDismiss,
 }: DeskGoalSheetProps): ReactElement {
   const { t } = useTranslation();
-  const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
+  const controlSize: ControlSize = "md";
   const [state, dispatch] = useReducer(reduceForm, target, openForm);
   const { serverId } = target;
   const live = useBoardTasks((store) => {
@@ -413,7 +412,7 @@ function GoalOwnerField({
   serverId: string;
   value: string | null;
   dispatch: Dispatch<FormAction>;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement {
   const { t } = useTranslation();
   const serverIds = useMemo(() => [serverId], [serverId]);
@@ -467,7 +466,7 @@ interface GoalAutopilotFieldsProps {
   dispatch: Dispatch<FormAction>;
   maxActiveValid: boolean;
   dailyStartLimitValid: boolean;
-  size: FieldControlSize;
+  size: ControlSize;
 }
 
 /** The goal's Autopilot: which profile starts its Ready tasks, how many, and whether to ask first. */

@@ -102,7 +102,7 @@ export function BoardViewsPane({
         <BoardViewMenu activeViewId={activeViewId} onSelectView={onSelectView} />
         <Button
           variant="ghost"
-          size="xs"
+          size="sm"
           leftIcon={Bookmark}
           onPress={startNaming}
           disabled={!canSave}
@@ -148,7 +148,7 @@ export function BoardViewsPane({
         ))}
         <Button
           variant="ghost"
-          size="xs"
+          size="sm"
           leftIcon={Plus}
           onPress={createGoal}
           disabled={!createHost}
@@ -334,7 +334,7 @@ export function BoardViewMenu({
   );
   return (
     <DropdownMenu>
-      <DropdownTrigger size="xs" testID="board-view-picker">
+      <DropdownTrigger size="sm" testID="board-view-picker">
         {active ? boardViewLabel(active, t) : t("board.desk.views.all")}
       </DropdownTrigger>
       <DropdownMenuContent
@@ -422,7 +422,7 @@ export function BoardFocusMenu({
 
   return (
     <DropdownMenu>
-      <DropdownTrigger size="xs" testID="board-focus-picker">
+      <DropdownTrigger size="sm" testID="board-focus-picker">
         {label}
       </DropdownTrigger>
       <DropdownMenuContent align="end" sheetTitle={t("board.desk.pane.goals")}>
@@ -522,7 +522,7 @@ function SaveViewForm({
   return (
     <View style={styles.saveForm}>
       <FormTextInput
-        size="xs"
+        size="sm"
         initialValue=""
         onChangeText={setName}
         onSubmitEditing={submit}
@@ -533,12 +533,12 @@ function SaveViewForm({
         testID="board-views-name"
       />
       <View style={styles.saveActions}>
-        <Button variant="ghost" size="xs" onPress={onCancel}>
+        <Button variant="ghost" size="sm" onPress={onCancel}>
           {t("common.actions.cancel")}
         </Button>
         <Button
           variant="secondary"
-          size="xs"
+          size="sm"
           onPress={submit}
           disabled={!canSave}
           testID="board-views-save-confirm"

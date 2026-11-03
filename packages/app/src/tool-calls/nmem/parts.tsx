@@ -194,7 +194,7 @@ export function DisclosureButton({ label, expanded, onToggle, testID }: Disclosu
   return (
     <Button
       variant="ghost"
-      size="xs"
+      size="sm"
       leftIcon={expanded ? ChevronDown : ChevronRight}
       onPress={onToggle}
       accessibilityState={accessibilityState}

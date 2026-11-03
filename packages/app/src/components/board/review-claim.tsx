@@ -67,7 +67,7 @@ export function BoardReleaseClaimButton({
 
   return (
     <Button
-      size="xs"
+      size="sm"
       variant="ghost"
       onPress={releasePress}
       loading={releasing}

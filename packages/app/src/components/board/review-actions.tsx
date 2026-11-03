@@ -91,7 +91,7 @@ export function BoardReviewActions({
         <AcceptButton onPress={archive} busy={archiving} archiving={archiving} />
       )}
       <Button
-        size="xs"
+        size="sm"
         variant="ghost"
         leftIcon={MessageSquare}
         onPress={openSheet}
@@ -207,7 +207,7 @@ function AcceptButton({
   else if (archiving) label = t("board.review.archiving");
   return (
     <Button
-      size="xs"
+      size="sm"
       variant="secondary"
       leftIcon={Check}
       trailing={trailing}

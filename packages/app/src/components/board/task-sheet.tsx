@@ -23,7 +23,7 @@ import {
 } from "@/components/board/dependency-fields";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
-import type { FieldControlSize } from "@/components/ui/control-geometry";
+import type { ControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import {
   SelectField,
@@ -31,7 +31,6 @@ import {
   type SelectFieldOption,
 } from "@/components/ui/select-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
-import { useIsCompactFormFactor } from "@/constants/layout";
 import { getForgePresentation } from "@/git/forge";
 import { useForgeSearchQuery } from "@/git/use-forge-search-query";
 import { useHostFeature } from "@/runtime/host-features";
@@ -296,7 +295,7 @@ export function BoardTaskSheet({
   onDismiss,
 }: BoardTaskSheetProps): ReactElement {
   const { t } = useTranslation();
-  const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
+  const controlSize: ControlSize = "md";
   const [state, dispatch] = useReducer(reduceForm, { target, hosts }, openForm);
   const isEdit = target.mode === "edit";
   // A started task follows its workspace's project.
@@ -581,7 +580,7 @@ function BoardTaskStage({
   visible: boolean;
   value: Stage;
   onChange: (value: Stage) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement | null {
   const { t } = useTranslation();
   const options = useMemo<SegmentedControlOption<Stage>[]>(
@@ -619,7 +618,7 @@ function BoardTaskGoal({
   goals: ReadonlyMap<string, BoardGoal>;
   value: string | null;
   onChange: (goalId: string | null) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement {
   const { t } = useTranslation();
   const options = useMemo<SelectFieldOption<string>[]>(() => {
@@ -659,7 +658,7 @@ interface BoardTaskCriteriaProps {
   onAdd: () => void;
   onChange: (key: number, text: string) => void;
   onRemove: (key: number) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }
 
 /** The acceptance checklist. The agent ticks rows when it reports, so the form only edits text. */
@@ -707,7 +706,7 @@ function BoardTaskCriterionRow({
   row: CriterionRow;
   onChange: (key: number, text: string) => void;
   onRemove: (key: number) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement {
   const { t } = useTranslation();
   const change = useCallback((text: string) => onChange(row.key, text), [onChange, row.key]);
@@ -750,7 +749,7 @@ interface BoardTaskAttachmentsProps {
   cwd: string | null;
   attachments: BoardTaskAttachment[];
   onChange: (attachments: BoardTaskAttachment[]) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }
 
 /** Issues and PRs handed to the first prompt, picked with the composer's forge search. */

@@ -455,7 +455,7 @@ function BoardFilterChips({
       {chips.map((chip) => (
         <BoardFilterChip key={chip.id} chip={chip} onFiltersChange={onFiltersChange} />
       ))}
-      <Button variant="ghost" size="xs" onPress={clearAll} testID="board-filters-clear">
+      <Button variant="ghost" size="sm" onPress={clearAll} testID="board-filters-clear">
         {t("board.view.filters.clear")}
       </Button>
     </View>
@@ -474,7 +474,7 @@ function BoardFilterChip({
   return (
     <Button
       variant="secondary"
-      size="xs"
+      size="sm"
       leftIcon={X}
       onPress={remove}
       accessibilityLabel={t("board.view.filters.remove", { filter: chip.label })}

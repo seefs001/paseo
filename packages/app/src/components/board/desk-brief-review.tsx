@@ -110,7 +110,7 @@ function SessionReviewActions({ item }: { item: BoardAgentItem }): ReactElement 
     <View style={styles.actions}>
       {actions.markRead ? (
         <Button
-          size="xs"
+          size="sm"
           variant="secondary"
           leftIcon={CheckCheck}
           onPress={actions.markRead}
@@ -123,7 +123,7 @@ function SessionReviewActions({ item }: { item: BoardAgentItem }): ReactElement 
             : t("board.agent.actions.markRead")}
         </Button>
       ) : null}
-      <Button size="xs" variant="ghost" leftIcon={SquareArrowOutUpRight} onPress={actions.open}>
+      <Button size="sm" variant="ghost" leftIcon={SquareArrowOutUpRight} onPress={actions.open}>
         {t("board.agent.actions.open")}
       </Button>
     </View>

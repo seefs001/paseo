@@ -157,7 +157,7 @@ function PermissionRow({
       ) : (
         <View style={styles.actions}>
           <Button
-            size="xs"
+            size="sm"
             variant="secondary"
             leftIcon={Check}
             onPress={approve}
@@ -168,7 +168,7 @@ function PermissionRow({
             {t("board.review.permission.approve")}
           </Button>
           <Button
-            size="xs"
+            size="sm"
             variant="ghost"
             leftIcon={X}
             onPress={deny}

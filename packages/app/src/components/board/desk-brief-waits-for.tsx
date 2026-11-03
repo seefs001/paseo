@@ -11,8 +11,7 @@ import {
   type BoardTaskRef,
 } from "@/components/board/dependency-fields";
 import { Button } from "@/components/ui/button";
-import type { FieldControlSize } from "@/components/ui/control-geometry";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import type { ControlSize } from "@/components/ui/control-geometry";
 import { toErrorMessage } from "@/utils/error-messages";
 import { useReadyBoardHost } from "./desk-brief-parts";
 
@@ -35,7 +34,7 @@ export function DeskWaitsForSheet({
   onDismiss: () => void;
 }): ReactElement {
   const { t } = useTranslation();
-  const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
+  const controlSize: ControlSize = "md";
   const tasks = useReadyBoardHost(serverId)?.tasks ?? NO_TASKS;
   const [blockers, setBlockers] = useState<BoardTaskRef[]>(() =>
     task.blockedBy.flatMap((id) => toBoardTaskRef(tasks, id) ?? []),

@@ -176,7 +176,7 @@ function ActionButton({
 }): ReactElement {
   return (
     <Button
-      size="xs"
+      size="sm"
       variant="outline"
       leftIcon={icon}
       onPress={onPress}

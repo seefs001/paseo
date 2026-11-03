@@ -57,7 +57,7 @@ export function DeskClamp({
       </View>
       {overflows ? (
         <Button
-          size="xs"
+          size="sm"
           variant="ghost"
           leftIcon={expanded ? ChevronUp : ChevronDown}
           onPress={toggle}

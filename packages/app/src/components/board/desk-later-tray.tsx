@@ -28,7 +28,7 @@ export function DeskLaterTray({
   return (
     <View style={styles.container} testID="desk-later-tray">
       <Button
-        size="xs"
+        size="sm"
         variant="ghost"
         leftIcon={expanded ? ChevronDown : ChevronRight}
         onPress={toggle}
@@ -78,7 +78,7 @@ function LaterRow({ checkpoint }: { checkpoint: DeskCheckpoint }): ReactElement 
         ) : null}
       </View>
       <Button
-        size="xs"
+        size="sm"
         variant="ghost"
         leftIcon={AlarmClockOff}
         onPress={wakePress}

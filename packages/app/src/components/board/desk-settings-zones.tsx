@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
-import type { FieldControlSize } from "@/components/ui/control-geometry";
+import type { ControlSize } from "@/components/ui/control-geometry";
 import { FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
 import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
@@ -30,7 +30,7 @@ export function DeskSettingsZones({
 }: {
   zones: DeskZone[];
   onChange: (zones: DeskZone[]) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement {
   const changeZone = useCallback(
     (next: DeskZone) => onChange(zones.map((zone) => (zone.id === next.id ? next : zone))),
@@ -76,7 +76,7 @@ function DeskZoneRow({
   isActive: boolean;
   dragHandleProps: DraggableRenderItemInfo<DeskZone>["dragHandleProps"];
   onChange: (zone: DeskZone) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement {
   const { t } = useTranslation();
   const label = t(`board.plan2.zones.${zone.id}`);

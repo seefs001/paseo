@@ -65,7 +65,7 @@ export function BoardTaskActions({
     <View style={styles.actions}>
       {canStart ? (
         <Button
-          size="xs"
+          size="sm"
           variant="secondary"
           leftIcon={Play}
           onPress={start}
@@ -77,13 +77,13 @@ export function BoardTaskActions({
         </Button>
       ) : null}
       {workspace ? (
-        <Button size="xs" variant="outline" leftIcon={SquareArrowOutUpRight} onPress={open}>
+        <Button size="sm" variant="outline" leftIcon={SquareArrowOutUpRight} onPress={open}>
           {t("board.actions.open")}
         </Button>
       ) : null}
       {item.column === "fog" || item.column === "ready" ? <StageButton card={card} /> : null}
       <Button
-        size="xs"
+        size="sm"
         variant="outline"
         leftIcon={Pencil}
         onPress={edit}
@@ -116,7 +116,7 @@ function StageButton({ card }: { card: BoardCard }): ReactElement {
   if (moving) label = t("board.agent.taskCard.moving");
   return (
     <Button
-      size="xs"
+      size="sm"
       variant="outline"
       leftIcon={toReady ? ListChecks : CloudFog}
       onPress={move}

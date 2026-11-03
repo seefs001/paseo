@@ -7,7 +7,7 @@ import { useDeskPrefs, type DeskPrefs } from "@/board/desk-prefs";
 import { setBoardDeskSettings, useBoardTasks } from "@/board/tasks";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
-import type { FieldControlSize } from "@/components/ui/control-geometry";
+import type { ControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import {
@@ -16,7 +16,6 @@ import {
   type SelectFieldOption,
 } from "@/components/ui/select-field";
 import { Switch } from "@/components/ui/switch";
-import { useIsCompactFormFactor } from "@/constants/layout";
 import { toErrorMessage } from "@/utils/error-messages";
 import { DeskSettingsZones, type DeskZone } from "./desk-settings-zones";
 
@@ -154,7 +153,7 @@ function DeskSettingsForm({
   header,
 }: DeskSettingsSheetProps & { settings: BoardDeskSettings; header: SheetHeader }): ReactElement {
   const { t } = useTranslation();
-  const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
+  const controlSize: ControlSize = "md";
   const [state, dispatch] = useReducer(reduceForm, settings, openForm);
   const retention = parseRetention(state.retention);
   const isSubmitting = state.submission.status === "submitting";
@@ -365,7 +364,7 @@ function ToggleRow<T extends string>({
 }
 
 /** This device's look; changes apply at once and never reach the host. */
-function DeskDeviceSettings({ size }: { size: FieldControlSize }): ReactElement {
+function DeskDeviceSettings({ size }: { size: ControlSize }): ReactElement {
   const { t } = useTranslation();
   const { prefs, update } = useDeskPrefs();
   const densityOptions = useMemo<SegmentedControlOption<DeskPrefs["density"]>[]>(

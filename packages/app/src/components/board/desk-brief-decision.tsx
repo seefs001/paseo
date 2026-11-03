@@ -101,7 +101,7 @@ export function DeskBriefDecision({
         ))}
         {noteOpen ? null : (
           <Button
-            size="xs"
+            size="sm"
             variant="ghost"
             leftIcon={NotebookPen}
             onPress={openNote}
@@ -140,7 +140,7 @@ function DecisionOption({
   const sending = submission.status === "sending";
   return (
     <Button
-      size="xs"
+      size="sm"
       variant={primary ? "default" : "secondary"}
       onPress={press}
       loading={sending && submission.choiceId === id}
@@ -171,7 +171,7 @@ function DecisionAgent({
   return (
     <View style={styles.facts}>
       <AgentChip title={agent.title?.trim() || t("board.brief.decision.unnamedAgent")} />
-      <Button size="xs" variant="ghost" leftIcon={SquareArrowOutUpRight} onPress={open}>
+      <Button size="sm" variant="ghost" leftIcon={SquareArrowOutUpRight} onPress={open}>
         {t("board.brief.decision.openAgent")}
       </Button>
     </View>

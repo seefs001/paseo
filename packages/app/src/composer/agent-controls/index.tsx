@@ -2015,7 +2015,7 @@ export function DraftAgentControls({
           description={profileInitializationError}
           testID="draft-profile-error"
         >
-          <Button size="xs" variant="outline" onPress={onRetryProfileInitialization}>
+          <Button size="sm" variant="outline" onPress={onRetryProfileInitialization}>
             {t("common.actions.retry")}
           </Button>
         </Alert>

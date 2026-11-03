@@ -275,7 +275,7 @@ function QuestionBody({ item }: { item: BoardAgentItem }): ReactElement {
       ) : null}
       <View style={styles.actions}>
         <Button
-          size="xs"
+          size="sm"
           variant="secondary"
           leftIcon={MessageCircleQuestionMark}
           onPress={answer}
@@ -335,11 +335,11 @@ function FailedBody({ item }: { item: BoardAgentItem }): ReactElement {
         </DeskClamp>
       ) : null}
       <View style={styles.actions}>
-        <Button size="xs" variant="secondary" leftIcon={SquareArrowOutUpRight} onPress={open}>
+        <Button size="sm" variant="secondary" leftIcon={SquareArrowOutUpRight} onPress={open}>
           {t("board.agent.actions.open")}
         </Button>
         <Button
-          size="xs"
+          size="sm"
           variant="secondary"
           leftIcon={RotateCcw}
           onPress={retry}
@@ -350,7 +350,7 @@ function FailedBody({ item }: { item: BoardAgentItem }): ReactElement {
           {pending === "retry" ? t("board.brief.failed.retrying") : t("board.brief.failed.retry")}
         </Button>
         <Button
-          size="xs"
+          size="sm"
           variant="ghost"
           leftIcon={Archive}
           onPress={archive}

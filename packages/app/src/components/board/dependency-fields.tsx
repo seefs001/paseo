@@ -6,7 +6,7 @@ import { View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
-import type { FieldControlSize } from "@/components/ui/control-geometry";
+import type { ControlSize } from "@/components/ui/control-geometry";
 import { Field } from "@/components/ui/form-field";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import {
@@ -56,7 +56,7 @@ interface ParentFieldProps {
   taskId: string | null;
   value: BoardTaskRef | null;
   onChange: (parent: BoardTaskRef | null) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }
 
 /** A task cannot sit under itself or under one of its own subtasks. */
@@ -109,7 +109,7 @@ interface BlockersFieldProps {
   taskId: string | null;
   value: readonly BoardTaskRef[];
   onChange: (blockers: BoardTaskRef[]) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }
 
 /** Only unfinished tasks are offered; a blocker that finished later stays selected. */
@@ -214,7 +214,7 @@ interface DependenciesProps {
   onParentChange: (parent: BoardTaskRef | null) => void;
   blockers: readonly BoardTaskRef[];
   onBlockersChange: (blockers: BoardTaskRef[]) => void;
-  size: FieldControlSize;
+  size: ControlSize;
 }
 
 /** Parent and blockers sit behind a disclosure so a plain task stays a short form. */

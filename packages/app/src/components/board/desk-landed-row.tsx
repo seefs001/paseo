@@ -149,7 +149,7 @@ function OpenButton({ item }: { item: BoardItem }): ReactElement | null {
   if (!workspaceId) return null;
   return (
     <Button
-      size="xs"
+      size="sm"
       variant="ghost"
       leftIcon={SquareArrowOutUpRight}
       onPress={open}
@@ -185,7 +185,7 @@ function ReopenButton({ item }: { item: BoardTaskItem }): ReactElement {
   }, [reopen]);
   return (
     <Button
-      size="xs"
+      size="sm"
       variant="ghost"
       leftIcon={RotateCcw}
       onPress={press}

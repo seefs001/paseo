@@ -6,14 +6,13 @@ import type { AgentProfile, AgentRole } from "@getpaseo/protocol/messages";
 import { AgentProfileAppearanceField } from "@/agent-profiles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
-import { type FieldControlSize } from "@/components/ui/control-geometry";
+import { type ControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import {
   SelectField,
   type SelectFieldDisplay,
   type SelectFieldOption,
 } from "@/components/ui/select-field";
-import { useIsCompactFormFactor } from "@/constants/layout";
 import { toErrorMessage } from "@/utils/error-messages";
 import type { AgentRoleValue } from "../internal/role-form-model";
 import { useAgentRoleFormModel, useAgentRoleFormState } from "../internal/use-role-form-model";
@@ -100,7 +99,7 @@ function OpenAgentRoleEditModal({
   onSave,
 }: AgentRoleEditModalProps & { onDismiss: () => void }): ReactElement {
   const { t } = useTranslation();
-  const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
+  const controlSize: ControlSize = "md";
   const snapshot = useMemo(
     () => ({ mode, profiles, ...(role ? { role } : {}) }),
     [mode, profiles, role],

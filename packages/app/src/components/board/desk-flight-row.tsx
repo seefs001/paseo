@@ -229,7 +229,7 @@ function TaskRowActions({
       pointerEvents={visible ? "auto" : "none"}
     >
       <Button
-        size="xs"
+        size="sm"
         variant="ghost"
         leftIcon={SquareArrowOutUpRight}
         onPress={open}

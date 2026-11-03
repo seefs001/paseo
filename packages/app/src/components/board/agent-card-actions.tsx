@@ -214,7 +214,7 @@ export function BoardAgentQuickActions({
       pointerEvents={visible ? "auto" : "none"}
     >
       <Button
-        size="xs"
+        size="sm"
         variant="ghost"
         leftIcon={SquareArrowOutUpRight}
         onPress={actions.open}
@@ -223,7 +223,7 @@ export function BoardAgentQuickActions({
       />
       {actions.stop ? (
         <Button
-          size="xs"
+          size="sm"
           variant="ghost"
           leftIcon={Square}
           onPress={actions.stop}
@@ -237,7 +237,7 @@ export function BoardAgentQuickActions({
       ) : null}
       {actions.markRead ? (
         <Button
-          size="xs"
+          size="sm"
           variant="ghost"
           leftIcon={CheckCheck}
           onPress={actions.markRead}
@@ -249,7 +249,7 @@ export function BoardAgentQuickActions({
       ) : null}
       {actions.archive ? (
         <Button
-          size="xs"
+          size="sm"
           variant="ghost"
           leftIcon={Archive}
           onPress={actions.archive}

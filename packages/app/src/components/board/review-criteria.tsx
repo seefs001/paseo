@@ -38,7 +38,7 @@ export function BoardReviewCriteria({
   return (
     <View style={styles.container}>
       <Button
-        size="xs"
+        size="sm"
         variant="ghost"
         leftIcon={expanded ? ChevronDown : ChevronRight}
         onPress={toggle}
