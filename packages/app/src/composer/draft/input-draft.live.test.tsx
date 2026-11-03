@@ -10,6 +10,8 @@ import { useDraftAgentFeatures } from "@/hooks/use-draft-agent-features";
 import { materializeAgentProfile } from "@/agent-profiles/internal/materialize-profile";
 import {
   encodeProfileReferences,
+  findResourceLinks,
+  findTextReferenceLinks,
   insertProfileReference,
 } from "@/composer/profile-reference/model";
 
@@ -556,22 +558,48 @@ describe("useAgentInputDraft live contract", () => {
     await renderDraft("draft:profile-a");
     expect(getLatest().attachments).toEqual(selected.attachments);
 
+    // A short link is plain Markdown: editing its label keeps the address, and the edit is
+    // published after paint like any other typing.
+    const renamed = selected.text.replace("[#Grok 4.7]", "[Grok]");
     await act(async () => {
-      getLatest().editText("#Grok 4. ");
+      getLatest().editText(renamed);
+      await expect.poll(getLatest().textSource.getSnapshot).toBe(renamed);
     });
-    expect(getLatest().textSource.getSnapshot()).toBe(" ");
     expect(getLatest().attachments).toEqual([]);
-    expect(getLatest().textReplacement.selection).toEqual({ start: 0, end: 0 });
+    expect(findResourceLinks(getLatest().textSource.getSnapshot())).toMatchObject([
+      { resource: "profile", serverId: "host-a", resourceId: "grok", label: "Grok" },
+    ]);
+    expect(getLatest().textSource.getSnapshot()).not.toContain("responses/grok-4.7");
 
+    // Linked history from older builds is restored as the link text, which still sends its
+    // snapshot; the composer holds no hidden metadata for it.
+    const legacyHistory = encodeProfileReferences({
+      text: "#Grok 4.7",
+      attachments: [
+        {
+          kind: "profile_reference",
+          id: "legacy",
+          serverId: "host-a",
+          profile: {
+            id: "grok",
+            name: "Grok 4.7",
+            provider: "pi",
+            model: "responses/grok-4.7",
+            featureValues: { fast_mode: true },
+          },
+          start: 0,
+          end: 9,
+        },
+      ],
+    });
     await act(async () => {
-      getLatest().replaceText(encodeProfileReferences(selected));
+      getLatest().replaceText(legacyHistory);
     });
-    expect(getLatest().textSource.getSnapshot()).toBe(selected.text);
-    expect(getLatest().attachments[0]).toMatchObject({
-      kind: "profile_reference",
-      profile: { id: "grok", featureValues: { fast_mode: true } },
-    });
-    expect(getLatest().textReplacement.text).not.toContain("paseo-profile:");
+    expect(getLatest().textSource.getSnapshot()).toBe(legacyHistory);
+    expect(getLatest().attachments).toEqual([]);
+    expect(findTextReferenceLinks(legacyHistory)).toMatchObject([
+      { kind: "profile_reference", profile: { id: "grok", featureValues: { fast_mode: true } } },
+    ]);
 
     const repeated = insertProfileReference({
       text: "#a #A",
@@ -583,11 +611,13 @@ describe("useAgentInputDraft live contract", () => {
     await act(async () => {
       getLatest().replaceInput(repeated);
     });
+    // Deleting the first link leaves the plain same-named text unbound.
     await act(async () => {
-      getLatest().editText("#A", { start: 0, end: 3 });
+      getLatest().editText("#A", { start: 0, end: repeated.text.indexOf(" #A") + 1 });
+      await expect.poll(getLatest().textSource.getSnapshot).toBe("#A");
     });
-    expect(getLatest().textSource.getSnapshot()).toBe("#A");
     expect(getLatest().attachments).toEqual([]);
+    expect(findResourceLinks(getLatest().textSource.getSnapshot())).toEqual([]);
   });
 
   it("updates and persists attachments through setAttachments", async () => {

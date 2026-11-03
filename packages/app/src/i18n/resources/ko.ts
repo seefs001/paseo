@@ -205,6 +205,12 @@ export const ko: TranslationResources = {
     },
     errors: {
       failedToSend: "메시지를 보내지 못했습니다",
+      referenceHostUnavailable:
+        "{{label}}을(를) 읽을 수 없습니다: 호스트 {{serverId}}에 연결되어 있지 않습니다.",
+      referenceNotFound: "호스트 {{serverId}}에 {{label}}이(가) 더 이상 없습니다.",
+      referenceReadFailed: "호스트 {{serverId}}에서 {{label}}을(를) 읽을 수 없습니다: {{error}}",
+      referenceRoleOtherHost:
+        "{{label}}은(는) 호스트 {{serverId}}의 역할입니다. 역할은 해당 호스트에서만 사용할 수 있습니다.",
       failedToCreateAgent: "에이전트를 생성하지 못했습니다",
       noHostSelected: "선택된 호스트가 없습니다",
       initialPromptRequired: "초기 프롬프트가 필요합니다",
@@ -422,6 +428,9 @@ export const ko: TranslationResources = {
       agentRole: "에이전트 역할",
       detailAgentId: "에이전트 ID",
       detailDirectory: "디렉터리",
+      detailRoleId: "역할 ID",
+      detailPurpose: "용도",
+      detailHost: "호스트",
       text: "텍스트",
       file: "파일",
     },

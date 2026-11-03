@@ -8,7 +8,7 @@ export interface AgentMentionDetailRow {
 }
 
 export interface AgentMentionDetail {
-  kind: "agent_profile" | "agent_session";
+  kind: "agent_profile" | "agent_session" | "agent_role";
   title: string;
   rows: AgentMentionDetailRow[];
 }
@@ -35,7 +35,32 @@ export function getAgentMentionDetail(
   if (attachment.contextKind === "agent_session") {
     return buildSessionDetail(attachment, t);
   }
+  if (attachment.contextKind === "agent_role") {
+    const fields = parseAddressCardFields(attachment.text);
+    const rows: AgentMentionDetailRow[] = [];
+    pushRow(rows, fields, "roleId", t("message.attachments.detailRoleId"));
+    pushRow(rows, fields, "description", t("message.attachments.detailPurpose"));
+    pushRow(rows, fields, "host", t("message.attachments.detailHost"));
+    return {
+      kind: "agent_role",
+      title: attachment.title?.trim() || fields.name || t("message.attachments.agentRole"),
+      rows,
+    };
+  }
   return null;
+}
+
+/** A preview whose resource is still being read, or could not be read. */
+export function buildAgentMentionStatusDetail(input: {
+  kind: AgentMentionDetail["kind"];
+  title: string;
+  status: string;
+}): AgentMentionDetail {
+  return {
+    kind: input.kind,
+    title: input.title,
+    rows: [{ key: "status", label: "", value: input.status }],
+  };
 }
 
 function buildProfileDetail(

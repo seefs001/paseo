@@ -206,6 +206,12 @@ export const ptBR: TranslationResources = {
     },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
+      referenceHostUnavailable:
+        "Não foi possível ler {{label}}: o host {{serverId}} não está conectado.",
+      referenceNotFound: "{{label}} não existe mais no host {{serverId}}.",
+      referenceReadFailed: "Não foi possível ler {{label}} do host {{serverId}}: {{error}}",
+      referenceRoleOtherHost:
+        "{{label}} é uma função do host {{serverId}}. Funções só podem ser usadas no próprio host.",
       failedToCreateAgent: "Falha ao criar agente",
       noHostSelected: "Nenhum host selecionado",
       initialPromptRequired: "O prompt inicial é obrigatório",
@@ -426,6 +432,9 @@ export const ptBR: TranslationResources = {
       agentRole: "Papel de agente",
       detailAgentId: "ID do agente",
       detailDirectory: "Diretório",
+      detailRoleId: "ID da função",
+      detailPurpose: "Finalidade",
+      detailHost: "Host",
       text: "Texto",
       file: "Arquivo",
     },

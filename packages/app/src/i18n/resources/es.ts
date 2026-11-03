@@ -207,6 +207,12 @@ export const es: TranslationResources = {
     },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",
+      referenceHostUnavailable:
+        "No se pudo leer {{label}}: el host {{serverId}} no está conectado.",
+      referenceNotFound: "{{label}} ya no existe en el host {{serverId}}.",
+      referenceReadFailed: "No se pudo leer {{label}} del host {{serverId}}: {{error}}",
+      referenceRoleOtherHost:
+        "{{label}} es un rol del host {{serverId}}. Los roles solo se usan en su propio host.",
       failedToCreateAgent: "No se pudo crear el agente",
       noHostSelected: "Ningún anfitrión seleccionado",
       initialPromptRequired: "Se requiere aviso inicial",
@@ -427,6 +433,9 @@ export const es: TranslationResources = {
       agentRole: "Rol de agente",
       detailAgentId: "ID del agente",
       detailDirectory: "Directorio",
+      detailRoleId: "ID del rol",
+      detailPurpose: "Propósito",
+      detailHost: "Host",
       text: "Texto",
       file: "Archivo",
     },

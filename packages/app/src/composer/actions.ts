@@ -12,6 +12,7 @@ import {
   userAttachmentsOnly,
 } from "@/attachments/workspace-attachment-utils";
 import {
+  prepareComposerMessageForSend,
   prepareComposerMessageForSubmit,
   type ComposerAttachmentSubmitFormat,
 } from "@/composer/attachments/submit";
@@ -205,7 +206,8 @@ export interface DispatchComposerAgentMessageInput {
 export async function dispatchComposerAgentMessage(
   input: DispatchComposerAgentMessageInput,
 ): Promise<void> {
-  const wirePayload = prepareComposerMessageForSubmit({
+  // Reads current resources first: a failure throws before the message is shown as sent.
+  const wirePayload = await prepareComposerMessageForSend({
     text: input.text,
     attachments: input.attachments,
     format: input.attachmentSubmitFormat,

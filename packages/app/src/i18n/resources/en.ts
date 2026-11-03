@@ -201,6 +201,11 @@ export const en = {
     },
     errors: {
       failedToSend: "Failed to send message",
+      referenceHostUnavailable: "Couldn't read {{label}}: host {{serverId}} isn't connected.",
+      referenceNotFound: "{{label}} no longer exists on host {{serverId}}.",
+      referenceReadFailed: "Couldn't read {{label}} from host {{serverId}}: {{error}}",
+      referenceRoleOtherHost:
+        "{{label}} is a role on host {{serverId}}. Roles can only be used on their own host.",
       failedToCreateAgent: "Failed to create agent",
       noHostSelected: "No host selected",
       initialPromptRequired: "Initial prompt is required",
@@ -419,6 +424,9 @@ export const en = {
       agentRole: "Agent role",
       detailAgentId: "Agent ID",
       detailDirectory: "Directory",
+      detailRoleId: "Role ID",
+      detailPurpose: "Purpose",
+      detailHost: "Host",
       text: "Text",
       file: "File",
     },

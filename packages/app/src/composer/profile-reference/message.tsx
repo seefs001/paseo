@@ -1,30 +1,29 @@
 import { Fragment, useCallback, useMemo } from "react";
 import { Text } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type { AgentAttachment } from "@getpaseo/protocol/messages";
-import { textReferenceMarkdown, textReferenceToAgentAttachment, type TextReference } from "./model";
+import type { MessageReference } from "./model";
 
 interface ProfileReferenceMessageProps {
   text: string;
-  references: TextReference[];
-  onOpenMention: (attachment: AgentAttachment) => void;
+  references: MessageReference[];
+  onOpenReference: (reference: MessageReference) => void;
 }
 
 export function ProfileReferenceMessage({
   text,
   references,
-  onOpenMention,
+  onOpenReference,
 }: ProfileReferenceMessageProps) {
   let offset = 0;
   const content = references.map((reference) => {
     const precedingText = text.slice(offset, reference.start);
     offset = reference.end;
     return (
-      <Fragment key={reference.id}>
+      <Fragment key={`${reference.start}:${reference.markdown}`}>
         {precedingText}
         <ProfileReferenceText
           reference={reference}
-          onOpenMention={onOpenMention}
+          onOpenReference={onOpenReference}
           label={text.slice(reference.start, reference.end)}
         />
       </Fragment>
@@ -40,20 +39,22 @@ export function ProfileReferenceMessage({
 }
 
 interface ProfileReferenceTextProps {
-  reference: TextReference;
+  reference: MessageReference;
   label: string;
-  onOpenMention: (attachment: AgentAttachment) => void;
+  onOpenReference: (reference: MessageReference) => void;
 }
 
-function ProfileReferenceText({ reference, label, onOpenMention }: ProfileReferenceTextProps) {
+function referenceTestKind(reference: MessageReference): string {
+  const inline = reference.reference;
+  return inline.kind === "resource_link" ? inline.resource : inline.kind.replace("_reference", "");
+}
+
+function ProfileReferenceText({ reference, label, onOpenReference }: ProfileReferenceTextProps) {
   const handlePress = useCallback(() => {
-    onOpenMention(textReferenceToAgentAttachment(reference));
-  }, [onOpenMention, reference]);
+    onOpenReference(reference);
+  }, [onOpenReference, reference]);
   const dataSet = useMemo(
-    () => ({
-      paseoReferenceMarkdown: textReferenceMarkdown(reference),
-      paseoReferenceLabel: label,
-    }),
+    () => ({ paseoReferenceMarkdown: reference.markdown, paseoReferenceLabel: label }),
     [label, reference],
   );
 
@@ -63,7 +64,7 @@ function ProfileReferenceText({ reference, label, onOpenMention }: ProfileRefere
       onPress={handlePress}
       accessibilityRole="button"
       dataSet={dataSet}
-      testID={`user-message-${reference.kind.replace("_reference", "")}-reference`}
+      testID={`user-message-${referenceTestKind(reference)}-reference`}
     >
       {label}
     </Text>

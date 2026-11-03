@@ -21,6 +21,7 @@ import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
+  prepareComposerMessageForSend,
   prepareComposerMessageForSubmit,
 } from "@/composer/attachments/submit";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
@@ -80,6 +81,7 @@ import { useDraftWorkspaceAttachmentScopeKey } from "@/attachments/workspace-att
 import type { MessagePayload } from "@/composer/types";
 import type { UserComposerAttachment } from "@/attachments/types";
 import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
+import { isResourceCard } from "@/composer/profile-reference/resolve";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
@@ -260,6 +262,8 @@ interface SubmitDraftInput {
   provider: AgentProvider;
   composerState: NewWorkspaceComposerState;
   supportsForgeSearch: boolean;
+  /** Cards already read for the short resource links in `text`. */
+  resourceCards: AgentAttachment[];
   resolveClient: () => DaemonClient;
   isStillOnCreateScreen: () => boolean;
 }
@@ -446,12 +450,14 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     format: attachmentSubmitFormat,
   });
   const workspaceNamingAttachments = getWorkspaceNamingAttachments(reviewAttachments);
-  const wirePayload = prepareComposerMessageForSubmit({
+  const wirePayload = await prepareComposerMessageForSend({
     text,
     attachments,
     serverId,
     format: attachmentSubmitFormat,
   });
+  // The pending tab shows the same resource cards that were read for the request.
+  const resourceCards = wirePayload.attachments.filter(isResourceCard);
   const images = await encodeImages(wirePayload.images);
   let navigated = false;
   let outcome: SubmitOutcome = "background";
@@ -509,6 +515,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
           composerState,
           supportsForgeSearch: input.supportsForgeSearch,
           agentCreation,
+          resourceCards,
         });
       },
     });
@@ -622,6 +629,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     text: trimmedText,
     attachments: trimmedAttachments,
     serverId,
+    resourceCards: input.resourceCards,
     format: resolveComposerAttachmentSubmitFormat({
       supportsForgeAttachments: input.supportsForgeSearch,
     }),

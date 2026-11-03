@@ -209,6 +209,12 @@ export const fr: TranslationResources = {
     },
     errors: {
       failedToSend: "Impossible d’envoyer le message",
+      referenceHostUnavailable:
+        "Impossible de lire {{label}} : l’hôte {{serverId}} n’est pas connecté.",
+      referenceNotFound: "{{label}} n’existe plus sur l’hôte {{serverId}}.",
+      referenceReadFailed: "Impossible de lire {{label}} depuis l’hôte {{serverId}} : {{error}}",
+      referenceRoleOtherHost:
+        "{{label}} est un rôle de l’hôte {{serverId}}. Un rôle ne s’utilise que sur son hôte.",
       failedToCreateAgent: "Impossible de créer l’agent",
       noHostSelected: "Aucun hôte sélectionné",
       initialPromptRequired: "Un prompt initial est requis",
@@ -429,6 +435,9 @@ export const fr: TranslationResources = {
       agentRole: "Rôle d'agent",
       detailAgentId: "ID de l'agent",
       detailDirectory: "Répertoire",
+      detailRoleId: "ID du rôle",
+      detailPurpose: "Objectif",
+      detailHost: "Hôte",
       text: "Texte",
       file: "Fichier",
     },

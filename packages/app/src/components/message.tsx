@@ -14,9 +14,12 @@ import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
 import {
-  decodeProfileReferences,
+  decodeMessageReferences,
   textReferenceToAgentAttachment,
+  type MessageReference,
 } from "@/composer/profile-reference/model";
+import { useReferencePreview } from "@/composer/profile-reference/preview";
+import { findSentResourceCard } from "@/composer/profile-reference/resolve";
 import { ReferenceCopySurface } from "@/composer/profile-reference/copy-surface";
 import { ProfileReferenceMessage } from "@/composer/profile-reference/message";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
@@ -91,10 +94,7 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Defs, Rect, Stop, LinearGradient as SvgLinearGradient } from "react-native-svg";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import {
-  getAgentMentionDetail,
-  isAgentMentionAttachment,
-} from "@/attachments/agent-mention-detail";
+import { isAgentMentionAttachment } from "@/attachments/agent-mention-detail";
 import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
 import { capAssistantMessageForRender, getUtf8ByteLength } from "./assistant-message-render-limit";
 import { getTurnDurationLabel } from "./assistant-turn-footer-label";
@@ -454,35 +454,36 @@ export const UserMessage = memo(function UserMessage({
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const [lightboxMetadata, setLightboxMetadata] = useState<UserMessageImageAttachment | null>(null);
-  const [mentionDetailAttachment, setMentionDetailAttachment] = useState<AgentAttachment | null>(
-    null,
-  );
+  const referencePreview = useReferencePreview();
   const handleLightboxClose = useCallback(() => setLightboxMetadata(null), []);
-  const handleOpenMention = useCallback((attachment: AgentAttachment) => {
-    setMentionDetailAttachment(attachment);
-  }, []);
-  const handleCloseMention = useCallback(() => {
-    setMentionDetailAttachment(null);
-  }, []);
-  const mentionDetail = mentionDetailAttachment
-    ? getAgentMentionDetail(mentionDetailAttachment, t)
-    : null;
+  const handleOpenMention = referencePreview.openCard;
+  const handleCloseMention = referencePreview.close;
+  const mentionDetail = referencePreview.detail;
   const lightboxSource = useMemo<ImageLightboxSource | null>(
     () => (lightboxMetadata ? { type: "attachment", metadata: lightboxMetadata } : null),
     [lightboxMetadata],
   );
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
   const { text: displayText, references } = useMemo(
-    () => decodeProfileReferences(message),
+    () => decodeMessageReferences(message),
     [message],
+  );
+  // A sent link opens the card read when the message was sent; only a message without one
+  // (sent outside the App) reads the current resource.
+  const sentCards = useMemo(
+    () =>
+      references.map(({ reference }) =>
+        reference.kind === "resource_link"
+          ? findSentResourceCard(attachments, reference)
+          : textReferenceToAgentAttachment(reference),
+      ),
+    [attachments, references],
   );
   const visibleAttachments = useMemo(() => {
     if (references.length === 0) {
       return attachments;
     }
-    const inlineCards = new Set(
-      references.map((reference) => textReferenceToAgentAttachment(reference).text),
-    );
+    const inlineCards = new Set(sentCards.flatMap((card) => (card ? [card.text] : [])));
     return attachments.filter(
       (attachment) =>
         attachment.type !== "text" ||
@@ -491,7 +492,20 @@ export const UserMessage = memo(function UserMessage({
           attachment.contextKind !== "agent_role") ||
         !inlineCards.has(attachment.text),
     );
-  }, [attachments, references]);
+  }, [attachments, references.length, sentCards]);
+  const handleOpenReference = useCallback(
+    (reference: MessageReference) => {
+      const card = sentCards[references.indexOf(reference)];
+      if (card) {
+        referencePreview.openCard(card);
+        return;
+      }
+      if (reference.reference.kind === "resource_link") {
+        referencePreview.openLink(reference.reference);
+      }
+    },
+    [referencePreview, references, sentCards],
+  );
   const hasText = displayText.trim().length > 0;
   const hasImages = images.length > 0;
   const hasAttachments = visibleAttachments.length > 0;
@@ -587,7 +601,7 @@ export const UserMessage = memo(function UserMessage({
                   <ProfileReferenceMessage
                     text={displayText}
                     references={references}
-                    onOpenMention={handleOpenMention}
+                    onOpenReference={handleOpenReference}
                   />
                 </Text>
               </ReferenceCopySurface>

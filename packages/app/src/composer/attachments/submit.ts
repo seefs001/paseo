@@ -11,8 +11,15 @@ import {
 } from "@/utils/review-attachments";
 import { workspaceFileAttachmentToAgentAttachment } from "@/attachments/workspace-file";
 import { pluginResourceAttachmentToAgentAttachment } from "@/plugins/attachments";
+import { i18n } from "@/i18n/i18next";
+import {
+  getSessionResourceClient,
+  ResourceReferenceError,
+  resolveResourceLinks,
+} from "@/composer/profile-reference/resolve";
 import {
   encodeProfileReferences,
+  roleReferenceLabel,
   findTextReferenceLinks,
   isTextReference,
   isValidTextReference,
@@ -130,6 +137,8 @@ function chatQuoteToAgentAttachment(
 interface PrepareComposerMessageInput extends SplitComposerAttachmentsOptions {
   text: string;
   attachments: readonly ComposerAttachment[];
+  /** Cards already read for the short resource links in `text`, in text order. */
+  resourceCards?: readonly AgentAttachment[];
 }
 
 export function prepareComposerMessageForSubmit(input: PrepareComposerMessageInput) {
@@ -148,11 +157,55 @@ export function prepareComposerMessageForSubmit(input: PrepareComposerMessageInp
     ...findTextReferenceLinks(text),
     ...input.attachments.filter((attachment) => !isTextReference(attachment)),
   ];
+  const split = splitComposerAttachmentsForSubmit(attachments, {
+    format: input.format,
+    serverId: input.serverId,
+  });
   return {
     text,
-    ...splitComposerAttachmentsForSubmit(attachments, {
-      format: input.format,
-      serverId: input.serverId,
-    }),
+    images: split.images,
+    attachments: [...(input.resourceCards ?? []), ...split.attachments],
   };
+}
+
+/**
+ * Prepares a message for sending: reads the current resource behind every short
+ * `paseo://HOST/KIND/ID` link from its host, then builds the wire payload. Throws a
+ * `ResourceReferenceError` before anything is sent when a resource cannot be read, so the
+ * caller keeps the draft.
+ */
+export async function prepareComposerMessageForSend(
+  input: Omit<PrepareComposerMessageInput, "resourceCards">,
+) {
+  const encoded = encodeProfileReferences({
+    text: input.text,
+    attachments: input.attachments.filter(
+      (attachment) =>
+        isTextReference(attachment) &&
+        isValidTextReference({ text: input.text, reference: attachment }),
+    ),
+  });
+  assertLegacyRolesOnTargetHost(encoded, input.serverId);
+  const resourceCards = await resolveResourceLinks({
+    text: encoded,
+    targetServerId: input.serverId,
+    getClient: getSessionResourceClient,
+  });
+  return prepareComposerMessageForSubmit({ ...input, resourceCards });
+}
+
+/** A role from another host cannot create agents here; same rule as short role links. */
+function assertLegacyRolesOnTargetHost(text: string, serverId: string | undefined): void {
+  if (!serverId) return;
+  for (const reference of findTextReferenceLinks(text)) {
+    if (reference.kind === "role_reference" && reference.serverId !== serverId) {
+      throw new ResourceReferenceError(
+        i18n.t("composer.errors.referenceRoleOtherHost", {
+          label: roleReferenceLabel(reference.role),
+          serverId: reference.serverId,
+          error: "",
+        }),
+      );
+    }
+  }
 }

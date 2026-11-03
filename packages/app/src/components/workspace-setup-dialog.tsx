@@ -27,7 +27,7 @@ import { encodeImages } from "@/utils/encode-images";
 import { toErrorMessage } from "@/utils/error-messages";
 import {
   resolveComposerAttachmentSubmitFormat,
-  prepareComposerMessageForSubmit,
+  prepareComposerMessageForSend,
 } from "@/composer/attachments/submit";
 import type {
   CreateAgentRequestOptions,
@@ -308,6 +308,16 @@ export function WorkspaceSetupDialog() {
 
   const handleCreateChatAgent = useCallback(
     async ({ text, attachments, cwd }: MessagePayload) => {
+      // Read referenced resources before the handler takes over errors: a failure here reaches
+      // the composer, which restores the draft and shows the error.
+      const wirePayload = await prepareComposerMessageForSend({
+        text,
+        attachments,
+        serverId,
+        format: resolveComposerAttachmentSubmitFormat({
+          supportsForgeAttachments: supportsForgeSearch,
+        }),
+      });
       try {
         setPendingAction("chat");
         setErrorMessage(null);
@@ -319,14 +329,6 @@ export function WorkspaceSetupDialog() {
           throw new Error(t("workspaceSetup.errors.selectModel"));
         }
 
-        const wirePayload = prepareComposerMessageForSubmit({
-          text,
-          attachments,
-          serverId,
-          format: resolveComposerAttachmentSubmitFormat({
-            supportsForgeAttachments: supportsForgeSearch,
-          }),
-        });
         const encodedImages = await encodeImages(wirePayload.images);
         if (!pendingWorkspaceSetup) throw new Error(t("workspaceSetup.errors.pendingRequired"));
         let createdAgent: AgentSnapshotPayload | undefined;

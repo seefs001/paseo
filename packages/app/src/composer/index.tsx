@@ -132,7 +132,7 @@ import { useAppSettings } from "@/hooks/use-settings";
 import { RenderProfile } from "@/utils/render-profiler";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
-import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
+import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type {
   AttachmentMetadata,
   ComposerAttachment,
@@ -157,7 +157,7 @@ import {
 import type { ProfileReferenceSelection } from "@/composer/profile-reference/use-autocomplete";
 import type { RoleReferenceSelection } from "@/composer/profile-reference/use-role-autocomplete";
 import type { SessionReferenceSelection } from "@/hooks/use-agent-autocomplete";
-import { getAgentMentionDetail } from "@/attachments/agent-mention-detail";
+import { useReferencePreview } from "@/composer/profile-reference/preview";
 import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useWorkspaceAttachmentsForScopes } from "@/attachments/workspace-attachments-store";
@@ -1609,7 +1609,7 @@ function ComposerContentImpl({
   );
 
   const profileReferenceHighlights = useProfileReferenceHighlights(textSource, attachments);
-  const [mentionPreview, setMentionPreview] = useState<AgentAttachment | null>(null);
+  const referencePreview = useReferencePreview();
 
   // Reference ranges index the draft text. Text that diverges from it (a live editor snapshot,
   // a trimmed or expanded message) carries them across first, one contiguous edit per step:
@@ -1682,11 +1682,14 @@ function ComposerContentImpl({
         index,
       });
       if (!reference) return;
-      setMentionPreview(textReferenceToAgentAttachment(reference));
+      if (reference.kind === "resource_link") {
+        referencePreview.openLink(reference);
+        return;
+      }
+      referencePreview.openCard(textReferenceToAgentAttachment(reference));
     },
-    [attachments, textSource],
+    [attachments, referencePreview, textSource],
   );
-  const handleCloseMentionPreview = useCallback(() => setMentionPreview(null), []);
 
   const runPluginClientSlashCommand = useCallback(
     (resolved: { command: (typeof pluginClientSlashCommands)[number]; args: string }): boolean => {
@@ -2812,8 +2815,8 @@ function ComposerContentImpl({
       >
         <AttachmentLightbox source={lightboxSource} onClose={handleLightboxClose} />
         <AgentMentionDetailSheet
-          detail={mentionPreview ? getAgentMentionDetail(mentionPreview, t) : null}
-          onClose={handleCloseMentionPreview}
+          detail={referencePreview.detail}
+          onClose={referencePreview.close}
         />
         {/* Input area */}
         <View style={inputAreaContainerStyle}>

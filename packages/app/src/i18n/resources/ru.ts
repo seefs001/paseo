@@ -207,6 +207,11 @@ export const ru: TranslationResources = {
     },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
+      referenceHostUnavailable: "Не удалось прочитать {{label}}: хост {{serverId}} не подключён.",
+      referenceNotFound: "{{label}} больше нет на хосте {{serverId}}.",
+      referenceReadFailed: "Не удалось прочитать {{label}} с хоста {{serverId}}: {{error}}",
+      referenceRoleOtherHost:
+        "{{label}} — роль хоста {{serverId}}. Роль можно использовать только на её хосте.",
       failedToCreateAgent: "Не удалось создать агента.",
       noHostSelected: "Хост не выбран",
       initialPromptRequired: "Необходим инициализирующий промпт",
@@ -426,6 +431,9 @@ export const ru: TranslationResources = {
       agentRole: "Роль агента",
       detailAgentId: "ID агента",
       detailDirectory: "Каталог",
+      detailRoleId: "ID роли",
+      detailPurpose: "Назначение",
+      detailHost: "Хост",
       text: "Текст",
       file: "Файл",
     },

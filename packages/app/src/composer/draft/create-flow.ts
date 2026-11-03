@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ComposerAttachment } from "@/attachments/types";
 import {
   resolveComposerAttachmentSubmitFormat,
-  prepareComposerMessageForSubmit,
+  prepareComposerMessageForSend,
 } from "@/composer/attachments/submit";
 import { isActiveCreateFlowForDraft, useCreateFlowStore } from "@/stores/create-flow-store";
 import { handoffCreatedAgentMessageSubmission } from "@/composer/submission/writer";
@@ -293,13 +293,20 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
       const supportsForgeSearch =
         useSessionStore.getState().sessions[pendingServerId]?.serverInfo?.features?.forgeSearch ===
         true;
-      const wirePayload = prepareComposerMessageForSubmit({
+      // A resource that cannot be read fails here, before the attempt starts; the draft stays.
+      const wirePayload = await prepareComposerMessageForSend({
         text: trimmedPrompt,
         attachments: trimmedAttachments,
         serverId: pendingServerId,
         format: resolveComposerAttachmentSubmitFormat({
           supportsForgeAttachments: supportsForgeSearch,
         }),
+      }).catch((error: unknown) => {
+        dispatch({
+          type: "DRAFT_SET_ERROR",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
       });
       const images = wirePayload.images;
 

@@ -6,11 +6,12 @@ import type { AgentAttachment, AgentProfile } from "@getpaseo/protocol/messages"
 import { UserMessage } from "@/components/message";
 import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-default-environment";
 import type { MarkdownClipboardEnvironment } from "@/utils/rich-clipboard";
+import { resolveResourceLink, type ResourceClient } from "./resolve";
 import {
+  decodeMessageReferences,
   decodeProfileReferences,
   insertSessionReference,
   profileReferenceToAgentAttachment,
-  textReferenceToAgentAttachment,
 } from "./model";
 
 vi.mock("@react-native-masked-view/masked-view", () => ({ default: () => null }));
@@ -200,7 +201,7 @@ describe("sent profile references", () => {
     expect(reloaded.getByRole("dialog").textContent).toContain(profile.notes);
   });
 
-  it("renders an inline session reference and opens its stored preview", () => {
+  it("renders an inline session reference and opens its stored preview", async () => {
     const selected = insertSessionReference({
       text: "看 @au",
       attachments: [],
@@ -215,15 +216,32 @@ describe("sent profile references", () => {
         workspaceId: "ws_1",
       },
     });
-    // The link is written into the text itself; the sent message is that text unchanged.
+    // The short link is written into the text; the sent message is that text unchanged, and the
+    // card is what the host returned for the session when the message was sent.
     expect(selected.attachments).toEqual([]);
-    const decoded = decodeProfileReferences(selected.text);
-    const reference = decoded.references[0];
-    if (!reference || reference.kind !== "session_reference") {
-      throw new Error("expected a session reference");
-    }
-    expect(reference).toMatchObject({ serverId: "local", agentId: "agt_auth_fix_123456" });
-    const sessionCard = textReferenceToAgentAttachment(reference);
+    expect(selected.text).toBe("看 [@Auth fix](paseo://local/session/agt_auth_fix_123456) ");
+    const decoded = decodeMessageReferences(selected.text);
+    const reference = decoded.references[0]?.reference;
+    if (reference?.kind !== "resource_link") throw new Error("expected a resource link");
+    expect(reference).toMatchObject({ serverId: "local", resourceId: "agt_auth_fix_123456" });
+    const host: ResourceClient = {
+      isConnected: true,
+      getDaemonConfig: vi.fn(),
+      fetchAgent: vi.fn(async () => ({
+        agent: {
+          id: "agt_auth_fix_123456",
+          title: "Auth fix",
+          provider: "codex",
+          model: "gpt-5",
+          cwd: "/project",
+          workspaceId: "ws_1",
+        },
+        project: null,
+      })) as unknown as ResourceClient["fetchAgent"],
+    };
+    const sessionCard = await resolveResourceLink(reference, (serverId) =>
+      serverId === "local" ? host : null,
+    );
     const view = render(
       <UserMessage
         message={selected.text}

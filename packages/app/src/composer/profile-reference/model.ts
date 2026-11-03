@@ -66,6 +66,84 @@ const SessionLinkPayloadSchema = SessionReferenceSchema.omit({
 const RoleLinkPayloadSchema = z.object({ serverId: z.string(), role: RoleReferenceSnapshotSchema });
 const TEXT_REFERENCE_LINK = /\[((?:\\.|[^\]\\])*)\]\(paseo-(profile|session|role):([^\s)]+)\)/g;
 
+/** Kinds a short `paseo://HOST/KIND/ID` resource link can address. */
+export type ResourceLinkKind = "profile" | "role" | "session";
+
+/**
+ * A short resource link: only the owning host, the kind and the stable id. The label is display
+ * text; Paseo reads the current resource from the host when the link is sent or opened.
+ */
+export interface ResourceLinkReference {
+  kind: "resource_link";
+  resource: ResourceLinkKind;
+  serverId: string;
+  resourceId: string;
+  label: string;
+  /** The link exactly as written, used when it is copied. */
+  markdown: string;
+  start: number;
+  end: number;
+}
+
+/** A reference found in text: a legacy snapshot link or a short resource link. */
+export type InlineReference = TextReference | ResourceLinkReference;
+
+const RESOURCE_LINK =
+  /\[((?:\\.|[^\]\\])*)\]\(paseo:\/\/([^\s/()]+)\/(profile|role|session)\/([^\s/()]+)\)/g;
+
+function encodeLinkSegment(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function decodeLinkSegment(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch (error) {
+    if (error instanceof URIError) return null;
+    throw error;
+  }
+}
+
+/** `[label](paseo://HOST/KIND/ID)`, with the host and id percent-encoded. */
+export function resourceLinkMarkdown(input: {
+  resource: ResourceLinkKind;
+  serverId: string;
+  resourceId: string;
+  label: string;
+}): string {
+  const label = input.label.replace(/[\\[\]]/g, "\\$&");
+  return `[${label}](paseo://${encodeLinkSegment(input.serverId)}/${input.resource}/${encodeLinkSegment(input.resourceId)})`;
+}
+
+/** Short resource links in `text`, with `start`/`end` spanning the whole link. */
+export function findResourceLinks(text: string): ResourceLinkReference[] {
+  if (!text.includes("](paseo://")) return [];
+  const links: ResourceLinkReference[] = [];
+  for (const match of text.matchAll(RESOURCE_LINK)) {
+    const resource = match[3] as ResourceLinkKind;
+    const label = match[1].replace(/\\([\\[\]])/g, "$1");
+    const serverId = decodeLinkSegment(match[2]);
+    const resourceId = decodeLinkSegment(match[4]);
+    if (!serverId || !resourceId) continue;
+    // The host, kind and id are the identity; the label is display text the user may edit.
+    if (label.trim().length === 0) continue;
+    links.push({
+      kind: "resource_link",
+      resource,
+      serverId,
+      resourceId,
+      label,
+      markdown: match[0],
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+  return links;
+}
+
 export interface ProfileReferenceRange {
   start: number;
   end: number;
@@ -158,7 +236,11 @@ export function textReferenceContainsIndex(
 export function getProfileReferenceHighlights<T extends ComposerAttachment>(
   input: ReferenceTextInput<T>,
 ): ProfileReferenceRange[] {
-  return [...validReferences(input), ...findTextReferenceLinks(input.text)]
+  return [
+    ...validReferences(input),
+    ...findTextReferenceLinks(input.text),
+    ...findResourceLinks(input.text),
+  ]
     .map(({ start, end }) => ({ start, end }))
     .sort((left, right) => left.start - right.start);
 }
@@ -249,20 +331,16 @@ export function insertProfileReference(input: {
   attachments: UserComposerAttachment[];
   selection: ProfileReferenceRange;
 } {
-  const profile = AgentProfileSchema.parse(JSON.parse(JSON.stringify(input.profile)));
-  const reference: ProfileReference = {
-    kind: "profile_reference",
-    id: `profile:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`,
-    serverId: input.serverId,
-    profile,
-    start: input.mention.start,
-    end: input.mention.start,
-  };
   return finishReferenceInsert({
     previousText: input.text,
     attachments: input.attachments,
     mention: input.mention,
-    reference,
+    link: resourceLinkMarkdown({
+      resource: "profile",
+      serverId: input.serverId,
+      resourceId: input.profile.id,
+      label: profileReferenceLabel(input.profile),
+    }),
   });
 }
 
@@ -276,35 +354,19 @@ export function insertSessionReference(input: {
   attachments: UserComposerAttachment[];
   selection: ProfileReferenceRange;
 } {
-  const title =
-    input.session.title?.trim().replace(/\s+/g, " ") || input.session.agentId.slice(0, 7);
-  const session: SessionReferenceSource = {
-    serverId: input.session.serverId,
-    agentId: input.session.agentId,
-    title,
-    provider: input.session.provider,
-    model: input.session.model?.trim() || null,
-    cwd: input.session.cwd,
-    workspaceId: input.session.workspaceId?.trim() || null,
-  };
-  const reference: SessionReference = {
-    kind: "session_reference",
-    id: `session:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`,
-    serverId: session.serverId,
-    agentId: session.agentId,
-    title,
-    provider: session.provider,
-    model: session.model,
-    cwd: session.cwd,
-    workspaceId: session.workspaceId,
-    start: input.mention.start,
-    end: input.mention.start,
-  };
   return finishReferenceInsert({
     previousText: input.text,
     attachments: input.attachments,
     mention: input.mention,
-    reference,
+    link: resourceLinkMarkdown({
+      resource: "session",
+      serverId: input.session.serverId,
+      resourceId: input.session.agentId,
+      label: sessionReferenceLabel({
+        title: input.session.title ?? "",
+        agentId: input.session.agentId,
+      }),
+    }),
   });
 }
 
@@ -319,46 +381,34 @@ export function insertRoleReference(input: {
   attachments: UserComposerAttachment[];
   selection: ProfileReferenceRange;
 } {
-  const role = RoleReferenceSnapshotSchema.parse({
-    id: input.role.id,
-    name: input.role.name,
-    icon: input.role.icon,
-    color: input.role.color,
-    description: input.role.description,
-    defaultProfileId: input.role.defaultProfileId,
-  });
-  const reference: RoleReference = {
-    kind: "role_reference",
-    id: `role:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`,
-    serverId: input.serverId,
-    role,
-    start: input.mention.start,
-    end: input.mention.start,
-  };
   return finishReferenceInsert({
     previousText: input.text,
     attachments: input.attachments,
     mention: input.mention,
-    reference,
+    link: resourceLinkMarkdown({
+      resource: "role",
+      serverId: input.serverId,
+      resourceId: input.role.id,
+      label: roleReferenceLabel(input.role),
+    }),
   });
 }
 
 /**
- * Replaces the typed mention with the reference's full Markdown link, the same way a `$` skill
- * is written. The link text carries everything Paseo needs, so copying, pasting and recalling
- * it keeps the resource without any side metadata.
+ * Replaces the typed mention with a short resource link, the same way a `$` skill is written.
+ * The link names the host, kind and id; Paseo reads the current resource when it is sent.
  */
 function finishReferenceInsert(input: {
   previousText: string;
   attachments: readonly UserComposerAttachment[];
   mention: ProfileReferenceRange;
-  reference: TextReference;
+  link: string;
 }): {
   text: string;
   attachments: UserComposerAttachment[];
   selection: ProfileReferenceRange;
 } {
-  const link = textReferenceMarkdown(input.reference);
+  const { link } = input;
   const after = input.previousText.slice(input.mention.end);
   const separator = after.length === 0 || !/^\s/.test(after) ? " " : "";
   const text = `${input.previousText.slice(0, input.mention.start)}${link}${separator}${after}`;
@@ -525,6 +575,57 @@ export function decodeProfileReferences(text: string): ProfileReferenceDraft {
   return { text: parts.join(""), references };
 }
 
+export interface MessageReference {
+  reference: InlineReference;
+  /** The link as written in the message, for copying. */
+  markdown: string;
+  /** Range of the visible label in the decoded text. */
+  start: number;
+  end: number;
+}
+
+/**
+ * Sent-message text with every valid reference link, legacy or short, replaced by its label.
+ */
+export function decodeMessageReferences(text: string): {
+  text: string;
+  references: MessageReference[];
+} {
+  const links: { start: number; end: number; label: string; reference: InlineReference }[] = [];
+  for (const reference of findTextReferenceLinks(text)) {
+    links.push({
+      start: reference.start,
+      end: reference.end,
+      label: textReferenceLabel(reference),
+      reference,
+    });
+  }
+  for (const reference of findResourceLinks(text)) {
+    links.push({ start: reference.start, end: reference.end, label: reference.label, reference });
+  }
+  links.sort((left, right) => left.start - right.start);
+  const parts: string[] = [];
+  const references: MessageReference[] = [];
+  let cursor = 0;
+  let length = 0;
+  for (const link of links) {
+    if (link.start < cursor) continue;
+    const prefix = text.slice(cursor, link.start);
+    const start = length + prefix.length;
+    parts.push(prefix, link.label);
+    length = start + link.label.length;
+    references.push({
+      reference: link.reference,
+      markdown: text.slice(link.start, link.end),
+      start,
+      end: length,
+    });
+    cursor = link.end;
+  }
+  parts.push(text.slice(cursor));
+  return { text: parts.join(""), references };
+}
+
 /**
  * Valid reference links written in the text itself, with `start`/`end` spanning the whole
  * link. Links whose label no longer matches their resource stay plain text.
@@ -544,11 +645,13 @@ export function findTextReferenceAt<T extends ComposerAttachment>(input: {
   text: string;
   attachments: readonly T[];
   index: number;
-}): TextReference | null {
+}): InlineReference | null {
   return (
-    [...validReferences(input), ...findTextReferenceLinks(input.text)].find((reference) =>
-      textReferenceContainsIndex(reference, input.index),
-    ) ?? null
+    [
+      ...validReferences(input),
+      ...findTextReferenceLinks(input.text),
+      ...findResourceLinks(input.text),
+    ].find((reference) => textReferenceContainsIndex(reference, input.index)) ?? null
   );
 }
 

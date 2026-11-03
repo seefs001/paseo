@@ -207,6 +207,12 @@ export const ja: TranslationResources = {
     },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",
+      referenceHostUnavailable:
+        "{{label}} を読み取れません: ホスト {{serverId}} に接続していません。",
+      referenceNotFound: "{{label}} はホスト {{serverId}} に存在しません。",
+      referenceReadFailed: "ホスト {{serverId}} から {{label}} を読み取れません: {{error}}",
+      referenceRoleOtherHost:
+        "{{label}} はホスト {{serverId}} のロールです。ロールは所属ホストでのみ使えます。",
       failedToCreateAgent: "エージェントの作成に失敗しました",
       noHostSelected: "ホストが選択されていません",
       initialPromptRequired: "初期プロンプトが必要です",
@@ -428,6 +434,9 @@ export const ja: TranslationResources = {
       agentRole: "エージェントロール",
       detailAgentId: "エージェント ID",
       detailDirectory: "ディレクトリ",
+      detailRoleId: "ロール ID",
+      detailPurpose: "用途",
+      detailHost: "ホスト",
       text: "テキスト",
       file: "ファイル",
     },

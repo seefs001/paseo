@@ -205,6 +205,11 @@ export const ar: TranslationResources = {
     },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
+      referenceHostUnavailable: "تعذّرت قراءة {{label}}: المضيف {{serverId}} غير متصل.",
+      referenceNotFound: "لم يعد {{label}} موجودًا على المضيف {{serverId}}.",
+      referenceReadFailed: "تعذّرت قراءة {{label}} من المضيف {{serverId}}: {{error}}",
+      referenceRoleOtherHost:
+        "{{label}} دور على المضيف {{serverId}}. لا يمكن استخدام الأدوار إلا على مضيفها.",
       failedToCreateAgent: "فشل في إنشاء الوكيل",
       noHostSelected: "لم يتم تحديد مضيف",
       initialPromptRequired: "مطلوب موجه الأولي",
@@ -420,6 +425,9 @@ export const ar: TranslationResources = {
       agentRole: "دور الوكيل",
       detailAgentId: "معرّف الوكيل",
       detailDirectory: "الدليل",
+      detailRoleId: "معرّف الدور",
+      detailPurpose: "الغرض",
+      detailHost: "المضيف",
       text: "نص",
       file: "ملف",
     },

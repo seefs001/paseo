@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { insertProfileReference } from "@/composer/profile-reference/model";
+import {
+  findResourceLinks,
+  insertProfileReference,
+  type ProfileReference,
+} from "@/composer/profile-reference/model";
 import {
   applyClearDraftRecord,
   pruneFinalizedDraftRecords,
@@ -99,6 +103,7 @@ describe("draft-store lifecycle", () => {
 
 describe("draft-store normalization", () => {
   it("persists selected profile snapshots and updates only their exact text ranges", () => {
+    // New references are short links: the draft text alone keeps host, kind and id.
     const selected = insertProfileReference({
       text: "#g",
       attachments: [],
@@ -106,19 +111,44 @@ describe("draft-store normalization", () => {
       serverId: "host-a",
       profile: { id: "grok", name: "Grok 4.7", provider: "pi", featureValues: { fast_mode: true } },
     });
-    const record: DraftRecord = {
+    expect(selected.attachments).toEqual([]);
+    expect(selected.text).toBe("[#Grok 4.7](paseo://host-a/profile/grok) ");
+    const linked: DraftRecord = {
       input: { text: selected.text, attachments: selected.attachments },
       lifecycle: "active",
       updatedAt: 1,
       version: 1,
     };
+    const restoredLink = toDraftInputIfReady(JSON.parse(JSON.stringify(linked)));
+    expect(restoredLink).toEqual({ text: selected.text, attachments: [] });
+    const editedLink = editDraftRecordText(linked, `先 ${selected.text}`, 2);
+    expect(findResourceLinks(editedLink.input.text)).toMatchObject([
+      { resource: "profile", serverId: "host-a", resourceId: "grok", start: 2 },
+    ]);
+    expect(editedLink.input.attachments).toEqual([]);
+
+    // Drafts saved by older builds bind a snapshot to the label's exact range.
+    const snapshot: ProfileReference = {
+      kind: "profile_reference",
+      id: "legacy",
+      serverId: "host-a",
+      profile: { id: "grok", name: "Grok 4.7", provider: "pi", featureValues: { fast_mode: true } },
+      start: 0,
+      end: 9,
+    };
+    const record: DraftRecord = {
+      input: { text: "#Grok 4.7 ", attachments: [snapshot] },
+      lifecycle: "active",
+      updatedAt: 1,
+      version: 1,
+    };
     const restored = toDraftInputIfReady(JSON.parse(JSON.stringify(record)));
-    expect(restored).toEqual({ text: selected.text, attachments: selected.attachments });
-    const edited = editDraftRecordText(record, `先 ${selected.text}`, 2);
+    expect(restored).toEqual({ text: "#Grok 4.7 ", attachments: [snapshot] });
+    const edited = editDraftRecordText(record, "先 #Grok 4.7 ", 2);
     expect(edited.input.attachments[0]).toMatchObject({
       start: 2,
       end: 11,
-      profile: { id: "grok" },
+      profile: { id: "grok", featureValues: { fast_mode: true } },
     });
     const removed = editDraftRecordText(edited, "先 普通文字", 3);
     expect(removed.input.attachments).toEqual([]);
