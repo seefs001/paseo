@@ -1986,6 +1986,9 @@ export const es: TranslationResources = {
       description: "Cambia o borra los filtros de la barra lateral para ver espacios de trabajo.",
       clear: "Borrar filtros",
     },
+    resident: {
+      title: "Residentes",
+    },
     pinned: {
       title: "Anclados",
       actions: "Acciones de anclados",
@@ -2085,6 +2088,8 @@ export const es: TranslationResources = {
         rename: "Cambiar nombre del espacio de trabajo",
         pin: "Anclar arriba",
         unpin: "Desanclar",
+        markResident: "Marcar como residente",
+        unmarkResident: "Quitar de residentes",
         archive: "Archivo",
         archiveWorkspace: "Archivar espacio de trabajo",
         hideFromSidebar: "Ocultar de la barra lateral",

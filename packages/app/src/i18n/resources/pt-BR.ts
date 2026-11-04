@@ -1972,6 +1972,9 @@ export const ptBR: TranslationResources = {
       description: "Altere ou limpe os filtros da barra lateral para ver espaços de trabalho.",
       clear: "Limpar filtros",
     },
+    resident: {
+      title: "Residentes",
+    },
     pinned: {
       title: "Fixados",
       actions: "Ações dos fixados",
@@ -2071,6 +2074,8 @@ export const ptBR: TranslationResources = {
         rename: "Renomear workspace",
         pin: "Fixar no topo",
         unpin: "Desafixar",
+        markResident: "Marcar como residente",
+        unmarkResident: "Remover dos residentes",
         archive: "Arquivar",
         archiveWorkspace: "Arquivar workspace",
         hideFromSidebar: "Ocultar da barra lateral",

@@ -1963,6 +1963,9 @@ export const ru: TranslationResources = {
         "Измените или очистите фильтры боковой панели, чтобы увидеть рабочие пространства.",
       clear: "Очистить фильтры",
     },
+    resident: {
+      title: "Постоянные",
+    },
     pinned: {
       title: "Закреплённые",
       actions: "Действия с закреплёнными",
@@ -2062,6 +2065,8 @@ export const ru: TranslationResources = {
         rename: "Переименовать рабочее пространство",
         pin: "Закрепить вверху",
         unpin: "Открепить",
+        markResident: "Сделать постоянным",
+        unmarkResident: "Убрать из постоянных",
         archive: "Архивировать",
         archiveWorkspace: "Архивировать рабочее пространство",
         hideFromSidebar: "Скрыть на боковой панели",

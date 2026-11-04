@@ -1983,6 +1983,9 @@ export const fr: TranslationResources = {
         "Modifiez ou effacez les filtres de la barre latérale pour afficher les espaces de travail.",
       clear: "Effacer les filtres",
     },
+    resident: {
+      title: "Résidents",
+    },
     pinned: {
       title: "Épinglés",
       actions: "Actions des éléments épinglés",
@@ -2082,6 +2085,8 @@ export const fr: TranslationResources = {
         rename: "Renommer l’espace de travail",
         pin: "Épingler en haut",
         unpin: "Désépingler",
+        markResident: "Marquer comme résident",
+        unmarkResident: "Retirer des résidents",
         archive: "Archiver",
         archiveWorkspace: "Archiver l’espace de travail",
         hideFromSidebar: "Masquer de la barre latérale",

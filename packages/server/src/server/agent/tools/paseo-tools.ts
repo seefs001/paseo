@@ -300,6 +300,7 @@ const WorkspaceAutomationSummarySchema = z.object({
   kind: z.enum(["directory", "local_checkout", "worktree"]),
   title: z.string().nullable(),
   background: z.boolean().optional(),
+  residentAt: z.string().nullable().optional(),
 });
 
 function toWorkspaceAutomationSummary(workspace: PersistedWorkspaceRecord) {
@@ -311,6 +312,7 @@ function toWorkspaceAutomationSummary(workspace: PersistedWorkspaceRecord) {
     kind: workspace.kind,
     title: workspace.title,
     background: workspace.background,
+    residentAt: workspace.residentAt ?? null,
   };
 }
 
@@ -2370,22 +2372,56 @@ function createToolCatalog(
     "list_workspaces",
     {
       title: "List workspaces",
-      description: "List active workspaces.",
-      inputSchema: { includeBackground: z.boolean().optional().default(false) },
+      description:
+        "List active workspaces. Pass residentOnly to list only resident workspaces, the ones the user marked as standing bots.",
+      inputSchema: {
+        includeBackground: z.boolean().optional().default(false),
+        residentOnly: z.boolean().optional().default(false),
+      },
       outputSchema: { workspaces: z.array(WorkspaceAutomationSummarySchema) },
     },
-    async ({ includeBackground = false }) => {
+    async ({ includeBackground = false, residentOnly = false }) => {
       if (!options.workspaceRegistry) {
         throw new Error("Workspace registry is not configured");
       }
       const workspaces = (await options.workspaceRegistry.listActive())
         .filter(
-          (workspace) => !workspace.archivedAt && (includeBackground || !workspace.background),
+          (workspace) =>
+            !workspace.archivedAt &&
+            (includeBackground || residentOnly || !workspace.background) &&
+            (!residentOnly || workspace.residentAt != null),
         )
         .map(toWorkspaceAutomationSummary);
       return {
         content: [],
         structuredContent: ensureValidJson({ workspaces }),
+      };
+    },
+  );
+
+  registerTool(
+    "set_workspace_resident",
+    {
+      title: "Set workspace resident",
+      description:
+        "Mark or unmark a workspace as resident. Resident workspaces show in the sidebar Resident section and are listed by list_workspaces with residentOnly.",
+      inputSchema: { workspaceId: z.string().min(1), resident: z.boolean() },
+      outputSchema: { workspaceId: z.string(), residentAt: z.string().nullable() },
+    },
+    async ({ workspaceId, resident }) => {
+      if (!options.workspaceRegistry) {
+        throw new Error("Workspace registry is not configured");
+      }
+      const now = new Date().toISOString();
+      const residentAt = resident ? now : null;
+      const existing = await options.workspaceRegistry.get(workspaceId);
+      if (!existing || existing.archivedAt) {
+        throw new Error(`Workspace not found: ${workspaceId}`);
+      }
+      await options.workspaceRegistry.upsert({ ...existing, residentAt, updatedAt: now });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ workspaceId, residentAt }),
       };
     },
   );

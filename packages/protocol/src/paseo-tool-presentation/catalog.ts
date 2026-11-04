@@ -387,6 +387,15 @@ export const PASEO_TOOL_CATALOG = {
       outputFields: ["workspaceId", "archivedAgentIds", "removedDirectory"],
     },
   },
+  set_workspace_resident: {
+    label: "Set resident",
+    completedLabel: "Updated resident",
+    context: field("workspaceId"),
+    detail: {
+      inputOrder: ["workspaceId", "resident"],
+      outputFields: ["workspaceId", "residentAt"],
+    },
+  },
   list_workspace_scripts: {
     label: "List scripts",
     completedLabel: "Listed scripts",

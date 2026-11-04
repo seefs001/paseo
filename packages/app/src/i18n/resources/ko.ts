@@ -1951,6 +1951,9 @@ export const ko: TranslationResources = {
       description: "워크스페이스를 보려면 사이드바 필터를 변경하거나 지우세요.",
       clear: "필터 지우기",
     },
+    resident: {
+      title: "상주",
+    },
     pinned: {
       title: "고정됨",
       actions: "고정 항목 작업",
@@ -2050,6 +2053,8 @@ export const ko: TranslationResources = {
         rename: "워크스페이스 이름 변경",
         pin: "상단에 고정",
         unpin: "고정 해제",
+        markResident: "상주로 지정",
+        unmarkResident: "상주 해제",
         archive: "보관",
         archiveWorkspace: "워크스페이스 보관",
         hideFromSidebar: "사이드바에서 숨기기",

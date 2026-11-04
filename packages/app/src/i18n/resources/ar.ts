@@ -1941,6 +1941,9 @@ export const ar: TranslationResources = {
       description: "غيّر عوامل تصفية الشريط الجانبي أو امسحها لعرض مساحات العمل.",
       clear: "مسح عوامل التصفية",
     },
+    resident: {
+      title: "مقيم",
+    },
     pinned: {
       title: "المثبتة",
       actions: "إجراءات العناصر المثبتة",
@@ -2040,6 +2043,8 @@ export const ar: TranslationResources = {
         rename: "إعادة تسمية مساحة العمل",
         pin: "تثبيت في الأعلى",
         unpin: "إلغاء التثبيت",
+        markResident: "تعيين كمقيم",
+        unmarkResident: "إلغاء المقيم",
         archive: "أرشيف",
         archiveWorkspace: "أرشفة مساحة العمل",
         hideFromSidebar: "إخفاء من الشريط الجانبي",

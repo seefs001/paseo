@@ -1961,6 +1961,9 @@ export const ja: TranslationResources = {
         "ワークスペースを表示するにはサイドバーのフィルターを変更またはクリアしてください。",
       clear: "フィルターをクリア",
     },
+    resident: {
+      title: "常駐",
+    },
     pinned: {
       title: "固定済み",
       actions: "固定済みの操作",
@@ -2060,6 +2063,8 @@ export const ja: TranslationResources = {
         rename: "ワークスペースの名前を変更",
         pin: "上部に固定",
         unpin: "固定解除",
+        markResident: "常駐に設定",
+        unmarkResident: "常駐を解除",
         archive: "アーカイブ",
         archiveWorkspace: "ワークスペースをアーカイブ",
         hideFromSidebar: "サイドバーから非表示",

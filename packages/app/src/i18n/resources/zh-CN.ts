@@ -1929,6 +1929,9 @@ export const zhCN: TranslationResources = {
       description: "更改或清除侧边栏筛选以查看工作区。",
       clear: "清除筛选",
     },
+    resident: {
+      title: "常驻",
+    },
     pinned: {
       title: "已置顶",
       actions: "置顶操作",
@@ -2026,6 +2029,8 @@ export const zhCN: TranslationResources = {
         rename: "重命名 workspace",
         pin: "置顶",
         unpin: "取消置顶",
+        markResident: "标记为常驻",
+        unmarkResident: "取消常驻",
         archive: "归档",
         archiveWorkspace: "归档工作区",
         hideFromSidebar: "从侧边栏隐藏",

@@ -3274,6 +3274,8 @@ export class Session {
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
       case "workspace.pin.set.request":
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
+      case "workspace.resident.set.request":
+        return this.handleWorkspaceResidentSetRequest(msg.workspaceId, msg.resident, msg.requestId);
       default:
         return undefined;
     }
@@ -4165,6 +4167,43 @@ export class Session {
           error: getErrorMessageOr(error, "Failed to set workspace title"),
         },
       });
+    }
+  }
+
+  private async handleWorkspaceResidentSetRequest(
+    workspaceId: string,
+    resident: boolean,
+    requestId: string,
+  ): Promise<void> {
+    const logContext = { workspaceId, resident, requestId };
+    this.sessionLogger.info(logContext, "session: workspace.resident.set.request");
+    const emitResponse = (accepted: boolean, residentAt: string | null, error: string | null) => {
+      this.emit({
+        type: "workspace.resident.set.response",
+        payload: { requestId, workspaceId, accepted, residentAt, error },
+      });
+    };
+
+    try {
+      const now = new Date().toISOString();
+      const nextResidentAt = resident ? now : null;
+      const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
+        ...existing,
+        residentAt: nextResidentAt,
+        updatedAt: now,
+      }));
+      if (!updated) {
+        emitResponse(false, null, "Workspace not found");
+        return;
+      }
+      emitResponse(true, nextResidentAt, null);
+      await this.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: workspace.resident.set.request error",
+      );
+      emitResponse(false, null, getErrorMessageOr(error, "Failed to update resident workspace"));
     }
   }
 

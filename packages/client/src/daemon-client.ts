@@ -3748,6 +3748,26 @@ export class DaemonClient {
     return { title: payload.title };
   }
 
+  async setWorkspaceResident(
+    workspaceId: string,
+    resident: boolean,
+    requestId?: string,
+  ): Promise<{ residentAt: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "workspace.resident.set.request",
+        workspaceId,
+        resident,
+      },
+      responseType: "workspace.resident.set.response",
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setWorkspaceResident rejected");
+    }
+    return { residentAt: payload.residentAt };
+  }
+
   async setWorkspacePinned(
     workspaceId: string,
     pinned: boolean,

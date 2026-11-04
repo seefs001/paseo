@@ -34,6 +34,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
+import { WorkspaceResidentMenuItem } from "@/components/sidebar/workspace-resident-menu-item";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
@@ -216,6 +217,14 @@ function SidebarWorkspaceMenuItems({
         >
           {isPinned ? t("sidebar.workspace.actions.unpin") : t("sidebar.workspace.actions.pin")}
         </WorkspaceMenuItem>
+      ) : null}
+      {serverId && workspaceId ? (
+        <WorkspaceResidentMenuItem
+          surface={surface}
+          serverId={serverId}
+          workspaceId={workspaceId}
+          workspaceKey={workspaceKey}
+        />
       ) : null}
       {serverId && workspaceId ? (
         <DropdownMenuSubTrigger

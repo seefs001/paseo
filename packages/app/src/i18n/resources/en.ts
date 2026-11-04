@@ -1952,6 +1952,9 @@ export const en = {
       description: "Change or clear the sidebar filters to see workspaces.",
       clear: "Clear filters",
     },
+    resident: {
+      title: "Resident",
+    },
     pinned: {
       title: "Pinned",
       actions: "Pinned actions",
@@ -2051,6 +2054,8 @@ export const en = {
         rename: "Rename workspace",
         pin: "Pin to top",
         unpin: "Unpin",
+        markResident: "Mark as resident",
+        unmarkResident: "Remove from resident",
         archive: "Archive",
         archiveWorkspace: "Archive workspace",
         hideFromSidebar: "Hide from sidebar",

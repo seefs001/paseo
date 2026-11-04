@@ -73,7 +73,10 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
       return Object.assign({}, project, { workspaces });
     });
   }
-  const pinnedWorkspaceKeys = new Set(input.pinnedKeys.pinnedWorkspaceKeys);
+  const pinnedWorkspaceKeys = new Set([
+    ...input.pinnedKeys.pinnedWorkspaceKeys,
+    ...(input.pinnedKeys.residentWorkspaceKeys ?? []),
+  ]);
   const unpinnedWorkspaces = Array.from(input.workspaceEntriesByKey.values()).filter(
     (workspace) => !pinnedWorkspaceKeys.has(workspace.workspaceKey),
   );
@@ -83,7 +86,7 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
   for (const group of workspaceGroups) group.rows.sort(compareRecency);
 
-  const sections: SidebarShortcutSection[] = [];
+  const sections: SidebarShortcutSection[] = [{ workspaces: pinnedGroups.residentChats }];
   if (!input.pinnedCollapsed) {
     sections.push({ workspaces: pinnedGroups.pinnedChats });
   }

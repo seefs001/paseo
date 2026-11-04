@@ -100,6 +100,11 @@ const PersistedWorkspaceRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  residentAt: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
   labels: z.array(z.string()).optional(),
   untrustedSource: UntrustedWorkspaceSourceSchema.optional(),
   // Public discovery visibility. Contents retain their ordinary lifecycle.
@@ -695,6 +700,7 @@ export function createPersistedWorkspaceRecord(input: {
   archivedAt?: string | null;
   autoArchivedChangeRequestUrl?: string | null;
   pinnedAt?: string | null;
+  residentAt?: string | null;
   labels?: string[];
   untrustedSource?: UntrustedWorkspaceSource;
   background?: boolean;
@@ -712,6 +718,7 @@ export function createPersistedWorkspaceRecord(input: {
     archivedAt: input.archivedAt ?? null,
     autoArchivedChangeRequestUrl: input.autoArchivedChangeRequestUrl ?? null,
     pinnedAt: input.pinnedAt ?? null,
+    residentAt: input.residentAt ?? null,
   });
 }
 

@@ -98,6 +98,7 @@ import {
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import { SidebarPinnedSectionHeader } from "@/components/sidebar/sidebar-pinned-section-header";
+import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { createWorkspaceVisibilityPolicy } from "@/components/sidebar/sidebar-group-visibility";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
@@ -2109,11 +2110,20 @@ function SidebarGroupedModeList({
       }),
     [pinnedGroups.pinnedChats, workspaceEntriesByKey],
   );
+  const residentWorkspaces = useMemo(
+    () =>
+      pinnedGroups.residentChats.flatMap((workspace) => {
+        const entry = workspaceEntriesByKey.get(workspace.workspaceKey);
+        return entry ? [entry] : [];
+      }),
+    [pinnedGroups.residentChats, workspaceEntriesByKey],
+  );
 
   return (
     <SidebarStatusWorkspaceList
       groups={workspaceGroups}
       pinnedWorkspaces={pinnedWorkspaces}
+      residentWorkspaces={residentWorkspaces}
       projectIconByProjectViewKey={projectIconByProjectViewKey}
       shortcutIndexByWorkspaceKey={_projectShortcutIndex}
       showShortcutBadges={showShortcutBadges}
@@ -2172,6 +2182,7 @@ function ProjectModeList({
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   onPinnedWorkspaceReorder: (workspaces: SidebarWorkspacePlacement[]) => void;
 }) {
+  const { t } = useTranslation();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const [creatingWorkspaceIds, setCreatingWorkspaceIds] = useState<Set<string>>(() => new Set());
   const creatingWorkspaceTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -2195,7 +2206,7 @@ function ProjectModeList({
   );
   const selectionEnabled = isWorkspaceRoute;
   const activeWorkspaceSelection = useActiveWorkspaceSelection();
-  const { pinnedChats, unpinnedProjects } = pinnedGroups;
+  const { residentChats, pinnedChats, unpinnedProjects } = pinnedGroups;
   const {
     leadingItem: leadingPinnedChat,
     visibleItems: visiblePinnedChats,
@@ -2493,6 +2504,15 @@ function ProjectModeList({
 
   const content = (
     <>
+      {residentChats.length > 0 ? (
+        <View style={styles.pinnedSection} testID="sidebar-resident-section">
+          <SidebarSectionHeader
+            title={t("sidebar.resident.title")}
+            testID="sidebar-resident-section-header"
+          />
+          {residentChats.map((workspace) => renderPinnedChatRow(workspace))}
+        </View>
+      ) : null}
       {pinnedChats.length > 0 ? (
         <View style={styles.pinnedSection} testID="sidebar-pinned-section">
           <SidebarPinnedSectionHeader

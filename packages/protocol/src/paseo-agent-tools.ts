@@ -19,6 +19,7 @@ export const PASEO_AGENT_TOOL_NAMES = [
   "create_workspace",
   "list_workspaces",
   "archive_workspace",
+  "set_workspace_resident",
   "create_agent",
   "send_agent_prompt",
   "get_agent_status",

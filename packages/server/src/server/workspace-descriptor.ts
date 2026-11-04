@@ -86,6 +86,7 @@ export async function describeWorkspaceRecord(
     name: resolveWorkspaceDisplayName(workspace),
     title: workspace.title,
     pinnedAt: workspace.pinnedAt,
+    residentAt: workspace.residentAt,
     ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
     background: workspace.background,
     archivingAt: null,
@@ -127,6 +128,7 @@ export async function describeCreatedWorktreeWorkspace(
     }),
     title: result.workspace.title,
     pinnedAt: result.workspace.pinnedAt,
+    residentAt: result.workspace.residentAt,
     ...(result.workspace.labels && result.workspace.labels.length > 0
       ? { labels: result.workspace.labels }
       : {}),

@@ -74,6 +74,7 @@ import {
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { SidebarPinnedSectionHeader } from "@/components/sidebar/sidebar-pinned-section-header";
+import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
 import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pin";
@@ -115,6 +116,7 @@ function statusWorkspaceKeyExtractor(workspace: SidebarWorkspaceEntry): string {
 interface StatusWorkspaceListProps {
   groups: SidebarWorkspaceGroup[];
   pinnedWorkspaces: SidebarWorkspaceEntry[];
+  residentWorkspaces?: SidebarWorkspaceEntry[];
   projectIconByProjectViewKey: ReadonlyMap<string, string | null>;
   shortcutIndexByWorkspaceKey: Map<string, number>;
   showShortcutBadges: boolean;
@@ -133,6 +135,7 @@ interface StatusWorkspaceListProps {
 export function SidebarStatusWorkspaceList({
   groups,
   pinnedWorkspaces,
+  residentWorkspaces = [],
   projectIconByProjectViewKey,
   shortcutIndexByWorkspaceKey,
   showShortcutBadges,
@@ -146,6 +149,7 @@ export function SidebarStatusWorkspaceList({
   parentGestureRef,
   dragGestureHostActive,
 }: StatusWorkspaceListProps) {
+  const { t } = useTranslation();
   const activeWorkspaceSelection = useActiveWorkspaceSelection();
   const collapsedWorkspaceGroupKeys = useSidebarCollapsedSectionsStore(
     (state) => state.collapsedWorkspaceGroupKeys,
@@ -219,6 +223,15 @@ export function SidebarStatusWorkspaceList({
   );
   const content = (
     <>
+      {residentWorkspaces.length > 0 ? (
+        <View style={styles.pinnedSection} testID="sidebar-resident-section">
+          <SidebarSectionHeader
+            title={t("sidebar.resident.title")}
+            testID="sidebar-resident-section-header"
+          />
+          {residentWorkspaces.map((workspace) => renderPinnedWorkspaceRow(workspace))}
+        </View>
+      ) : null}
       {pinnedWorkspaces.length > 0 ? (
         <View style={styles.pinnedSection} testID="sidebar-pinned-section">
           <SidebarPinnedSectionHeader
