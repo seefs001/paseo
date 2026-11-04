@@ -964,6 +964,7 @@ interface GitHubServiceDependencies {
 export interface GitHubCommandRunnerOptions {
   cwd: string;
   envOverlay?: Record<string, string>;
+  repositoryScope?: "origin";
 }
 
 export interface GitHubCommandResult {
@@ -1316,6 +1317,20 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     return entry.resolved
       ? { settled: true, value: entry.resolved.value }
       : { settled: false, value: null };
+  }
+
+  async function runGhCommand(
+    args: string[],
+    runOptions: GitHubCommandRunnerOptions,
+  ): Promise<GitHubCommandResult> {
+    if (runOptions.repositoryScope !== "origin") {
+      return githubCliRunner.run(args, runOptions);
+    }
+    const repo = await resolveRepoSlugCached(runOptions.cwd);
+    // gh defaults fork checkouts to the parent repository. GH_REPO anchors
+    // branch lookup to origin while explicit --repo still addresses fork PRs.
+    const envOverlay = repo ? { ...runOptions.envOverlay, GH_REPO: repo } : runOptions.envOverlay;
+    return githubCliRunner.run(args, { ...runOptions, envOverlay });
   }
 
   async function run(args: string[], runOptions: GitHubCommandRunnerOptions): Promise<string> {
@@ -2173,7 +2188,7 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
             headRef: input.headRef,
             headSha: input.headSha,
             headRepositoryOwner: input.headRepositoryOwner,
-            run,
+            run: (args, runOptions) => run(args, { ...runOptions, repositoryScope: "origin" }),
           });
           return addCurrentPullRequestGithubFacts({ cwd: input.cwd, status, run });
         },
@@ -2840,13 +2855,6 @@ const githubCliRunner = createForgeCliRunner({
     createCommandError: (params) => new GitHubCommandError(params),
   },
 });
-
-async function runGhCommand(
-  args: string[],
-  options: GitHubCommandRunnerOptions,
-): Promise<GitHubCommandResult> {
-  return githubCliRunner.run(args, options);
-}
 
 // Anchored to github.com so a pasted URL from an unrelated tracker (a GitLab
 // or Gitea link that happens to share the /owner/repo/(pull|issues)/N shape)
