@@ -8,6 +8,7 @@ import { getChatQuoteSourceLabel } from "@/attachments/chat-quote";
 import { AttachmentLabel, AttachmentPill } from "@/components/attachment-pill";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import { Field, FormTextInput } from "@/components/ui/form-field";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 
@@ -15,9 +16,15 @@ interface ChatQuotePreviewProps {
   text: string;
   source: ChatQuoteContextAttachment["source"];
   onOpenSource?: () => void;
+  /** Shown as an editable field when set; otherwise the quote is read-only. */
+  comment?: {
+    value: string;
+    onChange: (value: string) => void;
+    editable: boolean;
+  };
 }
 
-export function ChatQuotePreview({ text, source, onOpenSource }: ChatQuotePreviewProps) {
+export function ChatQuotePreview({ text, source, onOpenSource, comment }: ChatQuotePreviewProps) {
   const { t } = useTranslation();
   const openSource = useCallback(() => {
     onOpenSource?.();
@@ -29,6 +36,19 @@ export function ChatQuotePreview({ text, source, onOpenSource }: ChatQuotePrevie
       <Text style={styles.quote} selectable>
         {text}
       </Text>
+      {comment ? (
+        <Field label={t("composer.attachments.chatQuoteComment")}>
+          <FormTextInput
+            testID="chat-quote-comment-input"
+            initialValue={comment.value}
+            onChangeText={comment.onChange}
+            editable={comment.editable}
+            multiline
+            placeholder={t("composer.attachments.chatQuoteCommentPlaceholder")}
+            style={styles.commentInput}
+          />
+        </Field>
+      ) : null}
       <Text style={styles.label}>{t("composer.attachments.chatQuoteSource")}</Text>
       <Text style={styles.source} selectable>
         {getChatQuoteSourceLabel(source)}
@@ -47,6 +67,7 @@ interface ChatQuoteAttachmentPillProps {
   index: number;
   disabled: boolean;
   onRemove: (index: number) => void;
+  onChangeComment: (index: number, comment: string) => void;
 }
 
 export function ChatQuoteAttachmentPill({
@@ -54,15 +75,28 @@ export function ChatQuoteAttachmentPill({
   index,
   disabled,
   onRemove,
+  onChangeComment,
 }: ChatQuoteAttachmentPillProps) {
   const { t } = useTranslation();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const openPreview = useCallback(() => setPreviewOpen(true), []);
-  const closePreview = useCallback(() => setPreviewOpen(false), []);
+  const [commentDraft, setCommentDraft] = useState(attachment.comment ?? "");
+  const openPreview = useCallback(() => {
+    setCommentDraft(attachment.comment ?? "");
+    setPreviewOpen(true);
+  }, [attachment.comment]);
+  // The draft commits on close so typing does not rewrite the composer draft per keystroke.
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    if (commentDraft.trim() !== (attachment.comment ?? "")) onChangeComment(index, commentDraft);
+  }, [attachment.comment, commentDraft, index, onChangeComment]);
+  const commentField = useMemo(
+    () => ({ value: commentDraft, onChange: setCommentDraft, editable: !disabled }),
+    [commentDraft, disabled],
+  );
   const remove = useCallback(() => onRemove(index), [index, onRemove]);
   const header = useMemo<SheetHeader>(() => ({ title: t("composer.attachments.chatQuote") }), [t]);
   const title = `“${attachment.selectedText.replace(/\s+/g, " ").trim()}”`;
-  const sourceLabel = getChatQuoteSourceLabel(attachment.source);
+  const sourceLabel = attachment.comment ?? getChatQuoteSourceLabel(attachment.source);
   return (
     <>
       <AttachmentPill
@@ -83,6 +117,7 @@ export function ChatQuoteAttachmentPill({
           text={attachment.selectedText}
           source={attachment.source}
           onOpenSource={closePreview}
+          comment={commentField}
         />
       </AdaptiveModalSheet>
     </>
@@ -108,6 +143,9 @@ const styles = StyleSheet.create((theme) => ({
     borderLeftWidth: 2,
     borderLeftColor: theme.colors.border,
     marginBottom: theme.spacing[2],
+  },
+  commentInput: {
+    minHeight: 72,
   },
   source: {
     color: theme.colors.foregroundMuted,

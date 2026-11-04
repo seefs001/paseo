@@ -6,7 +6,7 @@ import type {
   ServerRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { formatCallArguments } from "./mcp-call-log.js";
+import { formatCallArguments, mcpToolError } from "./mcp-call-log.js";
 import { addModelVisibleStructuredContent } from "./tools/paseo-tool-serialization.js";
 import { createPaseoToolCatalog, type PaseoToolHostDependencies } from "./tools/paseo-tools.js";
 import type { PaseoToolResult } from "./tools/types.js";
@@ -62,7 +62,7 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
           safeRecordToolCall(recordToolCall, {
             tool: tool.name,
             ok: result.isError !== true,
-            error: result.isError === true ? "Tool returned an error" : null,
+            error: mcpToolError(result),
             durationMs: Date.now() - started,
             arguments: formatCallArguments(args),
           });

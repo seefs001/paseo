@@ -172,6 +172,8 @@ export const en = {
     attachments: {
       chatQuote: "Quoted message",
       chatQuoteSource: "Source",
+      chatQuoteComment: "Comment",
+      chatQuoteCommentPlaceholder: "Optional: what should the agent change or explain here?",
       openChatQuote: "Preview quote from {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
       removeChatQuote: "Remove quote",
       openChatQuoteSource: "Open source conversation",
@@ -364,6 +366,12 @@ export const en = {
       actions: "Selected text actions",
       addToChat: "Add to conversation",
       askInSideConversation: "Ask in side conversation",
+      copy: "Copy",
+      copied: "Copied",
+      copyFailed: "Could not copy the selection.",
+      commentLabel: "Comment on selection",
+      commentPlaceholder: "Add a comment (optional)",
+      commentHint: "Enter to add · Shift+Enter for a new line · Esc to cancel",
       updateHost: "Update the host to start a side conversation.",
       unavailable: "Cannot open a side conversation in this workspace.",
       sourceUnavailable:
@@ -1190,14 +1198,6 @@ export const en = {
       },
     },
   },
-  board: {
-    plan2: {
-      dnd: {
-        startWith: "Start with",
-        noProfiles: "No agent profiles on this host",
-        dropHere: "Drop here",
-        moveFailed: "Could not move the task: {{message}}",
-        assignFailed: "Could not move the task to that goal: {{message}}",
   artifacts: {
     pill: "Artifacts {{count}}",
     title: "Artifacts",
@@ -1226,6 +1226,14 @@ export const en = {
     },
     errors: { offline: "The host is offline." },
   },
+  board: {
+    plan2: {
+      dnd: {
+        startWith: "Start with",
+        noProfiles: "No agent profiles on this host",
+        dropHere: "Drop here",
+        moveFailed: "Could not move the task: {{message}}",
+        assignFailed: "Could not move the task to that goal: {{message}}",
         waitFailed: "Could not make the task wait: {{message}}",
         startFailed: "Could not start the task: {{message}}",
         snoozeFailed: "Could not snooze: {{message}}",
@@ -1814,6 +1822,8 @@ export const en = {
   },
   workspaceLabels: {
     title: "Labels",
+    search: "Search or create a label",
+    createAndApply: "Create and apply “{{name}}”",
     unlabelled: "Unlabelled",
     create: "Create label",
     createConfirm: "Create",
@@ -1835,6 +1845,7 @@ export const en = {
     },
     filter: {
       clear: "Clear filter",
+      matchAny: "Match any label",
     },
     manage: {
       open: "Manage labels…",
@@ -1865,6 +1876,20 @@ export const en = {
     },
   },
   sidebar: {
+    views: {
+      title: "Saved views",
+      empty: "No saved views",
+      save: "Save current view",
+      name: "View name",
+      duplicate: "A view with this name already exists",
+      manage: "Manage views",
+      remove: "Delete {{name}}",
+      removeTitle: "Delete view “{{name}}”?",
+      removeMessage: "This removes the saved view from this device. Workspaces will not change.",
+    },
+    filters: {
+      summary: "{{facet}}: {{values}}",
+    },
     statusGroupAccessibility: "{{label}} group",
     statusBucket: {
       needsInput: "Needs input",
@@ -3704,26 +3729,38 @@ export const en = {
       },
       mcpCalls: {
         title: "MCP calls",
-        hint: "Recent MCP calls on connected hosts. Tool arguments are stored. Results are not.",
+        hint: "Only requests to Paseo's MCP endpoint, up to {{limit}} recent records per host. Refreshes every 5 seconds. Inputs and errors may be truncated; results are not stored.",
         empty: "No MCP calls yet.",
         loadFailed: "Could not load MCP calls.",
         unsupported: "Update the host to view MCP calls.",
         arguments: "Arguments",
-        allowedTitle: "Allowed methods",
-        allowedHint: "Turn a method off to hide it from the next MCP call. speak stays available.",
+        allowedTitle: "Available tools",
+        allowedHint:
+          "Host-wide availability of built-in Paseo tools, not client permissions. Disabled tools are unavailable on subsequent MCP requests. speak stays available.",
         failed: "Failed",
         searchPlaceholder: "Search tools, callers, labels",
         clearSearch: "Clear search",
         viewTools: "Tool calls",
-        viewAll: "All",
+        viewAll: "Including protocol",
         allLabels: "All labels",
         labelFilter: "Filter by label",
         external: "External client",
         unknownAgent: "Agent {{id}}",
         noMatches: "No matching calls",
         clearFilters: "Clear filters",
-        methodsSearch: "Search methods",
-        noMethods: "No matching methods",
+        methodsSearch: "Search tools",
+        noMethods: "No matching tools",
+        allStatuses: "All statuses",
+        succeeded: "Succeeded",
+        statusFilter: "Filter by status",
+        summary: "{{visible}} of {{total}} loaded calls · {{failed}} failed",
+        refresh: "Refresh",
+        incomplete: "Records may be incomplete or out of date",
+        hostOffline: "{{host}}: disconnected. Any cached records may be out of date.",
+        hostUnsupported: "{{host}}: update this host to view its MCP calls.",
+        hostLoadFailed: "{{host}}: refresh failed. Any cached records may be out of date.",
+        noHosts: "Add a host to view MCP calls.",
+        saving: "Saving tool availability...",
         labelsHint:
           "Add ?label=name to a client's MCP URL to tag its calls. Calls from agents carry the agent's labels.",
       },

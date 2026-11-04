@@ -7,6 +7,7 @@ import type { BoardCard } from "@/board/columns";
 import { useDeskPrefs } from "@/board/desk-prefs";
 import type { BoardItem, BoardTaskItem } from "@/board/items";
 import { updateBoardTask } from "@/board/tasks";
+import { boardCardStyles } from "@/components/board/card-styles";
 import { DESK_BREAK_WORDS } from "@/components/board/desk-clamp";
 import { DeskItemContextMenu } from "@/components/board/desk-item-menu";
 import { WorkspaceMetaRow } from "@/components/sidebar/workspace-meta-row";
@@ -59,15 +60,18 @@ export const DeskLandedRow = memo(function DeskLandedRow({
         : null,
     [prefs.fields.pullRequest, workspace?.forge, workspace?.githubRuntime?.pullRequest],
   );
-  const summary = prefs.density === "compact" ? null : (task?.summary ?? null);
+  const compact = prefs.density === "compact";
+  const summary = compact ? null : (task?.summary ?? null);
   const rowStyle = useCallback(
     ({ hovered, pressed, open }: HoverState) => [
+      boardCardStyles.card,
       styles.row,
+      compact && styles.rowCompact,
       actionsAlwaysShown && styles.rowReserve,
-      (hovered || open) && styles.rowHovered,
-      pressed && styles.rowPressed,
+      (hovered || open) && boardCardStyles.hovered,
+      pressed && boardCardStyles.pressed,
     ],
-    [actionsAlwaysShown],
+    [actionsAlwaysShown, compact],
   );
   const triggerProps = useMemo(
     () => ({
@@ -75,7 +79,7 @@ export const DeskLandedRow = memo(function DeskLandedRow({
       accessibilityLabel: title,
       onPress: press,
       style: rowStyle,
-      highlightStyle: styles.rowPressed,
+      highlightStyle: boardCardStyles.pressed,
       testID: `desk-landed-${item.key}`,
     }),
     [item.key, press, rowStyle, title],
@@ -94,7 +98,7 @@ export const DeskLandedRow = memo(function DeskLandedRow({
       >
         <View style={styles.titleLine}>
           {task ? <Text style={styles.number}>{`T-${task.number}`}</Text> : null}
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
           <Text
@@ -202,19 +206,14 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   row: {
-    gap: theme.spacing[0.5],
-    paddingVertical: theme.spacing[1.5],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.base,
+    gap: theme.spacing[1.5],
+  },
+  rowCompact: {
+    gap: theme.spacing[1],
+    padding: theme.spacing[2],
   },
   rowReserve: {
     paddingRight: theme.spacing[16],
-  },
-  rowHovered: {
-    backgroundColor: theme.colors.surface2,
-  },
-  rowPressed: {
-    backgroundColor: theme.colors.surface3,
   },
   titleLine: {
     flexDirection: "row",
@@ -230,7 +229,8 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
+    ...DESK_BREAK_WORDS,
   },
   summary: {
     color: theme.colors.foregroundMuted,
@@ -248,13 +248,13 @@ const styles = StyleSheet.create((theme) => ({
   },
   actionsSlot: {
     position: "absolute",
-    top: theme.spacing[0.5],
-    right: theme.spacing[1],
+    top: theme.spacing[2],
+    right: theme.spacing[2],
     flexDirection: "row",
     alignItems: "center",
     // Hover actions cover the time, on the hovered row's own fill.
     borderRadius: theme.borderRadius.base,
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surface1,
   },
   hidden: {
     opacity: 0,

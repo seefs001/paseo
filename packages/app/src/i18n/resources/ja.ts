@@ -178,6 +178,8 @@ export const ja: TranslationResources = {
     attachments: {
       chatQuote: "引用メッセージ",
       chatQuoteSource: "引用元",
+      chatQuoteComment: "コメント",
+      chatQuoteCommentPlaceholder: "任意：この箇所について agent に変更や説明を求める内容",
       openChatQuote: "{{serverId}} / {{agentId}} / {{messageId}} からの引用をプレビュー：{{text}}",
       removeChatQuote: "引用を削除",
       openChatQuoteSource: "引用元の会話を開く",
@@ -374,6 +376,12 @@ export const ja: TranslationResources = {
       actions: "選択したテキストの操作",
       addToChat: "会話に追加",
       askInSideConversation: "サイドの会話で質問",
+      copy: "コピー",
+      copied: "コピーしました",
+      copyFailed: "選択範囲をコピーできませんでした。",
+      commentLabel: "選択範囲へのコメント",
+      commentPlaceholder: "コメントを追加（任意）",
+      commentHint: "Enter で追加 · Shift+Enter で改行 · Esc でキャンセル",
       updateHost: "サイドの会話を開始するにはホストを更新してください。",
       unavailable: "このワークスペースではサイドの会話を開けません。",
       sourceUnavailable:
@@ -1197,14 +1205,6 @@ export const ja: TranslationResources = {
       },
     },
   },
-  board: {
-    plan2: {
-      dnd: {
-        startWith: "開始に使う",
-        noProfiles: "このホストにエージェントプロファイルがありません",
-        dropHere: "ここにドロップ",
-        moveFailed: "タスクを移動できませんでした: {{message}}",
-        assignFailed: "タスクをそのゴールに移動できませんでした: {{message}}",
   artifacts: {
     pill: "成果物 {{count}}",
     title: "成果物",
@@ -1233,6 +1233,14 @@ export const ja: TranslationResources = {
     },
     errors: { offline: "ホストはオフラインです。" },
   },
+  board: {
+    plan2: {
+      dnd: {
+        startWith: "開始に使う",
+        noProfiles: "このホストにエージェントプロファイルがありません",
+        dropHere: "ここにドロップ",
+        moveFailed: "タスクを移動できませんでした: {{message}}",
+        assignFailed: "タスクをそのゴールに移動できませんでした: {{message}}",
         waitFailed: "タスクを待機させられませんでした: {{message}}",
         startFailed: "タスクを開始できませんでした: {{message}}",
         snoozeFailed: "後回しにできませんでした: {{message}}",
@@ -1822,6 +1830,8 @@ export const ja: TranslationResources = {
   },
   workspaceLabels: {
     title: "ラベル",
+    search: "ラベルを検索または作成",
+    createAndApply: "「{{name}}」を作成して適用",
     unlabelled: "ラベルなし",
     create: "ラベルを作成",
     createConfirm: "作成",
@@ -1843,6 +1853,7 @@ export const ja: TranslationResources = {
     },
     filter: {
       clear: "フィルターをクリア",
+      matchAny: "いずれかのラベルに一致",
     },
     manage: {
       open: "ラベルを管理…",
@@ -1873,6 +1884,20 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    views: {
+      title: "保存したビュー",
+      empty: "保存したビューはありません",
+      save: "現在のビューを保存",
+      name: "ビュー名",
+      duplicate: "同じ名前のビューが既にあります",
+      manage: "ビューを管理",
+      remove: "{{name}}を削除",
+      removeTitle: "ビュー「{{name}}」を削除しますか？",
+      removeMessage: "このデバイスから保存したビューを削除します。ワークスペースは変更されません。",
+    },
+    filters: {
+      summary: "{{facet}}：{{values}}",
+    },
     statusGroupAccessibility: "{{label}} グループ",
     statusBucket: {
       needsInput: "入力待ち",
@@ -3608,27 +3633,39 @@ export const ja: TranslationResources = {
       },
       mcpCalls: {
         title: "MCP 呼び出し",
-        hint: "接続中のホストの最近の MCP 呼び出しです。ツール引数は保存し、結果は保存しません。",
+        hint: "Paseo の MCP エンドポイントへの呼び出しのみ、ホストごとに最近の最大 {{limit}} 件を表示します。5 秒ごとに更新します。入力とエラーは省略される場合があり、結果は保存しません。",
         empty: "MCP 呼び出しはまだありません。",
         loadFailed: "MCP 呼び出しを読み込めませんでした。",
         unsupported: "MCP 呼び出しを表示するには、このホストを更新してください。",
         arguments: "引数",
-        allowedTitle: "許可するメソッド",
+        allowedTitle: "利用可能なツール",
         allowedHint:
-          "オフにしたメソッドは次の MCP 呼び出しから提供されません。speak は常に使えます。",
+          "Paseo 組み込みツールのホスト全体での利用可否を設定します。クライアントの権限ではありません。無効にしたツールは以降の MCP リクエストで利用できません。speak は常に利用可能です。",
         failed: "失敗",
         searchPlaceholder: "ツール、呼び出し元、ラベルを検索",
         clearSearch: "検索をクリア",
         viewTools: "ツール呼び出し",
-        viewAll: "すべて",
+        viewAll: "プロトコルを含む",
         allLabels: "すべてのラベル",
         labelFilter: "ラベルで絞り込む",
         external: "外部クライアント",
         unknownAgent: "エージェント {{id}}",
         noMatches: "一致する呼び出しはありません",
         clearFilters: "絞り込みをクリア",
-        methodsSearch: "メソッドを検索",
-        noMethods: "一致するメソッドはありません",
+        methodsSearch: "ツールを検索",
+        noMethods: "一致するツールはありません",
+        allStatuses: "すべての状態",
+        succeeded: "成功",
+        statusFilter: "状態で絞り込む",
+        summary: "読み込み済み {{total}} 件中 {{visible}} 件 · 失敗 {{failed}} 件",
+        refresh: "更新",
+        incomplete: "記録が不完全または古い可能性があります",
+        hostOffline: "{{host}}：未接続。キャッシュされた記録は古い可能性があります。",
+        hostUnsupported: "{{host}}：MCP 呼び出しを表示するには、このホストを更新してください。",
+        hostLoadFailed:
+          "{{host}}：更新に失敗しました。キャッシュされた記録は古い可能性があります。",
+        noHosts: "MCP 呼び出しを表示するにはホストを追加してください。",
+        saving: "ツール設定を保存中...",
         labelsHint:
           "クライアントの MCP URL に ?label=名前 を付けると、その呼び出しにラベルが付きます。エージェントからの呼び出しにはそのエージェントのラベルが付きます。",
       },

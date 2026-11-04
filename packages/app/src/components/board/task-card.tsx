@@ -8,6 +8,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { BacklogMove, BoardCard, BoardColumnId } from "@/board/columns";
 import { useDeskPrefs, type DeskPrefs } from "@/board/desk-prefs";
 import { toBoardTaskItem, type BoardItem } from "@/board/items";
+import { boardCardStyles } from "@/components/board/card-styles";
 import { GoalChip, useReadyBoardHost } from "@/components/board/desk-brief-parts";
 import { BoardPermissionRequest } from "@/components/board/permission-request";
 import { BoardReviewActions } from "@/components/board/review-actions";
@@ -92,11 +93,12 @@ export const BoardTaskCard = memo(function BoardTaskCard({
 
   const cardStyle = useCallback(
     ({ hovered, pressed, open }: CardState) => [
+      boardCardStyles.card,
       styles.card,
       compact && styles.cardCompact,
-      hovered && styles.cardHovered,
-      (selected || open) && styles.cardSelected,
-      pressed && styles.cardPressed,
+      hovered && boardCardStyles.hovered,
+      (selected || open) && boardCardStyles.selected,
+      pressed && boardCardStyles.pressed,
     ],
     [compact, selected],
   );
@@ -116,7 +118,7 @@ export const BoardTaskCard = memo(function BoardTaskCard({
           onPress={press}
           onLongPress={onDragStart}
           style={cardStyle}
-          highlightStyle={styles.cardPressed}
+          highlightStyle={boardCardStyles.pressed}
           testID={`board-card-${task.id}`}
         >
           <View style={styles.topLine}>
@@ -442,27 +444,11 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   card: {
-    gap: theme.spacing[1],
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface1,
-  },
-  cardHovered: {
-    backgroundColor: theme.colors.surface2,
+    gap: theme.spacing[1.5],
   },
   cardCompact: {
-    gap: theme.spacing[0.5],
-    paddingVertical: theme.spacing[1.5],
-  },
-  cardSelected: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.surface2,
-  },
-  cardPressed: {
-    backgroundColor: theme.colors.surface3,
+    gap: theme.spacing[1],
+    padding: theme.spacing[2],
   },
   topLine: {
     flexDirection: "row",

@@ -178,6 +178,8 @@ export const ru: TranslationResources = {
     attachments: {
       chatQuote: "Цитата сообщения",
       chatQuoteSource: "Источник",
+      chatQuoteComment: "Комментарий",
+      chatQuoteCommentPlaceholder: "Необязательно: что агенту изменить или объяснить здесь?",
       openChatQuote: "Просмотр цитаты из {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
       removeChatQuote: "Удалить цитату",
       openChatQuoteSource: "Открыть исходную беседу",
@@ -372,6 +374,12 @@ export const ru: TranslationResources = {
       actions: "Действия с выделенным текстом",
       addToChat: "Добавить в беседу",
       askInSideConversation: "Спросить в боковой беседе",
+      copy: "Копировать",
+      copied: "Скопировано",
+      copyFailed: "Не удалось скопировать выделение.",
+      commentLabel: "Комментарий к выделению",
+      commentPlaceholder: "Добавить комментарий (необязательно)",
+      commentHint: "Enter — добавить · Shift+Enter — новая строка · Esc — отмена",
       updateHost: "Обновите хост, чтобы начать боковую беседу.",
       unavailable: "Не удалось открыть боковую беседу в этом рабочем пространстве.",
       sourceUnavailable: "Это сообщение ещё не сохранено в истории. Повторите попытку чуть позже.",
@@ -1199,14 +1207,6 @@ export const ru: TranslationResources = {
       },
     },
   },
-  board: {
-    plan2: {
-      dnd: {
-        startWith: "Запустить с",
-        noProfiles: "На этом хосте нет профилей агентов",
-        dropHere: "Перетащите сюда",
-        moveFailed: "Не удалось переместить задачу: {{message}}",
-        assignFailed: "Не удалось перенести задачу в эту цель: {{message}}",
   artifacts: {
     pill: "Артефакты {{count}}",
     title: "Артефакты",
@@ -1235,6 +1235,14 @@ export const ru: TranslationResources = {
     },
     errors: { offline: "Хост не в сети." },
   },
+  board: {
+    plan2: {
+      dnd: {
+        startWith: "Запустить с",
+        noProfiles: "На этом хосте нет профилей агентов",
+        dropHere: "Перетащите сюда",
+        moveFailed: "Не удалось переместить задачу: {{message}}",
+        assignFailed: "Не удалось перенести задачу в эту цель: {{message}}",
         waitFailed: "Не удалось поставить задачу в ожидание: {{message}}",
         startFailed: "Не удалось запустить задачу: {{message}}",
         snoozeFailed: "Не удалось отложить: {{message}}",
@@ -1823,6 +1831,8 @@ export const ru: TranslationResources = {
   },
   workspaceLabels: {
     title: "Метки",
+    search: "Найти или создать метку",
+    createAndApply: "Создать и применить «{{name}}»",
     unlabelled: "Без метки",
     create: "Создать метку",
     createConfirm: "Создать",
@@ -1844,6 +1854,7 @@ export const ru: TranslationResources = {
     },
     filter: {
       clear: "Очистить фильтр",
+      matchAny: "Совпадение с любой меткой",
     },
     manage: {
       open: "Управление метками…",
@@ -1874,6 +1885,21 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    views: {
+      title: "Сохранённые виды",
+      empty: "Нет сохранённых видов",
+      save: "Сохранить текущий вид",
+      name: "Название вида",
+      duplicate: "Вид с таким названием уже существует",
+      manage: "Управление видами",
+      remove: "Удалить {{name}}",
+      removeTitle: "Удалить вид «{{name}}»?",
+      removeMessage:
+        "Сохранённый вид будет удалён с этого устройства. Рабочие пространства не изменятся.",
+    },
+    filters: {
+      summary: "{{facet}}: {{values}}",
+    },
     statusGroupAccessibility: "Группа «{{label}}»",
     statusBucket: {
       needsInput: "Ожидает ввода",
@@ -3626,27 +3652,38 @@ export const ru: TranslationResources = {
       },
       mcpCalls: {
         title: "Вызовы MCP",
-        hint: "Последние вызовы MCP на подключенных хостах. Аргументы инструментов сохраняются. Результаты нет.",
+        hint: "Только запросы к MCP-эндпоинту Paseo, до {{limit}} последних записей на хост. Обновление каждые 5 секунд. Входные данные и ошибки могут быть обрезаны; результаты не сохраняются.",
         empty: "Вызовов MCP пока нет.",
         loadFailed: "Не удалось загрузить вызовы MCP.",
         unsupported: "Обновите хост, чтобы смотреть вызовы MCP.",
         arguments: "Аргументы",
-        allowedTitle: "Разрешенные методы",
+        allowedTitle: "Доступные инструменты",
         allowedHint:
-          "Выключенный метод не предлагается со следующего вызова MCP. speak остается доступным.",
+          "Доступность встроенных инструментов Paseo для всего хоста, а не права клиентов. Отключённые инструменты недоступны в последующих запросах MCP. speak остаётся доступным.",
         failed: "Ошибка",
         searchPlaceholder: "Искать инструменты, вызывающих, метки",
         clearSearch: "Очистить поиск",
         viewTools: "Вызовы инструментов",
-        viewAll: "Все",
+        viewAll: "С запросами протокола",
         allLabels: "Все метки",
         labelFilter: "Фильтр по метке",
         external: "Внешний клиент",
         unknownAgent: "Агент {{id}}",
         noMatches: "Нет подходящих вызовов",
         clearFilters: "Сбросить фильтры",
-        methodsSearch: "Искать методы",
-        noMethods: "Нет подходящих методов",
+        methodsSearch: "Поиск инструментов",
+        noMethods: "Нет подходящих инструментов",
+        allStatuses: "Все статусы",
+        succeeded: "Успешно",
+        statusFilter: "Фильтр по статусу",
+        summary: "Показано {{visible}} из {{total}} загруженных вызовов · ошибок: {{failed}}",
+        refresh: "Обновить",
+        incomplete: "Записи могут быть неполными или устаревшими",
+        hostOffline: "{{host}}: нет подключения. Записи в кэше могут быть устаревшими.",
+        hostUnsupported: "{{host}}: обновите этот хост для просмотра вызовов MCP.",
+        hostLoadFailed: "{{host}}: не удалось обновить. Записи в кэше могут быть устаревшими.",
+        noHosts: "Добавьте хост для просмотра вызовов MCP.",
+        saving: "Сохранение доступности инструментов...",
         labelsHint:
           "Добавьте ?label=имя к MCP URL клиента, чтобы помечать его вызовы. Вызовы агентов получают метки агента.",
       },

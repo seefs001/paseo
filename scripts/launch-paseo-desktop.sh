@@ -2,7 +2,7 @@
 # Build the desktop main process and static renderer, then launch them in
 # .dev/Paseo.app against ~/.paseo on port 6767.
 # Stops /Applications/Paseo.app and any daemon listening on 6767 or 6768.
-# Local shortcut: paseo-dev.
+# Local shortcut: paseo-dev. Renderer profiling is enabled on a local DevTools port.
 set -euo pipefail
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -123,6 +123,12 @@ ensure_paseo_app() {
 }
 
 ensure_path
+ELECTRON_FLAGS="$(
+  PASEO_DEV_RUNTIME_FALLBACK_ROOT="$ROOT" node --input-type=module -e '
+    import { resolveDevRuntime } from "./packages/desktop/scripts/dev-runtime-config.mjs";
+    process.stdout.write(resolveDevRuntime().electronFlags);
+  '
+)"
 : >"$LOG"
 
 # Electron downloads its binary lazily; resolve it before building or stopping Paseo.
@@ -166,6 +172,7 @@ ensure_paseo_app
     EXPO_DEV_URL="paseo://app/" \
     PASEO_WEB_PLATFORM=electron \
     PASEO_DISABLE_SINGLE_INSTANCE_LOCK=1 \
+    PASEO_ELECTRON_FLAGS="$ELECTRON_FLAGS" \
     APP_VARIANT=development \
     BROWSER=none \
     PATH="$PATH" \
@@ -181,4 +188,5 @@ if ! kill -0 "$(cat "$ELECTRON_PID_FILE")" 2>/dev/null; then
 fi
 
 echo "Paseo launched (home $HOME_DIR, daemon $LISTEN, static renderer; no hot reload)"
+echo "Renderer profiling enabled (DevTools endpoint in the log)"
 echo "Logs: $LOG"

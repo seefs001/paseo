@@ -36,9 +36,7 @@ export function runtimeReleaseTag(date) {
 }
 
 export function stableRuntimeAssetName(filename) {
-  const match = /^paseo-runtime-.+-(linux)-(arm64|x64)\.tar\.gz$/.exec(
-    path.basename(filename),
-  );
+  const match = /^paseo-runtime-.+-(linux)-(arm64|x64)\.tar\.gz$/.exec(path.basename(filename));
   if (!match) return null;
   return `paseo-runtime-${match[1]}-${match[2]}.tar.gz`;
 }

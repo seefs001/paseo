@@ -18,13 +18,13 @@ import {
 } from "@/components/board/agent-pills";
 import { BoardAgentStateIndicator } from "@/components/board/agent-state-indicator";
 import { BoardAgentTimer, BoardLiveDuration } from "@/components/board/agent-time";
+import { boardCardStyles } from "@/components/board/card-styles";
 import { DeskItemContextMenu } from "@/components/board/desk-item-menu";
 import { DESK_BREAK_WORDS } from "@/components/board/desk-clamp";
 import { useClaimantName } from "@/components/board/review-claim";
 import { Button } from "@/components/ui/button";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
-import { STATUS_INDICATOR_ALERT_SIZE } from "@/utils/status-indicator-geometry";
 import { GoalChip, TaskChip, itemName, useItemGoal } from "./desk-brief-parts";
 
 type HoverState = PressableStateCallbackType & { hovered?: boolean; open?: boolean };
@@ -43,7 +43,7 @@ interface DeskFlightRowProps {
 }
 
 /**
- * Work moving now, in one line plus its context: state, title, goal and task, what it runs on,
+ * Work moving now: state, title, goal and task, what it runs on,
  * how long, and how full its context is. Stop and Open show on hover, always on touch.
  */
 export const DeskFlightRow = memo(function DeskFlightRow({
@@ -65,11 +65,12 @@ export const DeskFlightRow = memo(function DeskFlightRow({
   const title = item.kind === "agent" ? itemName(item) : item.card.task.title;
   const rowStyle = useCallback(
     ({ hovered, pressed, open }: HoverState) => [
+      boardCardStyles.card,
       styles.row,
       compact && styles.rowCompact,
-      hovered && styles.rowHovered,
-      (selected || open) && styles.rowSelected,
-      pressed && styles.rowPressed,
+      hovered && boardCardStyles.hovered,
+      (selected || open) && boardCardStyles.selected,
+      pressed && boardCardStyles.pressed,
     ],
     [compact, selected],
   );
@@ -80,7 +81,7 @@ export const DeskFlightRow = memo(function DeskFlightRow({
       accessibilityState: selected ? SELECTED_STATE : NOT_SELECTED_STATE,
       onPress: press,
       style: rowStyle,
-      highlightStyle: styles.rowPressed,
+      highlightStyle: boardCardStyles.pressed,
       testID: `desk-flight-${item.key}`,
     }),
     [item.key, press, rowStyle, selected, title],
@@ -99,10 +100,9 @@ export const DeskFlightRow = memo(function DeskFlightRow({
       >
         <View style={styles.titleLine}>
           <BoardAgentStateIndicator bucket={rowBucket(item)} />
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={compact ? 1 : 2}>
             {title}
           </Text>
-          {prefs.fields.timer ? <RowTimer item={item} /> : null}
         </View>
         <View style={styles.contextLine}>
           {item.kind === "agent" ? (
@@ -110,6 +110,7 @@ export const DeskFlightRow = memo(function DeskFlightRow({
           ) : (
             <TaskContext item={item} showHost={showHost} showGoal={showGoal} />
           )}
+          {prefs.fields.timer ? <RowTimer item={item} /> : null}
         </View>
       </DeskItemContextMenu>
       <View style={styles.actionsSlot} pointerEvents="box-none">
@@ -245,26 +246,11 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   row: {
-    gap: theme.spacing[0.5],
-    paddingVertical: theme.spacing[1.5],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.base,
-    borderWidth: 1,
-    borderColor: "transparent",
+    gap: theme.spacing[2],
   },
   rowCompact: {
-    gap: theme.spacing[0.5],
-    paddingVertical: theme.spacing[1],
-  },
-  rowHovered: {
-    backgroundColor: theme.colors.surface2,
-  },
-  rowSelected: {
-    backgroundColor: theme.colors.surface2,
-    borderColor: theme.colors.accent,
-  },
-  rowPressed: {
-    backgroundColor: theme.colors.surface3,
+    gap: theme.spacing[1],
+    padding: theme.spacing[2],
   },
   titleLine: {
     flexDirection: "row",
@@ -275,7 +261,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     ...DESK_BREAK_WORDS,
   },
   timer: {
@@ -288,8 +274,6 @@ const styles = StyleSheet.create((theme) => ({
     flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[1.5],
-    // Lines up under the title, past the state indicator's slot.
-    paddingLeft: STATUS_INDICATOR_ALERT_SIZE + 2 + theme.spacing[2],
     paddingRight: theme.spacing[16],
   },
   number: {

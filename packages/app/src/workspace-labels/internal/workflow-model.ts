@@ -1,6 +1,7 @@
 import {
   normalizeWorkspaceLabelName,
   workspaceLabelKey,
+  WORKSPACE_LABEL_COLORS,
   type WorkspaceLabelDefinition,
 } from "@getpaseo/protocol/workspace-labels";
 import { buildWorkspaceLabelPickerRows, type WorkspaceLabelPickerRow } from "./picker-model";
@@ -23,6 +24,8 @@ class ObservableModel {
 
 export interface WorkspaceLabelPickerModelSnapshot {
   rows: readonly WorkspaceLabelPickerRow[];
+  query: string;
+  createName: string | null;
   error: string | null;
   online: boolean;
   pendingNames: string[];
@@ -41,6 +44,9 @@ export class WorkspaceLabelPickerModel extends ObservableModel {
   private online = false;
   private labels: readonly WorkspaceLabelDefinition[] = [];
   private assigned: readonly string[] = [];
+  private query = "";
+  // Keep the opening order while toggling, so a press never moves the next row under the pointer.
+  private openingAssignments: ReadonlySet<string> | null = null;
   private readonly pending = new Map<string, Promise<boolean>>();
   private currentSnapshot: WorkspaceLabelPickerModelSnapshot;
 
@@ -63,7 +69,19 @@ export class WorkspaceLabelPickerModel extends ObservableModel {
     this.labels = input.labels;
     this.assigned = input.assigned;
     this.online = input.online;
+    this.openingAssignments ??= new Set(input.assigned.map(workspaceLabelKey));
     this.commit();
+  }
+
+  setQuery(query: string): void {
+    this.query = query;
+    this.commit();
+  }
+
+  create(): Promise<boolean> {
+    const name = this.currentSnapshot.createName;
+    if (!name || !this.online) return Promise.resolve(false);
+    return this.toggle({ name, color: WORKSPACE_LABEL_COLORS[0] }, true);
   }
 
   toggle(label: WorkspaceLabelDefinition, assigned: boolean): Promise<boolean> {
@@ -93,8 +111,25 @@ export class WorkspaceLabelPickerModel extends ObservableModel {
   }
 
   private buildSnapshot(): WorkspaceLabelPickerModelSnapshot {
+    const query = workspaceLabelKey(this.query);
+    const catalogRows = buildWorkspaceLabelPickerRows({
+      labels: this.labels,
+      assigned: this.assigned,
+    });
+    const rows = catalogRows.filter((row) => workspaceLabelKey(row.name).includes(query));
+    const openingAssignments = this.openingAssignments;
+    rows.sort((left, right) => {
+      const leftSelected = openingAssignments?.has(workspaceLabelKey(left.name)) ?? false;
+      const rightSelected = openingAssignments?.has(workspaceLabelKey(right.name)) ?? false;
+      return Number(rightSelected) - Number(leftSelected);
+    });
+    const exists = this.labels.some((label) => workspaceLabelKey(label.name) === query);
+    const canCreate = query.length > 0 && !exists;
+    const createName = canCreate ? normalizeWorkspaceLabelName(this.query) : null;
     return {
-      rows: buildWorkspaceLabelPickerRows({ labels: this.labels, assigned: this.assigned }),
+      rows,
+      query: this.query,
+      createName,
       error: this.error,
       online: this.online,
       pendingNames: [...this.pending.keys()],

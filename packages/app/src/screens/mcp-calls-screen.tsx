@@ -2,7 +2,8 @@ import { memo, useCallback, useMemo, useState, type ReactElement } from "react";
 import { ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useTranslation } from "react-i18next";
-import { Bot, ChevronRight, Plug, SlidersHorizontal, Tag } from "lucide-react-native";
+import { Bot, ChevronRight, Plug, RefreshCw, SlidersHorizontal, Tag } from "lucide-react-native";
+import { useMutation } from "@tanstack/react-query";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { McpCallRecord } from "@getpaseo/protocol/messages";
 import { CONFIGURABLE_PASEO_AGENT_TOOLS } from "@getpaseo/protocol/paseo-agent-tools";
@@ -12,6 +13,7 @@ import { MenuHeader } from "@/components/headers/menu-header";
 import { HostFilter } from "@/components/hosts/host-filter";
 import { ALL_HOSTS_OPTION_ID, type HostPickerHost } from "@/components/hosts/host-picker";
 import { useProviderIcon } from "@/components/provider-icons";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
@@ -22,18 +24,24 @@ import { SearchField } from "@/components/ui/search-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
-import { useFetchQuery } from "@/data/query";
+import { useFetchQueries } from "@/data/query";
 import { useAggregatedAgents } from "@/hooks/use-aggregated-agents";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
 import { useHostFeatureAvailabilityMap } from "@/runtime/host-features";
-import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
+import {
+  getHostRuntimeStore,
+  useHostRuntimeConnectionStatuses,
+  useHostRuntimeIsConnected,
+  useHosts,
+} from "@/runtime/host-runtime";
 import { deriveIdentityColorName } from "@/styles/identity-colors";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE } from "@/styles/theme";
 import { WorkspaceLabelChip } from "@/workspace-labels/chip";
 
-type McpCallView = "tools" | "failed" | "all";
+type McpCallView = "tools" | "all";
+type McpCallStatus = "all" | "failed" | "succeeded";
 
 interface ListedMcpCall extends McpCallRecord {
   serverId: string;
@@ -65,7 +73,7 @@ const CALL_LIMIT = 200;
 const POLL_INTERVAL_MS = 5000;
 const SHORT_AGENT_ID_LENGTH = 7;
 const ARGUMENTS_PREVIEW_LIMIT = 240;
-const EMPTY_CALLS: ListedMcpCall[] = [];
+const EMPTY_CALLS: McpCallRecord[] = [];
 
 const ThemedChevron = withUnistyles(ChevronRight);
 const ThemedPlug = withUnistyles(Plug);
@@ -86,64 +94,34 @@ function McpCallsScreenContent(): ReactElement {
   const { t } = useTranslation();
   const hosts = useHosts();
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
+  const connectionStatuses = useHostRuntimeConnectionStatuses(serverIds);
   const logAvailability = useHostFeatureAvailabilityMap(serverIds, "mcpCallLog");
   const allowlistAvailability = useHostFeatureAvailabilityMap(serverIds, "mcpToolAllowlist");
-  const supportedHosts = useMemo(
-    () => hosts.filter((host) => logAvailability.get(host.serverId) === true),
-    [logAvailability, hosts],
+  const queries = useFetchQueries<McpCallRecord[]>(
+    hosts.map((host) => ({
+      queryKey: ["mcp-calls", host.serverId],
+      enabled:
+        logAvailability.get(host.serverId) === true &&
+        connectionStatuses.get(host.serverId) === "online",
+      dataShape: "value",
+      staleTimeMs: 0,
+      refetchInterval: POLL_INTERVAL_MS,
+      queryFn: async () => {
+        const client = getHostRuntimeStore().getClient(host.serverId);
+        if (!client) throw new Error(t("common.errors.daemonClientDisconnected"));
+        return client.listMcpCalls(CALL_LIMIT);
+      },
+    })),
   );
-  const configurableHosts = useMemo(
-    () => hosts.filter((host) => allowlistAvailability.get(host.serverId) === true),
-    [allowlistAvailability, hosts],
-  );
-  const featuresPending = hosts.some((host) => logAvailability.get(host.serverId) == null);
-  const supportedKey = supportedHosts.map((host) => host.serverId).join("\n");
-  const query = useFetchQuery({
-    queryKey: ["mcp-calls", supportedKey],
-    enabled: supportedHosts.length > 0,
-    dataShape: "list",
-    staleTimeMs: 0,
-    refetchInterval: POLL_INTERVAL_MS,
-    queryFn: async () => {
-      const runtime = getHostRuntimeStore();
-      const groups = await Promise.all(
-        supportedHosts.map(async (host) => {
-          const client = runtime.getClient(host.serverId);
-          if (!client) return { calls: [] as ListedMcpCall[], failed: true };
-          try {
-            const calls = await client.listMcpCalls(CALL_LIMIT);
-            return {
-              failed: false,
-              calls: calls.map(
-                (call): ListedMcpCall => ({
-                  id: call.id,
-                  at: call.at,
-                  callerAgentId: call.callerAgentId,
-                  method: call.method,
-                  tool: call.tool,
-                  ok: call.ok,
-                  error: call.error,
-                  durationMs: call.durationMs,
-                  arguments: call.arguments,
-                  labels: call.labels,
-                  serverId: host.serverId,
-                  hostLabel: host.label,
-                }),
-              ),
-            };
-          } catch {
-            return { calls: [] as ListedMcpCall[], failed: true };
-          }
-        }),
-      );
-      const calls = groups.flatMap((group) => group.calls);
-      if (calls.length === 0 && groups.some((group) => group.failed)) {
-        throw new Error(t("settings.host.mcpCalls.loadFailed"));
+  const calls = useMemo(() => {
+    const merged: ListedMcpCall[] = [];
+    for (const [index, host] of hosts.entries()) {
+      for (const call of queries[index].data ?? EMPTY_CALLS) {
+        merged.push({ ...call, serverId: host.serverId, hostLabel: host.label });
       }
-      return calls.sort((left, right) => right.at.localeCompare(left.at));
-    },
-  });
-  const calls = query.data ?? EMPTY_CALLS;
+    }
+    return merged.sort((left, right) => right.at.localeCompare(left.at));
+  }, [hosts, queries]);
 
   const { agents } = useAggregatedAgents({ includeArchived: true });
   const agentsByKey = useMemo(() => {
@@ -156,6 +134,7 @@ function McpCallsScreenContent(): ReactElement {
 
   const [selectedHost, setSelectedHost] = useState(ALL_HOSTS_OPTION_ID);
   const [view, setView] = useState<McpCallView>("tools");
+  const [status, setStatus] = useState<McpCallStatus>("all");
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchResetKey, setSearchResetKey] = useState(0);
@@ -163,6 +142,41 @@ function McpCallsScreenContent(): ReactElement {
   const hostFilter = hosts.some((host) => host.serverId === selectedHost)
     ? selectedHost
     : ALL_HOSTS_OPTION_ID;
+  const scopedHosts = hosts.filter(
+    (host) => hostFilter === ALL_HOSTS_OPTION_ID || host.serverId === hostFilter,
+  );
+  const configurableHosts = scopedHosts.filter(
+    (host) => allowlistAvailability.get(host.serverId) === true,
+  );
+  const activeQueries = queries.filter(
+    (_query, index) =>
+      (hostFilter === ALL_HOSTS_OPTION_ID || hosts[index].serverId === hostFilter) &&
+      logAvailability.get(hosts[index].serverId) === true &&
+      connectionStatuses.get(hosts[index].serverId) === "online",
+  );
+  const issues = scopedHosts.flatMap((host) => {
+    if (connectionStatuses.get(host.serverId) !== "online") {
+      return [t("settings.host.mcpCalls.hostOffline", { host: host.label })];
+    }
+    if (logAvailability.get(host.serverId) === false) {
+      return [t("settings.host.mcpCalls.hostUnsupported", { host: host.label })];
+    }
+    const query = queries[hosts.indexOf(host)];
+    if (query.isError) {
+      return [t("settings.host.mcpCalls.hostLoadFailed", { host: host.label })];
+    }
+    return [];
+  });
+  const waitingForFeatures = scopedHosts.some(
+    (host) =>
+      connectionStatuses.get(host.serverId) === "online" &&
+      logAvailability.get(host.serverId) == null,
+  );
+  const waiting = waitingForFeatures || activeQueries.some((query) => query.isPending);
+  const refreshing = activeQueries.some((query) => query.isFetching);
+  const refresh = useCallback(() => {
+    for (const query of activeQueries) void query.refetch();
+  }, [activeQueries]);
 
   const entries = useMemo<McpCallEntry[]>(
     () =>
@@ -173,12 +187,13 @@ function McpCallsScreenContent(): ReactElement {
         let callerTitle = t("settings.host.mcpCalls.external");
         if (call.callerAgentId) {
           callerTitle =
-            agent?.title ??
+            agent?.title?.trim() ||
             t("settings.host.mcpCalls.unknownAgent", {
               id: call.callerAgentId.slice(0, SHORT_AGENT_ID_LENGTH),
             });
         }
         const searchText = [
+          call.id,
           call.tool,
           call.method,
           callerTitle,
@@ -195,53 +210,63 @@ function McpCallsScreenContent(): ReactElement {
       }),
     [agentsByKey, calls, t],
   );
-
+  const hostEntries = useMemo(
+    () =>
+      entries.filter(
+        ({ call }) => hostFilter === ALL_HOSTS_OPTION_ID || call.serverId === hostFilter,
+      ),
+    [entries, hostFilter],
+  );
+  const matchingEntries = useMemo(() => {
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return hostEntries.filter(({ call, searchText }) => {
+      if (view === "tools" && call.method !== "tools/call") return false;
+      if (status === "failed" && call.ok) return false;
+      if (status === "succeeded" && !call.ok) return false;
+      return tokens.every((token) => searchText.includes(token));
+    });
+  }, [hostEntries, search, status, view]);
   const labelOptions = useMemo<LabelOption[]>(() => {
     const counts = new Map<string, number>();
-    for (const call of calls) {
+    for (const { call } of matchingEntries) {
       for (const label of call.labels ?? []) counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     return [...counts]
       .map(([label, count]) => ({ label, count }))
       .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
-  }, [calls]);
-
-  const visibleEntries = useMemo(() => {
-    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return entries.filter(({ call, searchText }) => {
-      if (hostFilter !== ALL_HOSTS_OPTION_ID && call.serverId !== hostFilter) return false;
-      if (view === "tools" && call.method !== "tools/call") return false;
-      if (view === "failed" && call.ok) return false;
-      if (selectedLabel !== null && !call.labels?.includes(selectedLabel)) return false;
-      return tokens.every((token) => searchText.includes(token));
-    });
-  }, [entries, hostFilter, search, selectedLabel, view]);
+  }, [matchingEntries]);
+  const visibleEntries = useMemo(
+    () =>
+      matchingEntries.filter(
+        ({ call }) => selectedLabel === null || call.labels?.includes(selectedLabel),
+      ),
+    [matchingEntries, selectedLabel],
+  );
+  const failedCount = visibleEntries.filter(({ call }) => !call.ok).length;
 
   const clearFilters = useCallback(() => {
     setSearch("");
     setSearchResetKey((key) => key + 1);
     setSelectedLabel(null);
     setSelectedHost(ALL_HOSTS_OPTION_ID);
-    setView("all");
+    setView("tools");
+    setStatus("all");
   }, []);
   const openMethods = useCallback(() => setIsMethodsOpen(true), []);
   const closeMethods = useCallback(() => setIsMethodsOpen(false), []);
 
-  const waiting =
-    (featuresPending && supportedHosts.length === 0) ||
-    (query.isPending && supportedHosts.length > 0);
   let body: ReactElement;
-  if (waiting) {
+  if (hosts.length === 0) {
+    body = <CenteredMessage text={t("settings.host.mcpCalls.noHosts")} />;
+  } else if (hostEntries.length === 0 && waiting) {
     body = (
       <View style={styles.centered}>
         <LoadingSpinner size="large" color={styles.spinner.color} />
       </View>
     );
-  } else if (hosts.length > 0 && supportedHosts.length === 0) {
-    body = <CenteredMessage text={t("settings.host.mcpCalls.unsupported")} />;
-  } else if (query.isError) {
+  } else if (hostEntries.length === 0 && issues.length > 0) {
     body = <CenteredMessage text={t("settings.host.mcpCalls.loadFailed")} />;
-  } else if (calls.length === 0) {
+  } else if (hostEntries.length === 0) {
     body = (
       <CenteredMessage
         text={t("settings.host.mcpCalls.empty")}
@@ -258,28 +283,63 @@ function McpCallsScreenContent(): ReactElement {
       </View>
     );
   } else {
-    body = <McpCallList entries={visibleEntries} showHost={supportedHosts.length > 1} />;
+    body = <McpCallList entries={visibleEntries} showHost={scopedHosts.length > 1} />;
   }
 
   return (
     <View style={styles.container} testID="mcp-calls-screen">
       <MenuHeader title={t("sidebar.sections.mcpCalls")} />
-      {supportedHosts.length > 0 ? (
-        <McpCallsFilterRail
-          hosts={hosts}
-          selectedHost={hostFilter}
-          onSelectHost={setSelectedHost}
-          view={view}
-          onViewChange={setView}
-          labelOptions={labelOptions}
-          selectedLabel={selectedLabel}
-          onSelectLabel={setSelectedLabel}
-          search={search}
-          searchResetKey={searchResetKey}
-          onSearchChange={setSearch}
-          canConfigureMethods={configurableHosts.length > 0}
-          onOpenMethods={openMethods}
-        />
+      {hosts.length > 0 ? (
+        <View style={styles.rail}>
+          <Text style={styles.footnote}>
+            {t("settings.host.mcpCalls.hint", { limit: CALL_LIMIT })}
+          </Text>
+          <McpCallsFilterRail
+            hosts={hosts}
+            selectedHost={hostFilter}
+            onSelectHost={setSelectedHost}
+            view={view}
+            onViewChange={setView}
+            status={status}
+            onStatusChange={setStatus}
+            labelOptions={labelOptions}
+            selectedLabel={selectedLabel}
+            onSelectLabel={setSelectedLabel}
+            search={search}
+            searchResetKey={searchResetKey}
+            onSearchChange={setSearch}
+            canConfigureMethods={configurableHosts.length > 0}
+            onOpenMethods={openMethods}
+          />
+          <View style={styles.railRow}>
+            <Text style={styles.summary} testID="mcp-calls-summary">
+              {t("settings.host.mcpCalls.summary", {
+                visible: visibleEntries.length,
+                total: hostEntries.length,
+                failed: failedCount,
+              })}
+            </Text>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={RefreshCw}
+              onPress={refresh}
+              disabled={refreshing || activeQueries.length === 0}
+              testID="mcp-calls-refresh"
+            >
+              {t("settings.host.mcpCalls.refresh")}
+            </Button>
+          </View>
+          {issues.length > 0 ? (
+            <Alert
+              variant="warning"
+              size="sm"
+              title={t("settings.host.mcpCalls.incomplete")}
+              description={issues.join("\n")}
+              testID="mcp-calls-incomplete"
+            />
+          ) : null}
+        </View>
       ) : null}
       {body}
       <McpMethodsSheet visible={isMethodsOpen} onClose={closeMethods} hosts={configurableHosts} />
@@ -302,6 +362,8 @@ interface McpCallsFilterRailProps {
   onSelectHost: (serverId: string) => void;
   view: McpCallView;
   onViewChange: (view: McpCallView) => void;
+  status: McpCallStatus;
+  onStatusChange: (status: McpCallStatus) => void;
   labelOptions: LabelOption[];
   selectedLabel: string | null;
   onSelectLabel: (label: string | null) => void;
@@ -319,6 +381,8 @@ function McpCallsFilterRail({
   onSelectHost,
   view,
   onViewChange,
+  status,
+  onStatusChange,
   labelOptions,
   selectedLabel,
   onSelectLabel,
@@ -336,11 +400,6 @@ function McpCallsFilterRail({
         label: t("settings.host.mcpCalls.viewTools"),
         testID: "mcp-calls-view-tools",
       },
-      {
-        value: "failed",
-        label: t("settings.host.mcpCalls.failed"),
-        testID: "mcp-calls-view-failed",
-      },
       { value: "all", label: t("settings.host.mcpCalls.viewAll"), testID: "mcp-calls-view-all" },
     ],
     [t],
@@ -348,7 +407,7 @@ function McpCallsFilterRail({
   const showLabelFilter = labelOptions.length > 0 || selectedLabel !== null;
 
   return (
-    <View style={styles.rail}>
+    <View style={styles.filters}>
       <View style={styles.railRow}>
         <SearchField
           key={searchResetKey}
@@ -377,6 +436,7 @@ function McpCallsFilterRail({
             options={viewOptions}
             testID="mcp-calls-view"
           />
+          <CallStatusFilter status={status} onSelect={onStatusChange} />
           {showLabelFilter ? (
             <LabelFilter options={labelOptions} selected={selectedLabel} onSelect={onSelectLabel} />
           ) : null}
@@ -394,6 +454,57 @@ function McpCallsFilterRail({
         ) : null}
       </View>
     </View>
+  );
+}
+
+function CallStatusFilter({
+  status,
+  onSelect,
+}: {
+  status: McpCallStatus;
+  onSelect: (status: McpCallStatus) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const selectAll = useCallback(() => onSelect("all"), [onSelect]);
+  const selectFailed = useCallback(() => onSelect("failed"), [onSelect]);
+  const selectSucceeded = useCallback(() => onSelect("succeeded"), [onSelect]);
+  const labels: Record<McpCallStatus, string> = {
+    all: t("settings.host.mcpCalls.allStatuses"),
+    failed: t("settings.host.mcpCalls.failed"),
+    succeeded: t("settings.host.mcpCalls.succeeded"),
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownTrigger
+        size="sm"
+        accessibilityLabel={t("settings.host.mcpCalls.statusFilter")}
+        testID="mcp-calls-status-filter"
+      >
+        {labels[status]}
+      </DropdownTrigger>
+      <DropdownMenuContent side="bottom" align="start">
+        <DropdownMenuItem selected={status === "all"} showSelectedCheck onSelect={selectAll}>
+          {labels.all}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          selected={status === "failed"}
+          showSelectedCheck
+          onSelect={selectFailed}
+          testID="mcp-calls-view-failed"
+        >
+          {labels.failed}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          selected={status === "succeeded"}
+          showSelectedCheck
+          onSelect={selectSucceeded}
+          testID="mcp-calls-view-succeeded"
+        >
+          {labels.succeeded}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -486,7 +597,6 @@ function McpCallList({
           />
         ))}
       </View>
-      <Text style={styles.footnote}>{t("settings.host.mcpCalls.hint")}</Text>
       <Text style={styles.footnote}>{t("settings.host.mcpCalls.labelsHint")}</Text>
     </ScrollView>
   );
@@ -570,7 +680,7 @@ const McpCallRow = memo(function McpCallRow({
             ))}
           </View>
           {call.error ? (
-            <Text style={styles.error} numberOfLines={isOpen ? undefined : 1}>
+            <Text selectable={isOpen} style={styles.error} numberOfLines={isOpen ? undefined : 1}>
               {call.error}
             </Text>
           ) : null}
@@ -648,6 +758,9 @@ function CallDetails({ call }: { call: ListedMcpCall }): ReactElement {
       <Text selectable style={styles.detailFacts}>
         {facts}
       </Text>
+      <Text selectable style={styles.detailFacts}>
+        {call.hostLabel} · {call.method} · {call.id}
+      </Text>
     </View>
   );
 }
@@ -713,6 +826,11 @@ function McpMethodsSheet({
   );
 }
 
+interface MethodAvailabilityChange {
+  name: string;
+  allowed: boolean;
+}
+
 function McpMethodAllowlist({
   serverId,
   hostLabel,
@@ -723,35 +841,67 @@ function McpMethodAllowlist({
   hostLabel: string;
   showHost: boolean;
   methods: readonly string[];
-}): ReactElement | null {
-  const { config, patchConfig } = useDaemonConfig(serverId);
-  const disabled = config?.mcp.disabledTools;
-  const toggle = useCallback(
-    (name: string, allowed: boolean) => {
-      const next = new Set(disabled ?? []);
-      if (allowed) next.delete(name);
-      else next.add(name);
-      void patchConfig({ mcp: { disabledTools: [...next] } });
+}): ReactElement {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, isLoading, patchConfig } = useDaemonConfig(serverId);
+  const mutation = useMutation({
+    mutationFn: async ({ name, allowed }: MethodAvailabilityChange) => {
+      const disabled = new Set(config?.mcp.disabledTools ?? []);
+      if (allowed) disabled.delete(name);
+      else disabled.add(name);
+      const result = await patchConfig({ mcp: { disabledTools: [...disabled] } });
+      if (!result) throw new Error(t("common.errors.daemonClientDisconnected"));
+      return result;
     },
-    [disabled, patchConfig],
+  });
+  const { mutate } = mutation;
+  const toggle = useCallback(
+    (name: string, allowed: boolean) => mutate({ name, allowed }),
+    [mutate],
   );
-
-  if (!config) return null;
-
-  return (
-    <View style={styles.methodGroup}>
-      {showHost ? <Text style={settingsStyles.sectionHeaderTitle}>{hostLabel}</Text> : null}
+  const switchesDisabled = !isConnected || mutation.isPending;
+  const disabledTools = config?.mcp.disabledTools;
+  let content: ReactElement;
+  if (!isConnected) {
+    content = <Text style={styles.error}>{t("workspace.terminal.hostDisconnected")}</Text>;
+  } else if (!config && isLoading) {
+    content = <Text style={styles.sheetHint}>{t("common.loading")}</Text>;
+  } else if (!config) {
+    content = <Text style={styles.error}>{t("common.errors.daemonUnavailable")}</Text>;
+  } else {
+    content = (
       <View style={settingsStyles.card} testID={`mcp-method-allowlist-${serverId}`}>
         {methods.map((name, index) => (
           <MethodSwitch
             key={name}
             name={name}
-            allowed={!disabled?.includes(name)}
+            allowed={!disabledTools?.includes(name)}
+            disabled={switchesDisabled}
             isFirst={index === 0}
             onToggle={toggle}
           />
         ))}
       </View>
+    );
+  }
+
+  return (
+    <View style={styles.methodGroup}>
+      {showHost ? <Text style={settingsStyles.sectionHeaderTitle}>{hostLabel}</Text> : null}
+      {mutation.isPending ? (
+        <Text style={styles.sheetHint}>{t("settings.host.mcpCalls.saving")}</Text>
+      ) : null}
+      {mutation.isError ? (
+        <Alert
+          variant="error"
+          size="sm"
+          title={t("common.errors.unableToSave")}
+          description={mutation.error.message}
+          testID={`mcp-method-save-error-${serverId}`}
+        />
+      ) : null}
+      {content}
     </View>
   );
 }
@@ -759,11 +909,13 @@ function McpMethodAllowlist({
 function MethodSwitch({
   name,
   allowed,
+  disabled,
   isFirst,
   onToggle,
 }: {
   name: string;
   allowed: boolean;
+  disabled: boolean;
   isFirst: boolean;
   onToggle: (name: string, allowed: boolean) => void;
 }): ReactElement {
@@ -774,7 +926,12 @@ function MethodSwitch({
       testID={`mcp-method-${name}`}
     >
       <Text style={styles.methodName}>{name}</Text>
-      <Switch value={allowed} onValueChange={change} accessibilityLabel={name} />
+      <Switch
+        value={allowed}
+        onValueChange={change}
+        disabled={disabled}
+        accessibilityLabel={name}
+      />
     </View>
   );
 }
@@ -789,8 +946,18 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: { xs: theme.spacing[3], md: theme.spacing[6] },
     paddingTop: theme.spacing[4],
   },
+  filters: {
+    gap: theme.spacing[3],
+  },
+  summary: {
+    flex: 1,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontVariant: ["tabular-nums"],
+  },
   railRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing[2],

@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react-native";
 import {
   normalizeWorkspaceLabelName,
+  workspaceLabelKey,
   WORKSPACE_LABEL_COLORS,
   type WorkspaceLabelColor,
   type WorkspaceLabelDefinition,
@@ -34,6 +35,7 @@ import {
   type WorkspaceLabelPickerRow,
 } from "@/workspace-labels";
 import type { Theme } from "@/styles/theme";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { WorkspaceLabelDot, WorkspaceLabelSwatchRow } from "./swatch";
 
 /** The `MenuSubTrigger` on a workspace's menu that opens the assign page. */
@@ -79,6 +81,7 @@ export function useWorkspaceLabelMenuPages(
       {
         id: WORKSPACE_LABEL_PAGE_ID,
         title: t("workspaceLabels.title"),
+        hoverIntent: false,
         content: (
           <WorkspaceLabelPickerPage
             serverId={target.serverId}
@@ -118,6 +121,7 @@ function WorkspaceLabelPickerPage({
 }): ReactElement {
   const { t } = useTranslation();
   const { labels, targetHost: host } = useWorkspaceLabelProjection(serverId);
+  const isCompact = useIsCompactFormFactor();
   const model = useMemo(
     () =>
       createWorkspaceLabelPickerModel({
@@ -133,6 +137,12 @@ function WorkspaceLabelPickerPage({
   const offline = !snapshot.online;
   const error = snapshot.error ?? (host?.error ? t("workspaceLabels.errors.load") : null);
   const pending = useMemo(() => new Set(snapshot.pendingNames), [snapshot.pendingNames]);
+  const setQuery = useCallback((query: string) => model.setQuery(query), [model]);
+  const create = useCallback(() => {
+    void model.create();
+  }, [model]);
+  const creating =
+    snapshot.createName !== null && pending.has(workspaceLabelKey(snapshot.createName));
   const toggle = useCallback(
     (label: WorkspaceLabelDefinition, assigned: boolean) => {
       void model.toggle(label, assigned);
@@ -142,16 +152,36 @@ function WorkspaceLabelPickerPage({
 
   return (
     <>
+      <MenuTextField
+        onChangeText={setQuery}
+        placeholder={t("workspaceLabels.search")}
+        autoFocus={!isCompact}
+        onSubmitEditing={create}
+        testID="workspace-label-picker-search"
+      />
       {snapshot.rows.map((row) => (
         <WorkspaceLabelAssignRow
-          key={row.name.toLocaleLowerCase()}
+          key={workspaceLabelKey(row.name)}
           row={row}
           offline={offline}
-          pending={pending.has(row.name.toLocaleLowerCase())}
+          pending={pending.has(workspaceLabelKey(row.name))}
           onToggle={toggle}
         />
       ))}
-      {snapshot.rows.length > 0 ? <MenuSeparator /> : null}
+      {snapshot.createName ? (
+        <MenuItem
+          leading={CREATE_LEADING}
+          disabled={offline}
+          status={creating ? "pending" : "idle"}
+          pendingLabel={t("workspaceLabels.creating")}
+          closeOnSelect={false}
+          onSelect={create}
+          testID="workspace-label-picker-create-query"
+        >
+          {t("workspaceLabels.createAndApply", { name: snapshot.createName })}
+        </MenuItem>
+      ) : null}
+      <MenuSeparator />
       <MenuSubTrigger
         id={WORKSPACE_LABEL_CREATE_PAGE_ID}
         leading={CREATE_LEADING}

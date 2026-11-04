@@ -18,6 +18,10 @@ import { randomUUID } from "node:crypto";
 import { getHostName } from "./host-name.js";
 import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  isJSONRPCErrorResponse,
+  isJSONRPCResultResponse,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { resolveAgentRoles } from "@getpaseo/protocol/agent-role";
@@ -149,7 +153,12 @@ import { createSpeechSettingsOwner } from "./speech/speech-settings.js";
 import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
-import { getMcpCallLog, recordMcpRequestBody, resolveCallLabels } from "./agent/mcp-call-log.js";
+import {
+  getMcpCallLog,
+  mcpToolError,
+  recordMcpRequestBody,
+  resolveCallLabels,
+} from "./agent/mcp-call-log.js";
 import { mergeHostDisabledTools } from "./agent/paseo-tool-policy.js";
 import {
   createPaseoToolCatalog,
@@ -1718,6 +1727,7 @@ export async function createPaseoDaemon(
       callerAgentId: string | undefined;
       labels: readonly string[];
       onToolCall: () => void;
+      onResponseError: (error: string) => void;
     }) => {
       const { callerAgentId } = session;
       const agentMcpServer = await createAgentMcpServer({
@@ -1758,6 +1768,18 @@ export async function createPaseoDaemon(
           logger.error({ err }, "Agent MCP transport error");
         },
       });
+
+      const send = transport.send.bind(transport);
+      transport.send = async (message, options) => {
+        // MCP validation and protocol errors can still have HTTP status 200.
+        if (isJSONRPCErrorResponse(message)) {
+          session.onResponseError(message.error.message);
+        } else if (isJSONRPCResultResponse(message)) {
+          const error = mcpToolError(message.result);
+          if (error !== null) session.onResponseError(error);
+        }
+        await send(message, options);
+      };
 
       await agentMcpServer.connect(transport);
       return { server: agentMcpServer, transport };
@@ -1826,6 +1848,7 @@ export async function createPaseoDaemon(
       }
       const started = Date.now();
       let toolCallsRecorded = 0;
+      let responseError: string | null = null;
       let recordedHttp = false;
       const settleHttpCall = (ok: boolean, error: string | null) => {
         if (recordedHttp || req.method !== "POST") return;
@@ -1861,6 +1884,9 @@ export async function createPaseoDaemon(
           onToolCall: () => {
             toolCallsRecorded += 1;
           },
+          onResponseError: (error) => {
+            responseError = error;
+          },
         });
         res.on("close", () => {
           void transport.close();
@@ -1872,10 +1898,9 @@ export async function createPaseoDaemon(
           res as unknown as ServerResponse,
           req.body,
         );
-        settleHttpCall(
-          res.statusCode < 400,
-          res.statusCode < 400 ? null : `HTTP ${res.statusCode}`,
-        );
+        const httpError = res.statusCode < 400 ? null : `HTTP ${res.statusCode}`;
+        const error = responseError ?? httpError;
+        settleHttpCall(error === null, error);
       } catch (err) {
         logger.error({ err }, "Failed to handle Agent MCP request");
         settleHttpCall(false, "Internal MCP server error");

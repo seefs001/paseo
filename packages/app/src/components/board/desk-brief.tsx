@@ -13,6 +13,7 @@ import { archiveBoardAgent } from "@/board/agent-actions";
 import type { DeskCheckpoint } from "@/board/desk";
 import type { BoardAgentItem, BoardItem } from "@/board/items";
 import { BoardLiveDuration } from "@/components/board/agent-time";
+import { boardCardStyles } from "@/components/board/card-styles";
 import { BoardPermissionRequest } from "@/components/board/permission-request";
 import { sendBoardAgentPrompt } from "@/components/board/review-changes-sheet";
 import { parseQuestionFormQuestions } from "@/components/question-form-card-core";
@@ -83,15 +84,16 @@ export const DeskBrief = memo(function DeskBrief({
   }, [item, onOpenDetail]);
   const cardStyle = useCallback(
     ({ hovered, pressed, open: menuShown }: HoverState) => [
+      boardCardStyles.card,
       styles.card,
-      hovered && styles.cardHovered,
-      (selected || menuShown) && styles.cardSelected,
-      pressed && styles.cardPressed,
+      hovered && boardCardStyles.hovered,
+      (selected || menuShown) && boardCardStyles.selected,
+      pressed && boardCardStyles.pressed,
     ],
     [selected],
   );
   const staticStyle = useMemo(
-    () => [styles.card, (selected || menuOpen) && styles.cardSelected],
+    () => [boardCardStyles.card, styles.card, (selected || menuOpen) && boardCardStyles.selected],
     [menuOpen, selected],
   );
   const content = (
@@ -115,7 +117,7 @@ export const DeskBrief = memo(function DeskBrief({
             accessibilityState={selected ? SELECTED_STATE : NOT_SELECTED_STATE}
             onPress={open}
             style={cardStyle}
-            highlightStyle={styles.cardPressed}
+            highlightStyle={boardCardStyles.pressed}
           >
             {content}
           </ContextMenuTrigger>
@@ -386,23 +388,7 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   card: {
-    gap: theme.spacing[1.5],
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface1,
-  },
-  cardHovered: {
-    backgroundColor: theme.colors.surface2,
-  },
-  cardSelected: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.surface2,
-  },
-  cardPressed: {
-    backgroundColor: theme.colors.surface3,
+    gap: theme.spacing[2],
   },
   header: {
     flexDirection: "row",
@@ -441,7 +427,7 @@ const styles = StyleSheet.create((theme) => ({
   headline: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.normal,
     paddingRight: theme.spacing[4],
     ...DESK_BREAK_WORDS,
   },

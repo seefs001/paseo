@@ -183,6 +183,20 @@ export function resolveCallLabels(input: {
   return normalizeLabels(labels);
 }
 
+export function mcpToolError(result: unknown): string | null {
+  if (!isRecord(result) || result["isError"] !== true) return null;
+  const content = result["content"];
+  const messages: string[] = [];
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (isRecord(block) && block["type"] === "text" && typeof block["text"] === "string") {
+        messages.push(block["text"]);
+      }
+    }
+  }
+  return messages.join("\n").trim() || "Tool returned an error";
+}
+
 export function recordMcpRequestBody(
   log: McpCallLog,
   params: {

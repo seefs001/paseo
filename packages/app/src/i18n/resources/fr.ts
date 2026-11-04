@@ -179,6 +179,8 @@ export const fr: TranslationResources = {
     attachments: {
       chatQuote: "Message cité",
       chatQuoteSource: "Source",
+      chatQuoteComment: "Commentaire",
+      chatQuoteCommentPlaceholder: "Facultatif : que doit modifier ou expliquer l’agent ici ?",
       openChatQuote:
         "Aperçu de la citation de {{serverId}} / {{agentId}} / {{messageId}} : {{text}}",
       removeChatQuote: "Retirer la citation",
@@ -375,6 +377,12 @@ export const fr: TranslationResources = {
       actions: "Actions du texte sélectionné",
       addToChat: "Ajouter à la conversation",
       askInSideConversation: "Poser une question dans une conversation latérale",
+      copy: "Copier",
+      copied: "Copié",
+      copyFailed: "Impossible de copier la sélection.",
+      commentLabel: "Commenter la sélection",
+      commentPlaceholder: "Ajouter un commentaire (facultatif)",
+      commentHint: "Entrée pour ajouter · Maj+Entrée pour une nouvelle ligne · Échap pour annuler",
       updateHost: "Mettez à jour l’hôte pour lancer une conversation latérale.",
       unavailable: "Impossible d’ouvrir une conversation latérale dans cet espace de travail.",
       sourceUnavailable:
@@ -1211,14 +1219,6 @@ export const fr: TranslationResources = {
       },
     },
   },
-  board: {
-    plan2: {
-      dnd: {
-        startWith: "Démarrer avec",
-        noProfiles: "Aucun profil d'agent sur cet hôte",
-        dropHere: "Déposer ici",
-        moveFailed: "Impossible de déplacer la tâche : {{message}}",
-        assignFailed: "Impossible de déplacer la tâche vers cet objectif : {{message}}",
   artifacts: {
     pill: "Artefacts {{count}}",
     title: "Artefacts",
@@ -1251,6 +1251,14 @@ export const fr: TranslationResources = {
     },
     errors: { offline: "L’hôte est hors ligne." },
   },
+  board: {
+    plan2: {
+      dnd: {
+        startWith: "Démarrer avec",
+        noProfiles: "Aucun profil d'agent sur cet hôte",
+        dropHere: "Déposer ici",
+        moveFailed: "Impossible de déplacer la tâche : {{message}}",
+        assignFailed: "Impossible de déplacer la tâche vers cet objectif : {{message}}",
         waitFailed: "Impossible de mettre la tâche en attente : {{message}}",
         startFailed: "Impossible de démarrer la tâche : {{message}}",
         snoozeFailed: "Impossible de reporter : {{message}}",
@@ -1840,6 +1848,8 @@ export const fr: TranslationResources = {
   },
   workspaceLabels: {
     title: "Étiquettes",
+    search: "Rechercher ou créer une étiquette",
+    createAndApply: "Créer et appliquer « {{name}} »",
     unlabelled: "Sans étiquette",
     create: "Créer une étiquette",
     createConfirm: "Créer",
@@ -1864,6 +1874,7 @@ export const fr: TranslationResources = {
     },
     filter: {
       clear: "Effacer le filtre",
+      matchAny: "Correspondre à au moins une étiquette",
     },
     manage: {
       open: "Gérer les étiquettes…",
@@ -1894,6 +1905,21 @@ export const fr: TranslationResources = {
     },
   },
   sidebar: {
+    views: {
+      title: "Vues enregistrées",
+      empty: "Aucune vue enregistrée",
+      save: "Enregistrer la vue actuelle",
+      name: "Nom de la vue",
+      duplicate: "Une vue porte déjà ce nom",
+      manage: "Gérer les vues",
+      remove: "Supprimer {{name}}",
+      removeTitle: "Supprimer la vue « {{name}} » ?",
+      removeMessage:
+        "La vue enregistrée sera supprimée de cet appareil. Les espaces de travail ne changeront pas.",
+    },
+    filters: {
+      summary: "{{facet}} : {{values}}",
+    },
     statusGroupAccessibility: "Groupe {{label}}",
     statusBucket: {
       needsInput: "Attend une réponse",
@@ -3650,27 +3676,39 @@ export const fr: TranslationResources = {
       },
       mcpCalls: {
         title: "Appels MCP",
-        hint: "Appels MCP récents sur les hôtes connectés. Les arguments d'outil sont enregistrés. Les résultats ne le sont pas.",
+        hint: "Uniquement les requêtes au point d’accès MCP de Paseo, jusqu’à {{limit}} enregistrements récents par hôte. Actualisation toutes les 5 secondes. Les entrées et erreurs peuvent être tronquées ; les résultats ne sont pas conservés.",
         empty: "Aucun appel MCP pour l'instant.",
         loadFailed: "Impossible de charger les appels MCP.",
         unsupported: "Mettez à jour l'hôte pour voir les appels MCP.",
         arguments: "Arguments",
-        allowedTitle: "Méthodes autorisées",
+        allowedTitle: "Outils disponibles",
         allowedHint:
-          "Une méthode désactivée disparaît de l'appel MCP suivant. speak reste disponible.",
+          "Disponibilité des outils intégrés de Paseo pour tout l’hôte, et non permissions des clients. Les outils désactivés ne seront plus disponibles lors des requêtes MCP suivantes. speak reste disponible.",
         failed: "Échec",
         searchPlaceholder: "Rechercher outils, appelants, étiquettes",
         clearSearch: "Effacer la recherche",
         viewTools: "Appels d'outils",
-        viewAll: "Tous",
+        viewAll: "Avec requêtes de protocole",
         allLabels: "Toutes les étiquettes",
         labelFilter: "Filtrer par étiquette",
         external: "Client externe",
         unknownAgent: "Agent {{id}}",
         noMatches: "Aucun appel correspondant",
         clearFilters: "Effacer les filtres",
-        methodsSearch: "Rechercher des méthodes",
-        noMethods: "Aucune méthode correspondante",
+        methodsSearch: "Rechercher des outils",
+        noMethods: "Aucun outil correspondant",
+        allStatuses: "Tous les états",
+        succeeded: "Réussi",
+        statusFilter: "Filtrer par état",
+        summary: "{{visible}} appels sur {{total}} chargés · {{failed}} échecs",
+        refresh: "Actualiser",
+        incomplete: "Les enregistrements peuvent être incomplets ou périmés",
+        hostOffline: "{{host}} : déconnecté. Les enregistrements en cache peuvent être périmés.",
+        hostUnsupported: "{{host}} : mettez cet hôte à jour pour voir ses appels MCP.",
+        hostLoadFailed:
+          "{{host}} : échec de l’actualisation. Les enregistrements en cache peuvent être périmés.",
+        noHosts: "Ajoutez un hôte pour voir les appels MCP.",
+        saving: "Enregistrement de la disponibilité des outils...",
         labelsHint:
           "Ajoutez ?label=nom à l'URL MCP d'un client pour étiqueter ses appels. Les appels des agents portent les étiquettes de l'agent.",
       },

@@ -652,15 +652,18 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
     minHeight: 0,
+    margin: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
     paddingTop: theme.spacing[2],
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
   },
   zoneScroll: {
     flex: 1,
     minHeight: 0,
   },
   zoneList: {
-    gap: theme.spacing[1.5],
+    gap: theme.spacing[3],
     paddingBottom: theme.spacing[6],
   },
   zoneHeader: {
@@ -669,7 +672,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     minHeight: 32,
     paddingHorizontal: theme.spacing[1],
-    paddingBottom: theme.spacing[1],
+    paddingBottom: theme.spacing[2],
+    marginBottom: theme.spacing[2],
   },
   zoneTitle: {
     color: theme.colors.foreground,
@@ -678,8 +682,14 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
   },
   zoneCount: {
+    minWidth: theme.spacing[4],
+    paddingHorizontal: theme.spacing[1.5],
+    paddingVertical: theme.spacing[0.5],
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface3,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+    textAlign: "center",
   },
   laterSlot: {
     marginLeft: "auto",
@@ -709,7 +719,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[1],
   },
   group: {
-    gap: theme.spacing[1],
+    gap: theme.spacing[2],
   },
   stageHeader: {
     flexDirection: "row",

@@ -54,6 +54,7 @@ import {
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
 import { ChatQuoteAttachmentPill } from "@/attachments/chat-quote-pill";
+import { withChatQuoteComment } from "@/attachments/chat-quote";
 import { ContextWindowMeter } from "@/components/context-window-meter";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
 import {
@@ -359,6 +360,7 @@ interface RenderAttachmentTrayArgs {
   isComposerLocked: boolean;
   handleOpenAttachment: (attachment: ComposerAttachment) => void;
   handleRemoveAttachment: (index: number) => void;
+  handleChangeChatQuoteComment: (index: number, comment: string) => void;
   labels: {
     openImage: string;
     removeImage: string;
@@ -411,6 +413,7 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
     isComposerLocked,
     handleOpenAttachment,
     handleRemoveAttachment,
+    handleChangeChatQuoteComment,
     labels,
   } = args;
   // Profile references live inline in the text; the tray only shows standalone attachments.
@@ -426,6 +429,7 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
               disabled: isComposerLocked,
               onOpen: handleOpenAttachment,
               onRemove: handleRemoveAttachment,
+              onChangeChatQuoteComment: handleChangeChatQuoteComment,
               labels,
             })
           : null,
@@ -481,11 +485,12 @@ interface RenderComposerAttachmentPillArgs {
   disabled: boolean;
   onOpen: (attachment: ComposerAttachment) => void;
   onRemove: (index: number) => void;
+  onChangeChatQuoteComment: (index: number, comment: string) => void;
   labels: RenderAttachmentTrayArgs["labels"];
 }
 
 function renderComposerAttachmentPill(args: RenderComposerAttachmentPillArgs): ReactElement {
-  const { attachment, index, disabled, onOpen, onRemove, labels } = args;
+  const { attachment, index, disabled, onOpen, onRemove, onChangeChatQuoteComment, labels } = args;
   if (attachment.kind === "image") {
     return (
       <ImageAttachmentPill
@@ -508,6 +513,7 @@ function renderComposerAttachmentPill(args: RenderComposerAttachmentPillArgs): R
         index={index}
         disabled={disabled}
         onRemove={onRemove}
+        onChangeComment={onChangeChatQuoteComment}
       />
     );
   }
@@ -2155,6 +2161,19 @@ function ComposerContentImpl({
     [removeAttachment, selectedAttachments, setSelectedAttachments],
   );
 
+  const handleChangeChatQuoteComment = useCallback(
+    (index: number, comment: string) => {
+      setSelectedAttachments((prev) =>
+        prev.map((attachment, current) =>
+          current === index && attachment.kind === "chat_quote"
+            ? withChatQuoteComment(attachment, comment)
+            : attachment,
+        ),
+      );
+    },
+    [setSelectedAttachments],
+  );
+
   const handleOpenAttachment = useCallback(
     (attachment: ComposerAttachment) => {
       openComposerAttachment({
@@ -2629,6 +2648,7 @@ function ComposerContentImpl({
         isComposerLocked,
         handleOpenAttachment,
         handleRemoveAttachment,
+        handleChangeChatQuoteComment,
         labels: {
           openImage: t("composer.attachments.openImage"),
           removeImage: t("composer.attachments.removeImage"),
@@ -2642,6 +2662,7 @@ function ComposerContentImpl({
     [
       handleOpenAttachment,
       handleRemoveAttachment,
+      handleChangeChatQuoteComment,
       isComposerLocked,
       serverId,
       selectedAttachments,

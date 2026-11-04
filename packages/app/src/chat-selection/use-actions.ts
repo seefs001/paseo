@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import * as Clipboard from "expo-clipboard";
 import { addChatQuoteToAgent } from "@/attachments/chat-quote";
 import { getWorkspaceProjectId, openBoardTaskSheet } from "@/board/sheet";
 import type { ToastApi } from "@/components/toast-host";
@@ -93,7 +94,20 @@ export function useChatSelectionActions(
       agentId: input.agentId,
       messageId: selection.messageId,
       text: selection.text,
+      comment: selection.comment,
     });
+  });
+
+  const copyMarkdown = useStableEvent(async (selection: ChatTextSelection) => {
+    try {
+      if (await Clipboard.setStringAsync(selection.text)) {
+        input.toast?.show(t("message.selection.copied"), { variant: "success" });
+        return;
+      }
+    } catch {
+      // Browser clipboard permissions and insecure origins can reject the write.
+    }
+    input.toast?.error(t("message.selection.copyFailed"));
   });
 
   const askInSideConversation = useStableEvent((selection: ChatTextSelection) => {
@@ -154,8 +168,14 @@ export function useChatSelectionActions(
 
   return useMemo(() => {
     if (input.readOnly) return undefined;
-    return supportsBoardTasks
-      ? { addToChat, askInSideConversation, addToBoard }
-      : { addToChat, askInSideConversation };
-  }, [input.readOnly, addToChat, askInSideConversation, addToBoard, supportsBoardTasks]);
+    const base = { addToChat, copyMarkdown, askInSideConversation };
+    return supportsBoardTasks ? { ...base, addToBoard } : base;
+  }, [
+    input.readOnly,
+    addToChat,
+    copyMarkdown,
+    askInSideConversation,
+    addToBoard,
+    supportsBoardTasks,
+  ]);
 }

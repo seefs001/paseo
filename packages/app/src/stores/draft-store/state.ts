@@ -114,6 +114,7 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
       kind: z.literal("chat_quote"),
       id: z.string(),
       selectedText: z.string(),
+      comment: z.string().optional(),
       source: z.strictObject({
         serverId: z.string(),
         agentId: z.string(),

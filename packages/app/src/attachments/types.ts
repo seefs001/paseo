@@ -100,6 +100,8 @@ export interface ChatQuoteContextAttachment {
   kind: "chat_quote";
   id: string;
   selectedText: string;
+  /** The user's review note about the quoted passage, sent with it. */
+  comment?: string;
   source: {
     serverId: string;
     agentId: string;

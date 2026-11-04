@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   FlatList,
-  Platform,
   View,
   type LayoutChangeEvent,
   type ListRenderItemInfo,
@@ -277,10 +276,11 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
     },
     scrollToBottom,
   });
-  // Android's maintainVisibleContentPosition ignores the list inversion transform and
-  // fights the controller's offset-zero correction while the live header grows.
+  // The controller owns sticky-bottom on both native platforms. iOS position
+  // maintenance can scroll outside the content when the live header becomes a
+  // not-yet-measured history row; detached history still needs native anchoring.
   const maintainVisibleContentPosition =
-    Platform.OS === "android" && bottomAnchorController.mode === "sticky-bottom"
+    bottomAnchorController.mode === "sticky-bottom"
       ? undefined
       : DEFAULT_MAINTAIN_VISIBLE_CONTENT_POSITION;
   const topOverlayInset = useStreamTopOverlayInset();

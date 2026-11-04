@@ -176,6 +176,9 @@ export const ko: TranslationResources = {
     attachments: {
       chatQuote: "인용 메시지",
       chatQuoteSource: "출처",
+      chatQuoteComment: "댓글",
+      chatQuoteCommentPlaceholder:
+        "선택 사항: 이 부분에서 에이전트가 무엇을 바꾸거나 설명해야 하나요?",
       openChatQuote: "{{serverId}} / {{agentId}} / {{messageId}}의 인용 미리 보기: {{text}}",
       removeChatQuote: "인용 제거",
       openChatQuoteSource: "원본 대화 열기",
@@ -369,6 +372,12 @@ export const ko: TranslationResources = {
       actions: "선택한 텍스트 작업",
       addToChat: "대화에 추가",
       askInSideConversation: "옆 대화에서 질문",
+      copy: "복사",
+      copied: "복사됨",
+      copyFailed: "선택한 내용을 복사할 수 없습니다.",
+      commentLabel: "선택 영역에 댓글",
+      commentPlaceholder: "댓글 추가(선택 사항)",
+      commentHint: "Enter로 추가 · Shift+Enter로 줄바꿈 · Esc로 취소",
       updateHost: "옆 대화를 시작하려면 호스트를 업데이트하세요.",
       unavailable: "이 작업 공간에서 옆 대화를 열 수 없습니다.",
       sourceUnavailable: "이 메시지가 아직 기록에 저장되지 않았습니다. 잠시 후 다시 시도하세요.",
@@ -1189,15 +1198,6 @@ export const ko: TranslationResources = {
       },
     },
   },
-  board: {
-    plan2: {
-      dnd: {
-        startWith: "시작에 사용",
-        noProfiles: "이 호스트에 에이전트 프로필이 없습니다",
-        dropHere: "여기에 놓기",
-        moveFailed: "작업을 옮기지 못했습니다: {{message}}",
-        assignFailed: "작업을 해당 목표로 옮기지 못했습니다: {{message}}",
-        waitFailed: "작업을 대기시키지 못했습니다: {{message}}",
   artifacts: {
     pill: "산출물 {{count}}",
     title: "산출물",
@@ -1226,6 +1226,15 @@ export const ko: TranslationResources = {
     },
     errors: { offline: "호스트가 오프라인입니다." },
   },
+  board: {
+    plan2: {
+      dnd: {
+        startWith: "시작에 사용",
+        noProfiles: "이 호스트에 에이전트 프로필이 없습니다",
+        dropHere: "여기에 놓기",
+        moveFailed: "작업을 옮기지 못했습니다: {{message}}",
+        assignFailed: "작업을 해당 목표로 옮기지 못했습니다: {{message}}",
+        waitFailed: "작업을 대기시키지 못했습니다: {{message}}",
         startFailed: "작업을 시작하지 못했습니다: {{message}}",
         snoozeFailed: "미루지 못했습니다: {{message}}",
       },
@@ -1812,6 +1821,8 @@ export const ko: TranslationResources = {
   },
   workspaceLabels: {
     title: "레이블",
+    search: "레이블 검색 또는 만들기",
+    createAndApply: "“{{name}}” 만들고 적용",
     unlabelled: "레이블 없음",
     create: "레이블 만들기",
     createConfirm: "만들기",
@@ -1833,6 +1844,7 @@ export const ko: TranslationResources = {
     },
     filter: {
       clear: "필터 지우기",
+      matchAny: "레이블 중 하나와 일치",
     },
     manage: {
       open: "레이블 관리…",
@@ -1863,6 +1875,20 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    views: {
+      title: "저장된 보기",
+      empty: "저장된 보기가 없습니다",
+      save: "현재 보기 저장",
+      name: "보기 이름",
+      duplicate: "같은 이름의 보기가 이미 있습니다",
+      manage: "보기 관리",
+      remove: "{{name}} 삭제",
+      removeTitle: "“{{name}}” 보기를 삭제할까요?",
+      removeMessage: "이 기기에서 저장된 보기를 삭제합니다. 워크스페이스는 변경되지 않습니다.",
+    },
+    filters: {
+      summary: "{{facet}}: {{values}}",
+    },
     statusGroupAccessibility: "{{label}} 그룹",
     statusBucket: {
       needsInput: "입력 필요",
@@ -3591,27 +3617,38 @@ export const ko: TranslationResources = {
       },
       mcpCalls: {
         title: "MCP 호출",
-        hint: "연결된 호스트의 최근 MCP 호출입니다. 도구 인수는 저장하고 결과는 저장하지 않습니다.",
+        hint: "Paseo MCP 엔드포인트 호출만 호스트별 최근 최대 {{limit}}건까지 표시합니다. 5초마다 새로 고칩니다. 입력과 오류는 잘릴 수 있으며 결과는 저장하지 않습니다.",
         empty: "아직 MCP 호출이 없습니다.",
         loadFailed: "MCP 호출을 불러오지 못했습니다.",
         unsupported: "MCP 호출을 보려면 이 호스트를 업데이트하세요.",
         arguments: "인수",
-        allowedTitle: "허용할 메서드",
+        allowedTitle: "사용 가능한 도구",
         allowedHint:
-          "끈 메서드는 다음 MCP 호출부터 제공되지 않습니다. speak는 항상 사용할 수 있습니다.",
+          "클라이언트 권한이 아닌 호스트 전체의 Paseo 내장 도구 사용 여부를 설정합니다. 비활성화한 도구는 이후 MCP 요청에서 사용할 수 없습니다. speak는 항상 사용할 수 있습니다.",
         failed: "실패",
         searchPlaceholder: "도구, 호출자, 레이블 검색",
         clearSearch: "검색 지우기",
         viewTools: "도구 호출",
-        viewAll: "전체",
+        viewAll: "프로토콜 요청 포함",
         allLabels: "모든 레이블",
         labelFilter: "레이블로 필터",
         external: "외부 클라이언트",
         unknownAgent: "에이전트 {{id}}",
         noMatches: "일치하는 호출이 없습니다",
         clearFilters: "필터 지우기",
-        methodsSearch: "메서드 검색",
-        noMethods: "일치하는 메서드가 없습니다",
+        methodsSearch: "도구 검색",
+        noMethods: "일치하는 도구가 없습니다",
+        allStatuses: "모든 상태",
+        succeeded: "성공",
+        statusFilter: "상태별 필터",
+        summary: "불러온 {{total}}건 중 {{visible}}건 · 실패 {{failed}}건",
+        refresh: "새로 고침",
+        incomplete: "기록이 불완전하거나 오래되었을 수 있습니다",
+        hostOffline: "{{host}}: 연결되지 않았습니다. 캐시된 기록은 오래되었을 수 있습니다.",
+        hostUnsupported: "{{host}}: MCP 호출을 보려면 이 호스트를 업데이트하세요.",
+        hostLoadFailed: "{{host}}: 새로 고침에 실패했습니다. 캐시된 기록은 오래되었을 수 있습니다.",
+        noHosts: "MCP 호출을 보려면 호스트를 추가하세요.",
+        saving: "도구 설정 저장 중...",
         labelsHint:
           "클라이언트의 MCP URL에 ?label=이름을 붙이면 그 호출에 레이블이 붙습니다. 에이전트의 호출에는 해당 에이전트의 레이블이 붙습니다.",
       },

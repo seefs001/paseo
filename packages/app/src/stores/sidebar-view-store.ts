@@ -73,25 +73,39 @@ interface SidebarViewStoreState {
   clearProjectFilters: () => void;
   toggleLabelFilter: (name: string) => void;
   clearLabelFilter: () => void;
+  clearFilters: () => void;
   reconcileLabelFilter: (labels: readonly string[]) => void;
   reconcileHostFilters: (serverIds: readonly string[]) => void;
 }
 
-interface SidebarViewPersistedState {
-  groupMode: SidebarGroupMode;
-  workspaceSort: WorkspaceSort;
-  showBackground: boolean;
-  hostFilters: string[];
-  projectFilters: string[];
-  labelFilter: SidebarLabelFilter;
-}
-
-const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "label"]);
 const SidebarLabelFilterSchema = z.object({
   labels: z.array(z.string()),
 });
+
+export const SidebarViewSnapshotSchema = z.object({
+  groupMode: z.enum(["project", "status"]),
+  workspaceSort: z.enum(["manual", "created", "lastPrompt", "lastActivity"]),
+  showBackground: z.boolean(),
+  hostFilters: z.array(z.string()),
+  projectFilters: z.array(z.string()),
+  labelFilter: SidebarLabelFilterSchema,
+});
+export type SidebarViewSnapshot = z.infer<typeof SidebarViewSnapshotSchema>;
+
+export function selectSidebarViewSnapshot(state: SidebarViewSnapshot): SidebarViewSnapshot {
+  return {
+    groupMode: state.groupMode,
+    workspaceSort: state.workspaceSort,
+    showBackground: state.showBackground,
+    hostFilters: state.hostFilters,
+    projectFilters: state.projectFilters,
+    labelFilter: state.labelFilter,
+  };
+}
+
+const PersistedSidebarGroupModeSchema = z.enum(["project", "status", "label"]);
 const SidebarViewPersistedStateSchema = z.strictObject({
-  workspaceSort: z.enum(["manual", "created", "lastPrompt", "lastActivity"]).optional(),
+  workspaceSort: SidebarViewSnapshotSchema.shape.workspaceSort.optional(),
   showBackground: z.boolean().optional(),
   groupMode: PersistedSidebarGroupModeSchema.optional(),
   hostFilters: z.array(z.string()).optional(),
@@ -127,7 +141,7 @@ function readHostFilters(persistedState: SidebarViewStorageState): string[] {
   return legacyHostFilter ? [legacyHostFilter] : [];
 }
 
-export function migrateSidebarViewState(persistedState: unknown): SidebarViewPersistedState {
+export function migrateSidebarViewState(persistedState: unknown): SidebarViewSnapshot {
   const result = SidebarViewPersistedStateSchema.safeParse(persistedState);
   if (!result.success) {
     return {
@@ -191,7 +205,7 @@ export function createSidebarViewStorage(
 }
 
 export const useSidebarViewStore = create<SidebarViewStoreState>()(
-  persist(
+  persist<SidebarViewStoreState, [], [], SidebarViewStorageState>(
     (set) => ({
       showBackground: false,
       groupMode: "project",
@@ -217,6 +231,8 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
           return { labelFilter: { ...state.labelFilter, labels } };
         }),
       clearLabelFilter: () => set({ labelFilter: emptyLabelFilter() }),
+      clearFilters: () =>
+        set({ hostFilters: [], projectFilters: [], labelFilter: emptyLabelFilter() }),
       reconcileLabelFilter: (labels) =>
         set((state) => {
           const available = new Set(labels.map(workspaceLabelKey));
@@ -246,14 +262,7 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
         createSidebarViewStorage(),
         SidebarViewPersistedStateSchema,
       ),
-      partialize: (state) => ({
-        showBackground: state.showBackground ?? false,
-        groupMode: state.groupMode,
-        workspaceSort: state.workspaceSort,
-        hostFilters: state.hostFilters,
-        projectFilters: state.projectFilters,
-        labelFilter: state.labelFilter,
-      }),
+      partialize: selectSidebarViewSnapshot,
       migrate: migrateSidebarViewState,
     },
   ),

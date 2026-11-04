@@ -177,6 +177,8 @@ export const ptBR: TranslationResources = {
     attachments: {
       chatQuote: "Mensagem citada",
       chatQuoteSource: "Origem",
+      chatQuoteComment: "Comentário",
+      chatQuoteCommentPlaceholder: "Opcional: o que o agente deve mudar ou explicar aqui?",
       openChatQuote: "Visualizar citação de {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
       removeChatQuote: "Remover citação",
       openChatQuoteSource: "Abrir conversa de origem",
@@ -372,6 +374,12 @@ export const ptBR: TranslationResources = {
       actions: "Ações do texto selecionado",
       addToChat: "Adicionar à conversa",
       askInSideConversation: "Perguntar em uma conversa lateral",
+      copy: "Copiar",
+      copied: "Copiado",
+      copyFailed: "Não foi possível copiar a seleção.",
+      commentLabel: "Comentar a seleção",
+      commentPlaceholder: "Adicionar um comentário (opcional)",
+      commentHint: "Enter para adicionar · Shift+Enter para nova linha · Esc para cancelar",
       updateHost: "Atualize o host para iniciar uma conversa lateral.",
       unavailable: "Não é possível abrir uma conversa lateral neste espaço de trabalho.",
       sourceUnavailable:
@@ -1206,14 +1214,6 @@ export const ptBR: TranslationResources = {
       },
     },
   },
-  board: {
-    plan2: {
-      dnd: {
-        startWith: "Iniciar com",
-        noProfiles: "Nenhum perfil de agente neste host",
-        dropHere: "Solte aqui",
-        moveFailed: "Não foi possível mover a tarefa: {{message}}",
-        assignFailed: "Não foi possível mover a tarefa para esse objetivo: {{message}}",
   artifacts: {
     pill: "Artefatos {{count}}",
     title: "Artefatos",
@@ -1242,6 +1242,14 @@ export const ptBR: TranslationResources = {
     },
     errors: { offline: "O host está offline." },
   },
+  board: {
+    plan2: {
+      dnd: {
+        startWith: "Iniciar com",
+        noProfiles: "Nenhum perfil de agente neste host",
+        dropHere: "Solte aqui",
+        moveFailed: "Não foi possível mover a tarefa: {{message}}",
+        assignFailed: "Não foi possível mover a tarefa para esse objetivo: {{message}}",
         waitFailed: "Não foi possível fazer a tarefa esperar: {{message}}",
         startFailed: "Não foi possível iniciar a tarefa: {{message}}",
         snoozeFailed: "Não foi possível adiar: {{message}}",
@@ -1830,6 +1838,8 @@ export const ptBR: TranslationResources = {
   },
   workspaceLabels: {
     title: "Etiquetas",
+    search: "Buscar ou criar uma etiqueta",
+    createAndApply: "Criar e aplicar “{{name}}”",
     unlabelled: "Sem etiqueta",
     create: "Criar etiqueta",
     createConfirm: "Criar",
@@ -1854,6 +1864,7 @@ export const ptBR: TranslationResources = {
     },
     filter: {
       clear: "Limpar filtro",
+      matchAny: "Corresponder a qualquer etiqueta",
     },
     manage: {
       open: "Gerenciar etiquetas…",
@@ -1884,6 +1895,21 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    views: {
+      title: "Visualizações salvas",
+      empty: "Nenhuma visualização salva",
+      save: "Salvar visualização atual",
+      name: "Nome da visualização",
+      duplicate: "Já existe uma visualização com este nome",
+      manage: "Gerenciar visualizações",
+      remove: "Excluir {{name}}",
+      removeTitle: "Excluir a visualização “{{name}}”?",
+      removeMessage:
+        "Isso remove a visualização salva deste dispositivo. Os workspaces não serão alterados.",
+    },
+    filters: {
+      summary: "{{facet}}: {{values}}",
+    },
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {
       needsInput: "Precisa de resposta",
@@ -3620,27 +3646,39 @@ export const ptBR: TranslationResources = {
       },
       mcpCalls: {
         title: "Chamadas MCP",
-        hint: "Chamadas MCP recentes nos hosts conectados. Os argumentos são salvos. Os resultados não.",
+        hint: "Apenas solicitações ao endpoint MCP do Paseo, até {{limit}} registros recentes por host. Atualiza a cada 5 segundos. Entradas e erros podem ser truncados; os resultados não são salvos.",
         empty: "Ainda não há chamadas MCP.",
         loadFailed: "Não foi possível carregar as chamadas MCP.",
         unsupported: "Atualize o host para ver as chamadas MCP.",
         arguments: "Argumentos",
-        allowedTitle: "Métodos permitidos",
+        allowedTitle: "Ferramentas disponíveis",
         allowedHint:
-          "Um método desligado deixa de ser oferecido na próxima chamada MCP. speak continua disponível.",
+          "Disponibilidade das ferramentas integradas do Paseo em todo o host, não permissões dos clientes. Ferramentas desativadas não estarão disponíveis nas próximas solicitações MCP. speak continua disponível.",
         failed: "Falha",
         searchPlaceholder: "Buscar ferramentas, chamadores, rótulos",
         clearSearch: "Limpar busca",
         viewTools: "Chamadas de ferramentas",
-        viewAll: "Todas",
+        viewAll: "Com solicitações de protocolo",
         allLabels: "Todos os rótulos",
         labelFilter: "Filtrar por rótulo",
         external: "Cliente externo",
         unknownAgent: "Agente {{id}}",
         noMatches: "Nenhuma chamada corresponde",
         clearFilters: "Limpar filtros",
-        methodsSearch: "Buscar métodos",
-        noMethods: "Nenhum método corresponde",
+        methodsSearch: "Buscar ferramentas",
+        noMethods: "Nenhuma ferramenta correspondente",
+        allStatuses: "Todos os estados",
+        succeeded: "Sucesso",
+        statusFilter: "Filtrar por estado",
+        summary: "{{visible}} de {{total}} chamadas carregadas · {{failed}} com falha",
+        refresh: "Atualizar",
+        incomplete: "Os registros podem estar incompletos ou desatualizados",
+        hostOffline: "{{host}}: desconectado. Os registros em cache podem estar desatualizados.",
+        hostUnsupported: "{{host}}: atualize este host para ver suas chamadas MCP.",
+        hostLoadFailed:
+          "{{host}}: falha ao atualizar. Os registros em cache podem estar desatualizados.",
+        noHosts: "Adicione um host para ver chamadas MCP.",
+        saving: "Salvando disponibilidade das ferramentas...",
         labelsHint:
           "Adicione ?label=nome à URL MCP de um cliente para rotular as chamadas dele. Chamadas de agentes levam os rótulos do agente.",
       },

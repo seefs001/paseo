@@ -118,6 +118,7 @@ function chatQuoteToAgentAttachment(
   attachment: ChatQuoteContextAttachment,
 ): Extract<AgentAttachment, { type: "text" }> {
   const quotedLines = attachment.selectedText.split("\n").map((line) => `> ${line}`);
+  const comment = attachment.comment?.trim();
   return {
     type: "text",
     mimeType: "text/plain",
@@ -130,6 +131,7 @@ function chatQuoteToAgentAttachment(
       `Source message: ${attachment.source.messageId}`,
       "",
       ...quotedLines,
+      ...(comment ? ["", "User comment on this excerpt:", comment] : []),
     ].join("\n"),
   };
 }

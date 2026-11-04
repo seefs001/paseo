@@ -8,6 +8,7 @@ export interface ChatQuoteInput {
   agentId: string;
   messageId: string;
   text: string;
+  comment?: string;
 }
 
 export function buildChatQuoteAttachment(input: ChatQuoteInput): ChatQuoteContextAttachment {
@@ -15,6 +16,7 @@ export function buildChatQuoteAttachment(input: ChatQuoteInput): ChatQuoteContex
     kind: "chat_quote",
     id: generateAttachmentId(),
     selectedText: input.text,
+    ...(input.comment?.trim() ? { comment: input.comment.trim() } : {}),
     source: {
       serverId: input.serverId,
       agentId: input.agentId,
@@ -30,6 +32,15 @@ export function addChatQuoteToAgent(input: ChatQuoteInput): void {
     draftKey,
     attachment: buildChatQuoteAttachment(input),
   });
+}
+
+export function withChatQuoteComment(
+  attachment: ChatQuoteContextAttachment,
+  comment: string,
+): ChatQuoteContextAttachment {
+  const { comment: _previous, ...rest } = attachment;
+  const trimmed = comment.trim();
+  return trimmed ? { ...rest, comment: trimmed } : rest;
 }
 
 export function getChatQuoteSourceLabel(source: ChatQuoteContextAttachment["source"]): string {

@@ -177,6 +177,8 @@ export const es: TranslationResources = {
     attachments: {
       chatQuote: "Mensaje citado",
       chatQuoteSource: "Origen",
+      chatQuoteComment: "Comentario",
+      chatQuoteCommentPlaceholder: "Opcional: ¿qué debe cambiar o explicar el agente aquí?",
       openChatQuote:
         "Vista previa de la cita de {{serverId}} / {{agentId}} / {{messageId}}: {{text}}",
       removeChatQuote: "Quitar cita",
@@ -373,6 +375,12 @@ export const es: TranslationResources = {
       actions: "Acciones del texto seleccionado",
       addToChat: "Añadir a la conversación",
       askInSideConversation: "Preguntar en una conversación lateral",
+      copy: "Copiar",
+      copied: "Copiado",
+      copyFailed: "No se pudo copiar la selección.",
+      commentLabel: "Comentar la selección",
+      commentPlaceholder: "Añadir un comentario (opcional)",
+      commentHint: "Intro para añadir · Mayús+Intro para nueva línea · Esc para cancelar",
       updateHost: "Actualiza el host para iniciar una conversación lateral.",
       unavailable: "No se puede abrir una conversación lateral en este espacio de trabajo.",
       sourceUnavailable:
@@ -1216,14 +1224,6 @@ export const es: TranslationResources = {
       },
     },
   },
-  board: {
-    plan2: {
-      dnd: {
-        startWith: "Empezar con",
-        noProfiles: "No hay perfiles de agente en este host",
-        dropHere: "Suelta aquí",
-        moveFailed: "No se pudo mover la tarea: {{message}}",
-        assignFailed: "No se pudo mover la tarea a ese objetivo: {{message}}",
   artifacts: {
     pill: "Artefactos {{count}}",
     title: "Artefactos",
@@ -1253,6 +1253,14 @@ export const es: TranslationResources = {
     },
     errors: { offline: "El host está desconectado." },
   },
+  board: {
+    plan2: {
+      dnd: {
+        startWith: "Empezar con",
+        noProfiles: "No hay perfiles de agente en este host",
+        dropHere: "Suelta aquí",
+        moveFailed: "No se pudo mover la tarea: {{message}}",
+        assignFailed: "No se pudo mover la tarea a ese objetivo: {{message}}",
         waitFailed: "No se pudo hacer esperar la tarea: {{message}}",
         startFailed: "No se pudo iniciar la tarea: {{message}}",
         snoozeFailed: "No se pudo posponer: {{message}}",
@@ -1844,6 +1852,8 @@ export const es: TranslationResources = {
   },
   workspaceLabels: {
     title: "Etiquetas",
+    search: "Buscar o crear una etiqueta",
+    createAndApply: "Crear y aplicar «{{name}}»",
     unlabelled: "Sin etiqueta",
     create: "Crear etiqueta",
     createConfirm: "Crear",
@@ -1868,6 +1878,7 @@ export const es: TranslationResources = {
     },
     filter: {
       clear: "Borrar filtro",
+      matchAny: "Coincidir con cualquier etiqueta",
     },
     manage: {
       open: "Gestionar etiquetas…",
@@ -1898,6 +1909,21 @@ export const es: TranslationResources = {
     },
   },
   sidebar: {
+    views: {
+      title: "Vistas guardadas",
+      empty: "No hay vistas guardadas",
+      save: "Guardar vista actual",
+      name: "Nombre de la vista",
+      duplicate: "Ya existe una vista con este nombre",
+      manage: "Gestionar vistas",
+      remove: "Eliminar {{name}}",
+      removeTitle: "¿Eliminar la vista «{{name}}»?",
+      removeMessage:
+        "Esto elimina la vista guardada de este dispositivo. Los espacios de trabajo no cambiarán.",
+    },
+    filters: {
+      summary: "{{facet}}: {{values}}",
+    },
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {
       needsInput: "Necesita datos",
@@ -3643,27 +3669,39 @@ export const es: TranslationResources = {
       },
       mcpCalls: {
         title: "Llamadas MCP",
-        hint: "Llamadas MCP recientes en los hosts conectados. Se guardan los argumentos. No se guardan los resultados.",
+        hint: "Solo solicitudes al endpoint MCP de Paseo, hasta {{limit}} registros recientes por host. Se actualiza cada 5 segundos. Las entradas y los errores pueden estar truncados; no se guardan resultados.",
         empty: "Aún no hay llamadas MCP.",
         loadFailed: "No se pudieron cargar las llamadas MCP.",
         unsupported: "Actualiza el host para ver las llamadas MCP.",
         arguments: "Argumentos",
-        allowedTitle: "Métodos permitidos",
+        allowedTitle: "Herramientas disponibles",
         allowedHint:
-          "Un método desactivado deja de ofrecerse en la siguiente llamada MCP. speak sigue disponible.",
+          "Disponibilidad de las herramientas integradas de Paseo en todo el host, no permisos de clientes. Las herramientas desactivadas no estarán disponibles en solicitudes MCP posteriores. speak sigue disponible.",
         failed: "Error",
         searchPlaceholder: "Buscar herramientas, llamantes, etiquetas",
         clearSearch: "Borrar búsqueda",
         viewTools: "Llamadas a herramientas",
-        viewAll: "Todas",
+        viewAll: "Con solicitudes de protocolo",
         allLabels: "Todas las etiquetas",
         labelFilter: "Filtrar por etiqueta",
         external: "Cliente externo",
         unknownAgent: "Agente {{id}}",
         noMatches: "No hay llamadas que coincidan",
         clearFilters: "Borrar filtros",
-        methodsSearch: "Buscar métodos",
-        noMethods: "No hay métodos que coincidan",
+        methodsSearch: "Buscar herramientas",
+        noMethods: "No hay herramientas que coincidan",
+        allStatuses: "Todos los estados",
+        succeeded: "Correcta",
+        statusFilter: "Filtrar por estado",
+        summary: "{{visible}} de {{total}} llamadas cargadas · {{failed}} fallidas",
+        refresh: "Actualizar",
+        incomplete: "Los registros pueden estar incompletos o desactualizados",
+        hostOffline: "{{host}}: desconectado. Los registros en caché pueden estar desactualizados.",
+        hostUnsupported: "{{host}}: actualiza este host para ver sus llamadas MCP.",
+        hostLoadFailed:
+          "{{host}}: falló la actualización. Los registros en caché pueden estar desactualizados.",
+        noHosts: "Añade un host para ver las llamadas MCP.",
+        saving: "Guardando disponibilidad de herramientas...",
         labelsHint:
           "Añade ?label=nombre a la URL MCP de un cliente para etiquetar sus llamadas. Las llamadas de agentes llevan las etiquetas del agente.",
       },

@@ -197,6 +197,7 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
     minHeight: 0,
+    backgroundColor: theme.colors.surface1,
   },
   tabsScroll: {
     flexGrow: 0,
@@ -213,9 +214,12 @@ const styles = StyleSheet.create((theme) => ({
     height: 32,
     paddingHorizontal: theme.spacing[3],
     borderRadius: theme.borderRadius.lg,
+    borderWidth: theme.borderWidth[1],
+    borderColor: "transparent",
   },
   tabSelected: {
-    backgroundColor: theme.colors.interactionHighlight,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
   },
   tabPressed: {
     backgroundColor: theme.colors.interactionHighlight,

@@ -27,9 +27,11 @@ import {
   Type,
 } from "lucide-react-native";
 import {
+  MenuHint,
   MenuItem,
   MenuRoot,
   MenuSeparator,
+  MenuTextField,
   MenuSubTrigger,
   MenuSurface,
   MenuTrigger,
@@ -37,6 +39,7 @@ import {
 } from "@/components/ui/menu";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { isWeb } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHosts } from "@/runtime/host-runtime";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import { ProjectIconView } from "@/components/project-icon-view";
@@ -274,6 +277,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
       definitions.push({
         id: "labelFilter",
         title: t("workspaceLabels.title"),
+        hoverIntent: false,
         content: (
           <LabelFilterPage labels={labels} preferences={preferences} onManage={openManager} />
         ),
@@ -462,10 +466,21 @@ function LabelFilterPage({
   onManage: () => void;
 }): ReactElement {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const [query, setQuery] = useState("");
+  const search = workspaceLabelKey(query);
+  const matchingLabels = labels.filter((label) => workspaceLabelKey(label.name).includes(search));
   const selected = preferences.labelFilter.labels;
   return (
     <>
-      {labels.map((label) => (
+      <MenuTextField
+        onChangeText={setQuery}
+        placeholder={t("workspaceLabels.manage.search")}
+        autoFocus={!isCompact}
+        testID="sidebar-label-filter-search"
+      />
+      <MenuHint>{t("workspaceLabels.filter.matchAny")}</MenuHint>
+      {matchingLabels.map((label) => (
         <LabelFilterItem
           key={workspaceLabelKey(label.name)}
           name={label.name}
