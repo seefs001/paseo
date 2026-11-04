@@ -1595,6 +1595,7 @@ export async function createPaseoDaemon(
     boardTaskService,
     boardGoalService: board.goals,
     boardDecisionService: board.decisions,
+    artifactStore: board.artifacts,
     startBoardTask: (input) => {
       if (!wsServer) throw new Error("Daemon is not accepting Board starts");
       return wsServer.startBoardTask(input);

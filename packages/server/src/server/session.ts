@@ -184,6 +184,7 @@ import {
 } from "./session/checkout/git-metadata-generator.js";
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
 import { BoardSession } from "./session/board/board-session.js";
+import { ArtifactSession } from "./session/artifacts/artifact-session.js";
 import type { BoardServices } from "./board/services.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { UsageSession } from "./session/usage/usage-session.js";
@@ -842,6 +843,7 @@ export class Session {
   private readonly usageSession: UsageSession;
   private readonly speechModelsSession: SpeechModelsSession;
   private readonly boardSession: BoardSession;
+  private readonly artifactSession: ArtifactSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
@@ -1089,6 +1091,7 @@ export class Session {
       runtime: speechModels,
     });
     this.boardSession = this.createBoardSession(board, options.startBoardTask);
+    this.artifactSession = this.createArtifactSession(board);
     this.agentConfigSession = new AgentConfigSession({
       host: {
         emit: (msg) => this.emit(msg),
@@ -2533,6 +2536,7 @@ export class Session {
       this.dispatchWorkspaceStateMessage(msg) ??
       this.dispatchWorkspaceLabelMessage(msg) ??
       this.boardSession.dispatch(msg) ??
+      this.artifactSession.dispatch(msg) ??
       this.dispatchWorkspaceSetupMessage(msg) ??
       this.dispatchWorkspaceAndProjectMessage(msg)
     );
@@ -4446,6 +4450,14 @@ export class Session {
       pluginRuntime: this.pluginRuntime,
       isDirectory: (path) => this.filesystem.isDirectory(path),
       logger: this.sessionLogger,
+    });
+  }
+
+  private createArtifactSession(board: BoardServices | undefined): ArtifactSession {
+    return new ArtifactSession({
+      emit: (msg) => this.emit(msg),
+      delivery: this.delivery,
+      artifacts: board?.artifacts ?? null,
     });
   }
 

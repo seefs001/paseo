@@ -55,6 +55,9 @@ $PASEO_HOME/
 │       └── {agentId}.json               # One file per agent
 ├── schedules/
 │   └── {scheduleId}.json                # One file per schedule
+├── artifacts/
+│   ├── index.json                       # Artifacts collection, every workspace on the host
+│   └── files/{artifactId}/{fileName}    # The daemon's copy of each artifact's content
 ├── board/
 │   ├── tasks.json                       # Host-local Desk tasks
 │   ├── goals.json                       # Goals with their Autopilot settings
@@ -661,6 +664,24 @@ a failed start keeps the question open. An `agent` answer is sent to the asking 
 counts against today's limit. `skip` records the task version in `skips`, so Autopilot does not
 ask again until the task changes. The runner closes `autopilot_start` questions whose task changed
 or left the frontier, or whose goal stopped asking. Answered decisions stay listed for a day, then the next write drops them.
+
+### Artifacts
+
+**Path:** `$PASEO_HOME/artifacts/index.json`, written as `{ version: 1, artifacts: Artifact[] }`,
+with each artifact's content under `files/<id>/`. `ArtifactStore` (`server/artifacts/store.ts`)
+ships inside `BoardServices` because artifacts reference goals and tasks.
+
+The daemon copies the content when an agent registers it. That copy is the deliverable: archiving
+the workspace removes a Paseo-owned worktree with the file it came from, and the artifact still
+opens from its goal. An artifact never stores task state; `goalId` and `taskIds` are references,
+and a deleted goal or task shows as gone rather than being cleaned up.
+
+Entries are workspace-owned: `workspaceId` is the caller's workspace, and the composer pill shows
+only that workspace's entries, so two workspaces on one folder never see each other's
+([architecture.md](architecture.md#right-sidebar-boundary-directory-backed-vs-workspace-owned)).
+Re-registering keeps the id and raises `revision` when the caller passes `artifactId` or the same
+`sourcePath` in the same workspace. Removing drops the entry and the daemon's copy, never the
+workspace file. Content is capped at 10 MiB.
 
 ### Desk settings and snoozes
 

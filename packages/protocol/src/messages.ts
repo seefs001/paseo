@@ -1380,6 +1380,64 @@ export const BoardTaskSchema = z.object({
 });
 export type BoardTask = z.infer<typeof BoardTaskSchema>;
 
+/**
+ * One entry in a workspace's Artifacts collection: a plan, notes, diagram, prototype, screenshot,
+ * report, result or summary an agent registered. The daemon keeps its own copy of the content, so
+ * it outlives the workspace and its worktree. `refs` point at Desk records; Artifacts never carry
+ * task state of their own.
+ */
+export const ArtifactKindSchema = z.enum([
+  "plan",
+  "notes",
+  "diagram",
+  "prototype",
+  "screenshot",
+  "report",
+  "result",
+  "summary",
+]);
+export type ArtifactKind = z.infer<typeof ArtifactKindSchema>;
+/** How the stored copy renders: decided once from the file name when it is registered. */
+export const ArtifactMediaSchema = z.enum(["markdown", "html", "image", "text"]);
+export type ArtifactMedia = z.infer<typeof ArtifactMediaSchema>;
+export const ArtifactSchema = z.object({
+  id: z.string(),
+  /** Owning workspace. Same-folder workspaces never share entries. */
+  workspaceId: z.string(),
+  kind: ArtifactKindSchema,
+  title: z.string(),
+  fileName: z.string(),
+  media: ArtifactMediaSchema,
+  /** Workspace-relative path the content was copied from, when it came from a file. */
+  sourcePath: z.string().nullable(),
+  sourceAgentId: z.string().nullable(),
+  /** Set only when the registering agent knew the message id. */
+  sourceMessageId: z.string().nullable(),
+  goalId: z.string().nullable(),
+  taskIds: z.array(z.string()),
+  revision: z.number().int().positive(),
+  size: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Artifact = z.infer<typeof ArtifactSchema>;
+
+export const ArtifactListRequestSchema = z.object({
+  type: z.literal("artifact.list.request"),
+  requestId: z.string(),
+  subscribe: z.object({ subscriptionId: z.string().optional() }).optional(),
+});
+export const ArtifactReadRequestSchema = z.object({
+  type: z.literal("artifact.read.request"),
+  requestId: z.string(),
+  artifactId: z.string(),
+});
+export const ArtifactRemoveRequestSchema = z.object({
+  type: z.literal("artifact.remove.request"),
+  requestId: z.string(),
+  artifactId: z.string(),
+});
+
 export const BoardTaskListRequestSchema = z.object({
   type: z.literal("board.task.list.request"),
   requestId: z.string(),
@@ -3752,6 +3810,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceLabelUpdateRequestSchema,
   WorkspaceLabelDeleteRequestSchema,
   WorkspaceLabelDeleteInspectRequestSchema,
+  ArtifactListRequestSchema,
+  ArtifactReadRequestSchema,
+  ArtifactRemoveRequestSchema,
   BoardTaskListRequestSchema,
   BoardTaskCreateRequestSchema,
   BoardTaskUpdateRequestSchema,
@@ -4150,6 +4211,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceLabels: z.boolean().optional(),
         // COMPAT(boardTasks): added in v0.14.0, remove gate after 2027-05-01.
         boardTasks: z.boolean().optional(),
+        // COMPAT(artifacts): added in v0.15.0, remove gate after 2027-11-04.
+        artifacts: z.boolean().optional(),
         // COMPAT(workspaceSetupRun): added in v0.8.0, remove gate after 2027-09-02.
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
@@ -4952,6 +5015,45 @@ export const WorkspaceLabelDeleteInspectResponseSchema = z.object({
     requestId: z.string(),
     affectedWorkspaceCount: z.number().int().nonnegative(),
   }),
+});
+
+export const ArtifactListResponseSchema = z.object({
+  type: z.literal("artifact.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    subscriptionId: z.string().optional(),
+    artifacts: z.array(ArtifactSchema),
+  }),
+});
+/** Live change for `artifact.list.request` subscribers. */
+export const ArtifactUpdateSchema = z.object({
+  type: z.literal("artifact.update"),
+  payload: z.discriminatedUnion("kind", [
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("upsert"),
+      artifact: ArtifactSchema,
+    }),
+    z.object({
+      subscriptionId: z.string().optional(),
+      kind: z.literal("remove"),
+      artifactId: z.string(),
+    }),
+  ]),
+});
+export const ArtifactReadResponseSchema = z.object({
+  type: z.literal("artifact.read.response"),
+  payload: z.object({
+    requestId: z.string(),
+    artifact: ArtifactSchema,
+    /** `base64` for images, `utf8` for everything else. */
+    encoding: z.enum(["utf8", "base64"]),
+    content: z.string(),
+  }),
+});
+export const ArtifactRemoveResponseSchema = z.object({
+  type: z.literal("artifact.remove.response"),
+  payload: z.object({ requestId: z.string(), artifactId: z.string() }),
 });
 
 export const BoardTaskListResponseSchema = z.object({
@@ -7729,6 +7831,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceLabelUpdateResponseSchema,
   WorkspaceLabelDeleteResponseSchema,
   WorkspaceLabelDeleteInspectResponseSchema,
+  ArtifactListResponseSchema,
+  ArtifactUpdateSchema,
+  ArtifactReadResponseSchema,
+  ArtifactRemoveResponseSchema,
   BoardTaskListResponseSchema,
   BoardTaskUpdateSchema,
   BoardTaskCreateResponseSchema,

@@ -887,6 +887,14 @@ export type WorkspaceLabelDeleteInspectPayload = Extract<
   SessionOutboundMessage,
   { type: "workspace.label.delete.inspect.response" }
 >["payload"];
+export type ArtifactListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "artifact.list.response" }
+>["payload"];
+export type ArtifactReadPayload = Extract<
+  SessionOutboundMessage,
+  { type: "artifact.read.response" }
+>["payload"];
 export type BoardTaskListPayload = Extract<
   SessionOutboundMessage,
   { type: "board.task.list.response" }
@@ -3011,6 +3019,28 @@ export class DaemonClient {
         type: "workspace.label.delete.inspect.request",
         name: options.name,
       },
+    });
+  }
+
+  observeArtifacts(options?: { signal?: AbortSignal }): OwnedSubscription<ArtifactListPayload> {
+    return this.observe(
+      "artifact.list.response",
+      { type: "artifact.list.request", subscribe: {} },
+      options,
+    );
+  }
+
+  readArtifact(options: { artifactId: string; requestId?: string }): Promise<ArtifactReadPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"artifact.read.response">({
+      requestId: options.requestId,
+      message: { type: "artifact.read.request", artifactId: options.artifactId },
+    });
+  }
+
+  async removeArtifact(options: { artifactId: string; requestId?: string }): Promise<void> {
+    await this.sendNamespacedCorrelatedSessionRequest<"artifact.remove.response">({
+      requestId: options.requestId,
+      message: { type: "artifact.remove.request", artifactId: options.artifactId },
     });
   }
 

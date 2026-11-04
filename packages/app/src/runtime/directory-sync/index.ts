@@ -26,6 +26,7 @@ import {
   type DirectoryTransaction,
 } from "./transaction";
 import { workspaceLabels } from "@/workspace-labels";
+import { artifacts } from "@/artifacts/store";
 import { boardTasks } from "@/board/tasks";
 import type {
   CachedDirectory,
@@ -196,6 +197,7 @@ export class DirectorySync {
     this.releaseScriptStatusEvents();
     workspaceLabels.disconnect(this.serverId);
     boardTasks.disconnect(this.serverId);
+    artifacts.disconnect(this.serverId);
     this.connection = connection;
     this.abortPendingSessionWaits();
     if (!connection.client || connection.status !== "online") return true;
@@ -203,6 +205,7 @@ export class DirectorySync {
     // Reattach labels here because route-only demand can satisfy the epoch before full demand requests them.
     void this.connectWorkspaceLabels().catch(() => undefined);
     void this.connectBoardTasks().catch(() => undefined);
+    void this.connectArtifacts().catch(() => undefined);
     if (this.hasDemand()) void this.requestDemandRefresh().catch(() => undefined);
     return true;
   }
@@ -264,6 +267,7 @@ export class DirectorySync {
     this.routeDemandIds.clear();
     workspaceLabels.disconnect(this.serverId);
     boardTasks.disconnect(this.serverId);
+    artifacts.disconnect(this.serverId);
   }
 
   private releaseSubscriptions(): void {
@@ -667,6 +671,7 @@ export class DirectorySync {
       await Promise.all([
         this.connectWorkspaceLabels(),
         this.connectBoardTasks().catch(() => undefined),
+        this.connectArtifacts().catch(() => undefined),
       ]);
     }
   }
@@ -678,6 +683,16 @@ export class DirectorySync {
       serverId: this.serverId,
       client,
       supportsWorkspaceLabels: serverInfo?.features?.workspaceLabels === true,
+    });
+  }
+
+  async connectArtifacts(): Promise<void> {
+    const { client } = this.requireOnline();
+    const serverInfo = client.getLastServerInfoMessage();
+    await artifacts.connect({
+      serverId: this.serverId,
+      client,
+      supportsArtifacts: serverInfo?.features?.artifacts === true,
     });
   }
 

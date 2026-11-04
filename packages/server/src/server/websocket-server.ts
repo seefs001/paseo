@@ -2178,6 +2178,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.workspaceLabelService ? { workspaceLabels: true } : {}),
         // COMPAT(boardTasks): added in v0.14.0, remove gate after 2027-05-01.
         ...(this.board ? { boardTasks: true } : {}),
+        // COMPAT(artifacts): added in v0.15.0, remove gate after 2027-11-04.
+        ...(this.board ? { artifacts: true } : {}),
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
         workspaceSetupRun: true,
         workspaceSetupObservation: true,

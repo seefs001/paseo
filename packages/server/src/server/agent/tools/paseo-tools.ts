@@ -20,7 +20,10 @@ import {
   type ToolHosts,
 } from "../host-operations/index.js";
 import { AgentDirectory } from "../directory.js";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { basename, isAbsolute, relative, resolve as resolvePath } from "node:path";
+import { ArtifactKindSchema, ArtifactSchema } from "@getpaseo/protocol/messages";
+import type { ArtifactStore } from "../../artifacts/store.js";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
@@ -159,6 +162,7 @@ export interface PaseoToolHostDependencies {
   boardTaskService?: BoardTaskService;
   boardGoalService?: BoardGoalService;
   boardDecisionService?: BoardDecisionService;
+  artifactStore?: ArtifactStore;
   startBoardTask?: (input: BoardTaskStartInput) => Promise<BoardTaskStartResult>;
   providerSnapshotManager: ProviderSnapshotManager;
   daemonConfigStore?: Pick<DaemonConfigStore, "get">;
@@ -1932,6 +1936,134 @@ function createToolCatalog(
         content: [],
         structuredContent: ensureValidJson({ ...started, task: withRef(started.task) }),
       };
+    },
+  );
+
+  function artifacts(): ArtifactStore {
+    if (!options.artifactStore)
+      throw new PaseoToolInputError("Artifacts are unavailable on this host");
+    return options.artifactStore;
+  }
+
+  /** The caller's workspace record; artifacts always belong to one. */
+  async function callerWorkspace(tool: string) {
+    const workspaceId = resolveCallerAgent()?.workspaceId;
+    if (!workspaceId) {
+      throw new PaseoToolInputError(`${tool} needs an agent session that belongs to a workspace`);
+    }
+    if (!options.workspaceRegistry) throw new Error("Workspace registry is not configured");
+    const workspace = await options.workspaceRegistry.get(workspaceId);
+    if (!workspace) throw new PaseoToolInputError("Caller workspace not found");
+    return workspace;
+  }
+
+  /** The Desk task linked to the caller's workspace, which an artifact serves unless told otherwise. */
+  const linkedTask = (workspaceId: string): BoardTask | undefined =>
+    options.boardTaskService?.list().find((task) => task.workspaceId === workspaceId);
+
+  const ArtifactOutputSchema = ArtifactSchema;
+
+  registerTool(
+    "register_artifact",
+    {
+      title: "Register artifact",
+      description:
+        "Add a file to your workspace's Artifacts collection, or update one already there, so the user can open it from the Artifacts pill and the goal after the workspace is gone. Register products a person would open again: a plan, research notes, a Markdown file with a mermaid diagram, a screenshot, an HTML prototype, a verification report, a result file. Leave out logs, tool output and source files you edited. Pass `path` (inside your workspace) or `content` with `fileName`. The daemon stores a copy; register again after you change the file. Re-registering the same `path`, or passing `artifactId`, updates that entry and raises its revision. `goalId`/`taskIds` default to the task linked to your workspace. Pass `messageId` only when you know it. Registering records nothing on the Desk.",
+      inputSchema: {
+        title: z.string().describe("Short label the user sees."),
+        kind: ArtifactKindSchema,
+        path: z
+          .string()
+          .optional()
+          .describe("File inside your workspace, relative to its root or absolute."),
+        content: z.string().optional().describe("Text content, when there is no file."),
+        fileName: z
+          .string()
+          .optional()
+          .describe("Required with `content`; its extension decides the preview."),
+        artifactId: z.string().optional().describe("Entry to update."),
+        goalId: z.string().optional().describe("Goal id or G-<number>."),
+        taskIds: z.array(z.string()).optional().describe("Task ids or T-<number>."),
+        messageId: z.string().optional(),
+      },
+      outputSchema: { artifact: ArtifactOutputSchema },
+    },
+    async (args: {
+      title: string;
+      kind: z.infer<typeof ArtifactKindSchema>;
+      path?: string;
+      content?: string;
+      fileName?: string;
+      artifactId?: string;
+      goalId?: string;
+      taskIds?: string[];
+      messageId?: string;
+    }) => {
+      const store = artifacts();
+      const workspace = await callerWorkspace("register_artifact");
+      let content: Buffer;
+      let fileName: string;
+      let sourcePath: string | null = null;
+      if (args.path !== undefined) {
+        const absolute = isAbsolute(args.path)
+          ? resolvePath(args.path)
+          : resolvePath(workspace.cwd, args.path);
+        const inside = relative(workspace.cwd, absolute);
+        if (!inside || inside.startsWith("..") || isAbsolute(inside)) {
+          throw new PaseoToolInputError("`path` must be a file inside your workspace");
+        }
+        content = await readFile(absolute);
+        fileName = args.fileName ?? basename(absolute);
+        sourcePath = inside;
+      } else if (args.content !== undefined && args.fileName) {
+        content = Buffer.from(args.content, "utf8");
+        fileName = args.fileName;
+      } else {
+        throw new PaseoToolInputError("Pass `path`, or `content` with `fileName`");
+      }
+      const task = linkedTask(workspace.workspaceId);
+      const taskIds = args.taskIds?.map(taskIdFor) ?? (task ? [task.id] : []);
+      const goalId =
+        args.goalId !== undefined
+          ? goalIdFor(args.goalId)
+          : (task?.goalId ?? goalIdOrOwned(undefined) ?? null);
+      const artifact = await store.register({
+        artifactId: args.artifactId,
+        workspaceId: workspace.workspaceId,
+        kind: args.kind,
+        title: args.title,
+        fileName,
+        content,
+        sourcePath,
+        sourceAgentId: callerAgentId ?? null,
+        sourceMessageId: args.messageId ?? null,
+        goalId,
+        taskIds,
+      });
+      return { content: [], structuredContent: ensureValidJson({ artifact }) };
+    },
+  );
+
+  registerTool(
+    "list_artifacts",
+    {
+      title: "List artifacts",
+      description:
+        "List Artifacts. Without arguments: your workspace's collection. With `goalId` (id or G-<number>): every artifact that serves the goal, including those of archived workspaces.",
+      inputSchema: { goalId: z.string().optional() },
+      outputSchema: { artifacts: z.array(ArtifactOutputSchema) },
+    },
+    async ({ goalId }: { goalId?: string }) => {
+      const store = artifacts();
+      let list;
+      if (goalId !== undefined) {
+        const id = goalIdFor(goalId);
+        list = store.list().filter((artifact) => artifact.goalId === id);
+      } else {
+        const workspace = await callerWorkspace("list_artifacts");
+        list = store.list().filter((artifact) => artifact.workspaceId === workspace.workspaceId);
+      }
+      return { content: [], structuredContent: ensureValidJson({ artifacts: list }) };
     },
   );
 

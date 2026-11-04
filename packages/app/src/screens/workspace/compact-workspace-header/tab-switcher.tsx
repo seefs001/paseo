@@ -34,6 +34,7 @@ function getFallbackTabOptionLabel(
     changes: string;
     files: string;
     pullRequest: string;
+    artifact: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -66,6 +67,9 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
   }
+  if (tab.target.kind === "artifact") {
+    return labels.artifact;
+  }
   return labels.agent;
 }
 
@@ -81,6 +85,7 @@ function getFallbackTabOptionDescription(
     changes: string;
     files: string;
     pullRequest: string;
+    artifact: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -106,6 +111,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
+  }
+  if (tab.target.kind === "artifact") {
+    return labels.artifact;
   }
   if (tab.target.kind === "working_diff" || tab.target.kind === "changes_tree") {
     return labels.changes;
@@ -232,6 +240,7 @@ function MobileWorkspaceTabOption({
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
+      artifact: t("artifacts.title"),
     }),
     [t],
   );
@@ -309,6 +318,7 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
+      artifact: t("artifacts.title"),
     }),
     [t],
   );

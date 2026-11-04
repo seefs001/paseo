@@ -2,6 +2,8 @@ import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { memo, useCallback, type ReactElement } from "react";
 import type { AwaitingAgent } from "@/board/chat-desk";
 import type { BoardCard } from "@/board/columns";
+import { useWorkspaceArtifacts } from "@/artifacts/store";
+import { ArtifactsTrack } from "@/artifacts/track";
 import { ChatAwaitingTrack, ChatTaskTrack } from "@/components/board/chat-desk-tracks";
 import { WorkspaceDiffStatPill } from "@/composer/diff-stat-pill";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
@@ -63,6 +65,7 @@ export const AgentTracks = memo(function AgentTracks({
 }): ReactElement | null {
   const { tabId } = usePaneContext();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
+  const hasArtifacts = useWorkspaceArtifacts(serverId, workspaceId).length > 0;
   const isCompact = useIsCompactFormFactor();
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
@@ -123,6 +126,7 @@ export const AgentTracks = memo(function AgentTracks({
 
   if (
     !hasWorkspaceDiffStat &&
+    !hasArtifacts &&
     !hasAgentTracks({
       parentAgentId,
       subagentRows,
@@ -160,6 +164,7 @@ export const AgentTracks = memo(function AgentTracks({
         agentId={agentId}
         compact={isCompact}
       />
+      <ArtifactsTrack serverId={serverId} workspaceId={workspaceId} agentId={agentId} />
       <WorkspaceDiffStatPill
         serverId={serverId}
         workspaceId={workspaceId}
@@ -177,6 +182,7 @@ export function hasAgentTracks({
   hasPluginComposerPills = false,
   deskTask = null,
   awaitingAgents = [],
+  hasArtifacts = false,
 }: {
   parentAgentId: string | null;
   subagentRows: readonly SubagentRow[];
@@ -185,8 +191,11 @@ export function hasAgentTracks({
   hasPluginComposerPills?: boolean;
   deskTask?: BoardCard | null;
   awaitingAgents?: readonly AwaitingAgent[];
+  /** The workspace has registered artifacts, so the Artifacts pill shows. */
+  hasArtifacts?: boolean;
 }): boolean {
   return (
+    hasArtifacts ||
     deskTask !== null ||
     awaitingAgents.length > 0 ||
     parentAgentId !== null ||

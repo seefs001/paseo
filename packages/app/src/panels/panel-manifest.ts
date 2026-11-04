@@ -158,6 +158,14 @@ const manifests = {
     compactSheet: null,
     resourceKey: (target) => target.sha,
   },
+  artifact: {
+    kind: "artifact",
+    supportedHosts: ["main", "explorer"],
+    showCloseButton: true,
+    singleton: false,
+    compactSheet: { openAsTab: false },
+    resourceKey: (target) => target.artifactId,
+  },
 } satisfies PanelManifestByKind;
 
 export function getPanelManifest<K extends WorkspaceTabTarget["kind"]>(kind: K): PanelManifest<K> {

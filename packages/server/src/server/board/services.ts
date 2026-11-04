@@ -1,3 +1,4 @@
+import { ArtifactStore } from "../artifacts/store.js";
 import type { ProjectRegistry, WorkspaceRegistry } from "../workspace-registry.js";
 import {
   createBoardDecisionEffect,
@@ -15,6 +16,8 @@ export interface BoardServices {
   goals: BoardGoalService;
   decisions: BoardDecisionService;
   desk: BoardDeskStore;
+  /** Artifacts reference goals and tasks, so they ship with the Desk. */
+  artifacts: ArtifactStore;
 }
 
 export function createBoardServices(input: {
@@ -43,7 +46,8 @@ export function createBoardServices(input: {
     }),
   });
   const desk = createBoardDeskStore({ paseoHome: input.paseoHome });
-  return { tasks, goals, decisions, desk };
+  const artifacts = new ArtifactStore({ paseoHome: input.paseoHome });
+  return { tasks, goals, decisions, desk, artifacts };
 }
 
 export async function initializeBoardServices(board: BoardServices): Promise<void> {
@@ -52,5 +56,6 @@ export async function initializeBoardServices(board: BoardServices): Promise<voi
     board.goals.initialize(),
     board.decisions.initialize(),
     board.desk.initialize(),
+    board.artifacts.initialize(),
   ]);
 }

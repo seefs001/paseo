@@ -245,6 +245,20 @@ export const PASEO_TOOL_CATALOG = {
       outputFields: ["goal"],
     },
   },
+  register_artifact: {
+    label: "Register artifact",
+    completedLabel: "Registered artifact",
+    context: field("title", "path"),
+    detail: {
+      inputOrder: ["title", "kind", "path", "fileName", "artifactId", "goalId", "taskIds"],
+      outputFields: ["artifact"],
+    },
+  },
+  list_artifacts: {
+    label: "List artifacts",
+    completedLabel: "Listed artifacts",
+    detail: { inputOrder: ["goalId"], outputFields: ["artifacts"] },
+  },
   request_decision: {
     label: "Request decision",
     completedLabel: "Requested decision",

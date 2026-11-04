@@ -69,6 +69,10 @@ function normalizeSimpleWorkspaceTabTarget(value: WorkspaceTabTarget): Workspace
       const sha = trimNonEmpty(value.sha);
       return sha ? { kind: "commit_diff", sha } : null;
     }
+    case "artifact": {
+      const artifactId = trimNonEmpty(value.artifactId);
+      return artifactId ? { kind: "artifact", artifactId } : null;
+    }
     default:
       return null;
   }
@@ -160,6 +164,9 @@ function secondaryWorkspaceTabTargetsEqual(
   if (left.kind === "commit_diff" && right.kind === "commit_diff") {
     return left.sha === right.sha;
   }
+  if (left.kind === "artifact" && right.kind === "artifact") {
+    return left.artifactId === right.artifactId;
+  }
   return false;
 }
 
@@ -222,6 +229,9 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
   }
   if (target.kind === "commit_diff") {
     return `commit_diff_${target.sha}`;
+  }
+  if (target.kind === "artifact") {
+    return `artifact_${target.artifactId}`;
   }
   if (target.kind === "working_diff") {
     return "working_diff";

@@ -35,6 +35,7 @@ import {
   type ComposerEditingSession,
 } from "@/composer/editing-session";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
+import { useWorkspaceArtifacts } from "@/artifacts/store";
 import {
   resolveComposerTrackControlClearance,
   resolveComposerTrackTailClearance,
@@ -1119,7 +1120,9 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   // A Desk task rides on its workspace's root agent, as it does on the Desk.
   const deskTask = useWorkspaceBoardCard(serverId, parentAgentId === null ? workspaceId : null);
   const awaitingAgents = useAgentsAwaitingInput(serverId, agentId);
+  const hasArtifacts = useWorkspaceArtifacts(serverId, workspaceId).length > 0;
   const hasVisibleAgentTracks = hasAgentTracks({
+    hasArtifacts,
     parentAgentId: parentPillAgentId,
     subagentRows,
     tasks,

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAgentProfiles } from "@/agent-profiles";
+import { GoalArtifacts } from "@/artifacts/goal-artifacts";
 import type { DeskGoalSheetTarget } from "@/board/goal-sheet";
 import { createBoardGoal, deleteBoardGoal, updateBoardGoal, useBoardTasks } from "@/board/tasks";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
@@ -369,6 +370,7 @@ export function DeskGoalSheet({
             ) : null}
           </View>
         ) : null}
+        {state.goalId !== null ? <GoalArtifacts serverId={serverId} goalId={state.goalId} /> : null}
         {state.goalId !== null ? (
           <View style={styles.manage}>
             <Button
