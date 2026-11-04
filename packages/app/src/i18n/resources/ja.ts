@@ -2737,6 +2737,21 @@ export const ja: TranslationResources = {
     stopTooltip: "サブエージェントを停止",
     stopAllAction: "すべてのサブエージェントを停止",
     stopAllRetry: "再試行 ({{failed}}/{{total}})",
+    selectAction: "Select",
+    selectionCancel: "Cancel",
+    selectedCount: "{{count}} selected",
+    stopSelectedAction: "Stop selected",
+    detachSelectedAction: "Detach selected",
+    archiveSelectedAction: "Archive selected",
+    archiveSelectedConfirmTitle: "Archive {{count}} subagents?",
+    archiveSelectedConfirmMessage:
+      "The selected subagents will be archived and removed from the track. Running ones will stop.",
+    detachSelectedConfirmTitle: "Detach {{count}} subagents?",
+    detachSelectedConfirmMessage:
+      "The selected subagents keep running on their own and leave this track.",
+    bulkActionFailed: "{{failed}} of {{total}} failed: {{message}}",
+    finishedGroup: "Finished ({{count}})",
+    permissionOpenToAnswer: "Open to answer",
   },
   panels: {
     draft: {

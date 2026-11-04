@@ -2765,6 +2765,21 @@ export const fr: TranslationResources = {
     stopTooltip: "Arrêter le sous-agent",
     stopAllAction: "Arrêter tous les sous-agents",
     stopAllRetry: "Réessayer ({{failed}}/{{total}})",
+    selectAction: "Select",
+    selectionCancel: "Cancel",
+    selectedCount: "{{count}} selected",
+    stopSelectedAction: "Stop selected",
+    detachSelectedAction: "Detach selected",
+    archiveSelectedAction: "Archive selected",
+    archiveSelectedConfirmTitle: "Archive {{count}} subagents?",
+    archiveSelectedConfirmMessage:
+      "The selected subagents will be archived and removed from the track. Running ones will stop.",
+    detachSelectedConfirmTitle: "Detach {{count}} subagents?",
+    detachSelectedConfirmMessage:
+      "The selected subagents keep running on their own and leave this track.",
+    bulkActionFailed: "{{failed}} of {{total}} failed: {{message}}",
+    finishedGroup: "Finished ({{count}})",
+    permissionOpenToAnswer: "Open to answer",
   },
   panels: {
     draft: {

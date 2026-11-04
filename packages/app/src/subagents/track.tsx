@@ -1,9 +1,19 @@
 import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { useHosts } from "@/runtime/host-runtime";
-import { useCallback, useMemo, type ReactElement, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { Archive, Square, Unlink } from "lucide-react-native";
+import {
+  Archive,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  CircleCheck,
+  ListChecks,
+  Square,
+  Unlink,
+  X,
+} from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useProviderIcon } from "@/components/provider-icons";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
@@ -20,7 +30,14 @@ import { useAgentFactsLine } from "@/panels/agent-facts-line";
 import { getPanelManifest } from "@/panels/panel-manifest";
 import { useSheetPanePage } from "@/screens/workspace/sheet-pane";
 import type { SheetTab } from "@/stores/workspace-layout-store";
+import { formatCompactTimeAgo } from "@/utils/time";
 import type { SubagentRow } from "./select";
+import { SubagentPermissionLine } from "./permission-line";
+import {
+  rowSelectionKey,
+  useSubagentSelection,
+  type SubagentSelection,
+} from "./use-subagent-selection";
 import type { ArchiveFinishedStatus } from "./use-archive-finished";
 import { countStoppableSubagents } from "./stop-subagents";
 import { useStopAllSubagents, useStopSubagent, type StopAllStatus } from "./use-stop-subagents";
@@ -28,9 +45,16 @@ import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
+  groupSubagentRows,
 } from "./track-presentation";
 
 const ThemedArchive = withUnistyles(Archive);
+const ThemedChevronDown = withUnistyles(ChevronDown);
+const ThemedChevronRight = withUnistyles(ChevronRight);
+const ThemedCircle = withUnistyles(Circle);
+const ThemedCircleCheck = withUnistyles(CircleCheck);
+const ThemedListChecks = withUnistyles(ListChecks);
+const ThemedX = withUnistyles(X);
 const ThemedSquare = withUnistyles(Square);
 const ThemedUnlink = withUnistyles(Unlink);
 
@@ -98,28 +122,49 @@ export function SubagentsTrack({
     void stopAllSubagents();
   }, [stopAllSubagents]);
   const sheetPanePage = useSheetPanePage();
+  const selection = useSubagentSelection(rows, serverId);
+  const [finishedExpanded, setFinishedExpanded] = useState(false);
+  const grouped = useMemo(() => groupSubagentRows(rows), [rows]);
+  const toggleFinished = useCallback(() => setFinishedExpanded((value) => !value), []);
 
-  const isArchivingFinished = archiveFinishedStatus.kind === "archiving";
-  const isArchiveFinishedFailed = archiveFinishedStatus.kind === "failed";
-  const isStoppingAll = stopAll.status.kind === "stopping";
-  const isStopAllFailed = stopAll.status.kind === "failed";
-  if (
-    rows.length === 0 &&
-    !isArchivingFinished &&
-    !isArchiveFinishedFailed &&
-    !isStoppingAll &&
-    !isStopAllFailed
-  ) {
+  const { showArchiveFinished, showStopAll, showSelect, showBulkActions, empty } =
+    resolvePanelActions({
+      rows,
+      archiveFinishedStatus,
+      stopAllStatus: stopAll.status,
+      selection,
+    });
+  if (empty) {
     return null;
   }
 
   const pill = buildSubagentPillPresentation(t, rows);
-  const finishedCount = countFinishedSubagents(rows);
-  const showArchiveFinished = finishedCount > 0 || isArchivingFinished || isArchiveFinishedFailed;
-  const showStopAll = countStoppableSubagents(rows) > 0 || isStoppingAll || isStopAllFailed;
-  const showBulkActions = showStopAll || showArchiveFinished;
+  const idle = !selection.selecting;
   const sheets = rows.map(sheetTabFor);
+  const sheetTabIdFor = mapSheetTabIds(rows, sheets, serverId);
   const pages = sheets.flatMap((sheet) => (sheet ? [sheetPanePage(sheet)] : []));
+  // A fan-out with nothing left running shows its finished rows; otherwise they fold away.
+  const finishedCollapsible = grouped.active.length > 0 && grouped.finished.length > 0;
+  const showFinishedRows = !finishedCollapsible || finishedExpanded || !idle;
+  const renderRow = (row: SubagentRow) => {
+    const key = rowSelectionKey(row, serverId);
+    return (
+      <SubagentsTrackRow
+        key={key}
+        selectionKey={key}
+        row={row}
+        serverId={serverId}
+        onOpenSubagent={onOpenSubagent}
+        onOpenProviderSubagent={onOpenProviderSubagent}
+        sheetTabId={sheetTabIdFor.get(key)}
+        onArchiveSubagent={onArchiveSubagent}
+        onDetachSubagent={onDetachSubagent}
+        onStopSubagent={stopSubagent}
+        selected={selection.selecting ? selection.selectedKeys.has(key) : null}
+        onToggleSelected={selection.toggle}
+      />
+    );
+  };
 
   return (
     <ComposerTrackPill
@@ -131,32 +176,207 @@ export function SubagentsTrack({
     >
       {showBulkActions ? (
         <ComposerTrackActions divided={rows.length > 0}>
-          {showStopAll ? (
-            <StopAllRow status={stopAll.status} disabled={isStoppingAll} onPress={handleStopAll} />
-          ) : null}
-          {showArchiveFinished && onArchiveFinished ? (
-            <ArchiveFinishedRow
-              status={archiveFinishedStatus}
-              disabled={isArchivingFinished}
-              onPress={onArchiveFinished}
+          {idle ? (
+            <IdleBulkActions
+              onSelect={showSelect ? selection.start : undefined}
+              stopAllStatus={showStopAll ? stopAll.status : null}
+              onStopAll={handleStopAll}
+              archiveFinishedStatus={showArchiveFinished ? archiveFinishedStatus : null}
+              onArchiveFinished={onArchiveFinished}
             />
-          ) : null}
+          ) : (
+            <SelectionActions selection={selection} canDetach={onDetachSubagent !== undefined} />
+          )}
         </ComposerTrackActions>
       ) : null}
-      {rows.map((row, index) => (
-        <SubagentsTrackRow
-          key={row.kind === "paseo" ? `${row.address.serverId}:${row.id}` : row.id}
-          row={row}
-          serverId={serverId}
-          onOpenSubagent={onOpenSubagent}
-          onOpenProviderSubagent={onOpenProviderSubagent}
-          sheetTabId={sheets[index]?.tab.tabId ?? null}
-          onArchiveSubagent={onArchiveSubagent}
-          onDetachSubagent={onDetachSubagent}
-          onStopSubagent={stopSubagent}
+      {grouped.active.map(renderRow)}
+      {finishedCollapsible && idle ? (
+        <PanelActionRow
+          icon={finishedExpanded ? ThemedChevronDown : ThemedChevronRight}
+          label={t("subagents.finishedGroup", { count: grouped.finished.length })}
+          testID="subagents-track-finished-toggle"
+          onPress={toggleFinished}
         />
-      ))}
+      ) : null}
+      {showFinishedRows ? grouped.finished.map(renderRow) : null}
     </ComposerTrackPill>
+  );
+}
+
+function resolvePanelActions({
+  rows,
+  archiveFinishedStatus,
+  stopAllStatus,
+  selection,
+}: {
+  rows: readonly SubagentRow[];
+  archiveFinishedStatus: ArchiveFinishedStatus;
+  stopAllStatus: StopAllStatus;
+  selection: SubagentSelection;
+}) {
+  // A bulk action in flight or failed keeps its row, even after the rows it acted on are gone.
+  const showArchiveFinished =
+    countFinishedSubagents(rows) > 0 || archiveFinishedStatus.kind !== "idle";
+  const showStopAll = countStoppableSubagents(rows) > 0 || stopAllStatus.kind !== "idle";
+  const showSelect = selection.selectableCount > 1;
+  return {
+    showArchiveFinished,
+    showStopAll,
+    showSelect,
+    showBulkActions: selection.selecting || showStopAll || showArchiveFinished || showSelect,
+    empty: rows.length === 0 && !showArchiveFinished && !showStopAll,
+  };
+}
+
+function mapSheetTabIds(
+  rows: readonly SubagentRow[],
+  sheets: ReadonlyArray<SheetTab | null>,
+  serverId: string,
+): Map<string, string | null> {
+  return new Map(
+    rows.map((row, index) => [rowSelectionKey(row, serverId), sheets[index]?.tab.tabId ?? null]),
+  );
+}
+
+/** The panel's bulk rows outside selection mode. A null status hides its row. */
+function IdleBulkActions({
+  onSelect,
+  stopAllStatus,
+  onStopAll,
+  archiveFinishedStatus,
+  onArchiveFinished,
+}: {
+  onSelect?: () => void;
+  stopAllStatus: StopAllStatus | null;
+  onStopAll: () => void;
+  archiveFinishedStatus: ArchiveFinishedStatus | null;
+  onArchiveFinished?: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <>
+      {onSelect ? (
+        <PanelActionRow
+          icon={ThemedListChecks}
+          label={t("subagents.selectAction")}
+          testID="subagents-track-select"
+          onPress={onSelect}
+        />
+      ) : null}
+      {stopAllStatus ? (
+        <StopAllRow
+          status={stopAllStatus}
+          disabled={stopAllStatus.kind === "stopping"}
+          onPress={onStopAll}
+        />
+      ) : null}
+      {archiveFinishedStatus && onArchiveFinished ? (
+        <ArchiveFinishedRow
+          status={archiveFinishedStatus}
+          disabled={archiveFinishedStatus.kind === "archiving"}
+          onPress={onArchiveFinished}
+        />
+      ) : null}
+    </>
+  );
+}
+
+type RowIcon = typeof ThemedArchive;
+
+/** A panel-level row that keeps the panel open: its result shows up inside the panel. */
+function PanelActionRow({
+  icon: Icon,
+  label,
+  trailing,
+  testID,
+  disabled = false,
+  onPress,
+}: {
+  icon: RowIcon;
+  label: string;
+  trailing?: string;
+  testID: string;
+  disabled?: boolean;
+  onPress: () => void;
+}): ReactElement {
+  const renderRow = useCallback(
+    ({ active }: { active: boolean }) => (
+      <>
+        <Icon
+          size={ROW_ICON_SIZE}
+          uniProps={active ? foregroundColorMapping : foregroundMutedColorMapping}
+        />
+        <Text style={styles.rowLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {trailing ? <Text style={styles.rowTrailing}>{trailing}</Text> : null}
+      </>
+    ),
+    [Icon, label, trailing],
+  );
+  return (
+    <ComposerTrackRow
+      accessibilityLabel={label}
+      testID={testID}
+      disabled={disabled}
+      closeOnSelect={false}
+      onPress={onPress}
+    >
+      {renderRow}
+    </ComposerTrackRow>
+  );
+}
+
+/** Replaces the bulk rows while the user picks subagents. Each action runs on the picked rows. */
+function SelectionActions({
+  selection,
+  canDetach,
+}: {
+  selection: SubagentSelection;
+  canDetach: boolean;
+}): ReactElement {
+  const { t } = useTranslation();
+  const { run, pending, selectedCount, selectedRunningCount } = selection;
+  const busy = pending !== null;
+  const none = selectedCount === 0;
+  const stopSelected = useCallback(() => run("stop"), [run]);
+  const detachSelected = useCallback(() => run("detach"), [run]);
+  const archiveSelected = useCallback(() => run("archive"), [run]);
+  return (
+    <>
+      <PanelActionRow
+        icon={ThemedX}
+        label={t("subagents.selectionCancel")}
+        trailing={t("subagents.selectedCount", { count: selectedCount })}
+        testID="subagents-track-selection-cancel"
+        disabled={busy}
+        onPress={selection.cancel}
+      />
+      <PanelActionRow
+        icon={ThemedSquare}
+        label={t("subagents.stopSelectedAction")}
+        trailing={selectedRunningCount > 0 ? String(selectedRunningCount) : undefined}
+        testID="subagents-track-stop-selected"
+        disabled={busy || selectedRunningCount === 0}
+        onPress={stopSelected}
+      />
+      {canDetach ? (
+        <PanelActionRow
+          icon={ThemedUnlink}
+          label={t("subagents.detachSelectedAction")}
+          testID="subagents-track-detach-selected"
+          disabled={busy || none}
+          onPress={detachSelected}
+        />
+      ) : null}
+      <PanelActionRow
+        icon={ThemedArchive}
+        label={t("subagents.archiveSelectedAction")}
+        testID="subagents-track-archive-selected"
+        disabled={busy || none}
+        onPress={archiveSelected}
+      />
+    </>
   );
 }
 
@@ -277,10 +497,21 @@ interface SubagentsTrackRowProps {
   onOpenSubagent: (address: AgentAddress) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   /** The sheet page the row opens in place of the list, when it opens in a sheet. */
-  sheetTabId: string | null;
+  sheetTabId: string | null | undefined;
   onArchiveSubagent: (address: AgentAddress) => void;
   onDetachSubagent?: (address: AgentAddress) => void;
   onStopSubagent: (address: AgentAddress) => void;
+  selectionKey: string;
+  /** Null outside selection mode. Provider rows are never selectable. */
+  selected: boolean | null;
+  onToggleSelected: (key: string) => void;
+}
+
+function SelectionMark({ selected }: { selected: boolean }): ReactElement {
+  if (selected) {
+    return <ThemedCircleCheck size={ROW_ICON_SIZE} uniProps={foregroundColorMapping} />;
+  }
+  return <ThemedCircle size={ROW_ICON_SIZE} uniProps={foregroundMutedColorMapping} />;
 }
 
 function SubagentsTrackRow({
@@ -292,6 +523,9 @@ function SubagentsTrackRow({
   onArchiveSubagent,
   onDetachSubagent,
   onStopSubagent,
+  selectionKey,
+  selected,
+  onToggleSelected,
 }: SubagentsTrackRowProps): ReactElement {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
@@ -319,10 +553,18 @@ function SubagentsTrackRow({
   const canStop = row.kind === "paseo" && row.turn.phase === "open";
   const stopDisabled = canStop && row.turn.cancellationRequestId !== null;
   const actionsAlwaysVisible = isNative || isCompact;
+  const selecting = selected !== null;
+  const selectable = selecting && row.kind === "paseo";
+  const handleToggle = useCallback(
+    () => onToggleSelected(selectionKey),
+    [onToggleSelected, selectionKey],
+  );
+  const age = formatCompactTimeAgo(row.createdAt);
 
   const renderRow = useCallback(
     ({ active }: { active: boolean }) => (
       <>
+        {selectable ? <SelectionMark selected={selected === true} /> : null}
         <WorkspaceTabIcon presentation={presentation} backdrop={active ? "surface2" : "surface1"} />
         <View style={styles.rowText}>
           <Text style={styles.rowTitle} numberOfLines={1}>
@@ -332,12 +574,18 @@ function SubagentsTrackRow({
             <>
               <SubagentFacts rowId={row.id} text={rowServerId !== serverId ? hostLabel : ""} />
               <PaseoSubagentFacts serverId={rowServerId} agentId={row.id} />
+              {selecting ? null : (
+                <SubagentPermissionLine address={row.address} compact={isCompact} />
+              )}
             </>
           ) : (
             <SubagentFacts rowId={row.id} text={presentation.subtitle} />
           )}
         </View>
-        {row.kind === "paseo" ? (
+        <Text style={styles.rowTrailing} testID={`subagents-track-row-age-${row.id}`}>
+          {age}
+        </Text>
+        {row.kind === "paseo" && !selecting ? (
           <SubagentRowActions
             rowId={row.id}
             displayLabel={displayLabel}
@@ -353,6 +601,10 @@ function SubagentsTrackRow({
     ),
     [
       actionsAlwaysVisible,
+      age,
+      selectable,
+      selected,
+      selecting,
       canStop,
       displayLabel,
       handleArchivePress,
@@ -361,8 +613,7 @@ function SubagentsTrackRow({
       isCompact,
       onDetachSubagent,
       presentation,
-      row.kind,
-      row.id,
+      row,
       serverId,
       rowServerId,
       hostLabel,
@@ -374,12 +625,23 @@ function SubagentsTrackRow({
     <ComposerTrackRow
       accessibilityLabel={displayLabel}
       testID={`subagents-track-row-${row.id}`}
-      opensPage={sheetTabId ?? undefined}
-      onPress={handlePress}
+      opensPage={selecting ? undefined : (sheetTabId ?? undefined)}
+      onPress={rowPressHandler(selecting, selectable, handleToggle, handlePress)}
+      closeOnSelect={!selecting}
     >
       {renderRow}
     </ComposerTrackRow>
   );
+}
+
+function rowPressHandler(
+  selecting: boolean,
+  selectable: boolean,
+  onToggle: () => void,
+  onOpen: () => void,
+): (() => void) | undefined {
+  if (!selecting) return onOpen;
+  return selectable ? onToggle : undefined;
 }
 
 /** The same facts line the agent's sheet shows when it opens without its composer. */

@@ -40,6 +40,7 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
     titleState: label ? "ready" : "loading",
     statusBucket: deriveSidebarStateBucket({
       status,
+      pendingPermissionCount: row.kind === "paseo" ? row.pendingPermissionCount : undefined,
       requiresAttention: false,
     }),
   };
@@ -72,9 +73,10 @@ export interface SubagentPillPresentation {
  * "1 failed" over a child that is still working says the fan-out has stopped. Every state present
  * gets its own mark and its own count, in the order the sidebar's status groups list them.
  *
- * It stays one line because subagent rows only ever reach three states — see
- * `buildSubagentRowPresentationData`, which reports no attention of its own — so the pill is two
- * segments at worst, and falls back to naming what it opens once nothing is happening.
+ * It stays one line because subagent rows only ever reach four states — see
+ * `buildSubagentRowPresentationData`, which reports no attention of its own but does report a
+ * pending permission as needing input — and falls back to naming what it opens once nothing is
+ * happening.
  */
 export function buildSubagentPillPresentation(
   t: TFunction,
@@ -123,6 +125,29 @@ function summarizeSubagentStatus(rows: readonly SubagentRow[]): SubagentStatusCo
     const count = buckets.filter((candidate) => candidate === bucket).length;
     return count > 0 ? [{ bucket, count }] : [];
   });
+}
+
+export interface GroupedSubagentRows {
+  /** Rows that are not done, in the sidebar's status order, then oldest first. */
+  active: SubagentRow[];
+  /** Done rows, oldest first. */
+  finished: SubagentRow[];
+}
+
+/** Splits the panel so what needs the user leads and quiet children can fold away. */
+export function groupSubagentRows(rows: readonly SubagentRow[]): GroupedSubagentRows {
+  const active: Array<{ row: SubagentRow; rank: number; index: number }> = [];
+  const finished: SubagentRow[] = [];
+  rows.forEach((row, index) => {
+    const bucket = buildSubagentRowPresentationData(row).statusBucket;
+    if (bucket === null || bucket === "done") {
+      finished.push(row);
+      return;
+    }
+    active.push({ row, rank: STATUS_BUCKET_ORDER.indexOf(bucket), index });
+  });
+  active.sort((left, right) => left.rank - right.rank || left.index - right.index);
+  return { active: active.map((entry) => entry.row), finished };
 }
 
 export function countFinishedSubagents(rows: readonly SubagentRow[]): number {

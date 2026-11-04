@@ -50,7 +50,7 @@ function usePendingPermissions(serverId: string, scope: PermissionScope): Pendin
 }
 
 /** The allow and deny actions the agent panel would offer, or the panel's defaults. */
-function resolveDecisionActions(permission: PendingPermission): {
+export function resolveDecisionActions(permission: PendingPermission): {
   allow: AgentPermissionAction;
   deny: AgentPermissionAction;
 } {
@@ -65,7 +65,7 @@ function resolveDecisionActions(permission: PendingPermission): {
   };
 }
 
-function toResponse(action: AgentPermissionAction): AgentPermissionResponse {
+export function toPermissionResponse(action: AgentPermissionAction): AgentPermissionResponse {
   return action.behavior === "allow"
     ? { behavior: "allow", selectedActionId: action.id }
     : { behavior: "deny", selectedActionId: action.id, message: "Denied by user" };
@@ -125,7 +125,7 @@ function PermissionRow({
         await client.respondToPermissionAndWait(
           permission.agentId,
           request.id,
-          toResponse(behavior === "allow" ? actions.allow : actions.deny),
+          toPermissionResponse(behavior === "allow" ? actions.allow : actions.deny),
           15000,
         );
       } catch (error) {

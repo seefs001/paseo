@@ -363,7 +363,11 @@ Archived Paseo subagents disappear from the track, by design. To remove one from
 
 A running Paseo subagent row has a **stop** button beside detach and archive. It interrupts that agent's current turn, the same stop as the composer square, and leaves the agent in the track. **Stop all**, the row above the list, interrupts every running Paseo subagent in the panel at once. Provider-owned rows have no stop control.
 
-The **Archive finished** row at the foot of the panel covers every finished row. It archives idle or errored managed Paseo subagents one at a time, and hides completed, failed, or canceled provider-owned rows in the current app session. Native sessions and timelines are untouched. Running and initializing children remain in the track. If a hidden provider child starts running again, the app brings it back to the track.
+The panel lists rows that need the user first, in the sidebar's status order, then running rows. While anything is still active, finished rows fold under a **Finished (n)** row. A managed subagent with a pending permission counts as needing input on the pill, and its row offers Approve and Deny for the oldest request; questions and plans still need the subagent's own pane.
+
+**Select** puts the panel in selection mode once it holds two or more Paseo subagents. Picked rows can be stopped, detached, or archived together. Detach and archive confirm once for the whole selection. Provider-owned rows are not selectable.
+
+The **Archive finished** row in the panel's bulk actions covers every finished row. It archives idle or errored managed Paseo subagents one at a time, and hides completed, failed, or canceled provider-owned rows in the current app session. Native sessions and timelines are untouched. Running and initializing children remain in the track. If a hidden provider child starts running again, the app brings it back to the track.
 
 To keep the agent alive but remove it from the parent's track, use **detach**. The daemon clears the relationship lifecycle labels, emits the normal agent update, and every client reclassifies the agent from subagent to root/sibling from that updated snapshot.
 
