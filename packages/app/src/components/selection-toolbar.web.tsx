@@ -15,13 +15,9 @@ import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { computePosition, type Rect } from "@/components/ui/anchor";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import {
-  getOverlayRoot,
-  OverlayLayerProvider,
-  useOverlayLayer,
-  useWebOverlayRegistration,
-} from "@/lib/overlay-root";
+import { getOverlayRoot, OverlayLayerProvider, useOverlayLayer } from "@/lib/overlay-root";
 export interface AnchoredSelection {
   anchor: Rect;
 }
@@ -68,7 +64,7 @@ export function SelectionToolbar<Selection extends AnchoredSelection>({
   const close = useCallback(() => setSelection(null), []);
 
   const onKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+    (event: KeyboardInputEvent) => {
       const toolbar = toolbarRef.current;
       const focused = document.activeElement;
       const editingText =
@@ -96,7 +92,8 @@ export function SelectionToolbar<Selection extends AnchoredSelection>({
     },
     [close],
   );
-  const registerOverlay = useWebOverlayRegistration({
+  const registerOverlay = useOverlayRegistration({
+    keys: ["Escape", "Tab"],
     active: visible,
     layer,
     onKeyDown,

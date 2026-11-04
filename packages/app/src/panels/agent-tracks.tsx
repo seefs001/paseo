@@ -2,11 +2,9 @@ import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { memo, useCallback, type ReactElement } from "react";
 import type { AwaitingAgent } from "@/board/chat-desk";
 import type { BoardCard } from "@/board/columns";
-import { useWorkspaceArtifacts } from "@/artifacts/store";
 import { ArtifactsTrack } from "@/artifacts/track";
 import { ChatAwaitingTrack, ChatTaskTrack } from "@/components/board/chat-desk-tracks";
 import { WorkspaceDiffStatPill } from "@/composer/diff-stat-pill";
-import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import { AgentTaskList } from "@/composer/task-list";
 import { ComposerTrackBar } from "@/composer/tracks";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -45,7 +43,6 @@ export const AgentTracks = memo(function AgentTracks({
   tasks,
   archiveFinishedStatus,
   onArchiveFinished,
-  hasPluginComposerPills,
   deskTask,
   awaitingAgents,
 }: {
@@ -57,15 +54,12 @@ export const AgentTracks = memo(function AgentTracks({
   tasks: TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
   onArchiveFinished: () => void;
-  hasPluginComposerPills: boolean;
   /** The Desk task this conversation's workspace is working on. */
   deskTask: BoardCard | null;
   /** Other agents waiting on the user. */
   awaitingAgents: readonly AwaitingAgent[];
-}): ReactElement | null {
+}): ReactElement {
   const { tabId } = usePaneContext();
-  const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
-  const hasArtifacts = useWorkspaceArtifacts(serverId, workspaceId).length > 0;
   const isCompact = useIsCompactFormFactor();
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
@@ -124,22 +118,6 @@ export const AgentTracks = memo(function AgentTracks({
     });
   }, [isCompact, openInSidePane, workspaceKey]);
 
-  if (
-    !hasWorkspaceDiffStat &&
-    !hasArtifacts &&
-    !hasAgentTracks({
-      parentAgentId,
-      subagentRows,
-      tasks,
-      archiveFinishedStatus,
-      hasPluginComposerPills,
-      deskTask,
-      awaitingAgents,
-    })
-  ) {
-    return null;
-  }
-
   return (
     <ComposerTrackBar>
       {/* What waits on the user elsewhere leads: it is the one pill that asks for action now. */}
@@ -173,35 +151,3 @@ export const AgentTracks = memo(function AgentTracks({
     </ComposerTrackBar>
   );
 });
-
-export function hasAgentTracks({
-  parentAgentId,
-  subagentRows,
-  tasks,
-  archiveFinishedStatus,
-  hasPluginComposerPills = false,
-  deskTask = null,
-  awaitingAgents = [],
-  hasArtifacts = false,
-}: {
-  parentAgentId: string | null;
-  subagentRows: readonly SubagentRow[];
-  tasks: readonly TodoEntry[] | undefined;
-  archiveFinishedStatus: ArchiveFinishedStatus;
-  hasPluginComposerPills?: boolean;
-  deskTask?: BoardCard | null;
-  awaitingAgents?: readonly AwaitingAgent[];
-  /** The workspace has registered artifacts, so the Artifacts pill shows. */
-  hasArtifacts?: boolean;
-}): boolean {
-  return (
-    hasArtifacts ||
-    deskTask !== null ||
-    awaitingAgents.length > 0 ||
-    parentAgentId !== null ||
-    subagentRows.length > 0 ||
-    Boolean(tasks?.length) ||
-    archiveFinishedStatus.kind !== "idle" ||
-    hasPluginComposerPills
-  );
-}

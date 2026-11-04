@@ -7,7 +7,7 @@ import {
   createAgentCommand,
   type CreateAgentCommandDependencies,
 } from "../agent/create-agent/create.js";
-import { resolveCreateAgentIntent } from "../agent/create-agent/intent.js";
+import { inheritAgentBackground, resolveCreateAgentIntent } from "../agent/create-agent/intent.js";
 import { resolveCreateAgentTitles } from "../agent/create-agent-title.js";
 import type { FirstAgentContext } from "../messages.js";
 import {
@@ -101,6 +101,7 @@ export function createDaemonWorkspaceEffects(
           agentId,
           config: { ...request.config, cwd: intent.cwd },
           workspaceId: intent.workspaceId,
+          background: inheritAgentBackground(request.background, caller),
           initialPrompt: request.initialPrompt,
           source: request.callerAgentId
             ? { kind: "agent-message", agentId: request.callerAgentId }

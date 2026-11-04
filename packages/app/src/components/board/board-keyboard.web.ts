@@ -6,7 +6,7 @@ import {
 } from "@/components/board/board-desk";
 import { BOARD_SEARCH_TEST_ID } from "@/components/board/board-toolbar";
 import { resolveKeyboardFocusScope } from "@/keyboard/focus-scope";
-import { hasActiveWebOverlay } from "@/lib/overlay-root";
+import { hasActiveOverlay } from "@/keyboard";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
 import type { BoardKeyboardInput } from "./board-keyboard";
@@ -86,7 +86,7 @@ export function useBoardKeyboard(input: BoardKeyboardInput): void {
     if (!enabled) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isImeComposingKeyboardEvent(event) || hasActiveWebOverlay()) return;
+      if (isImeComposingKeyboardEvent(event) || hasActiveOverlay()) return;
       const scope = resolveKeyboardFocusScope({
         target: event.target,
         commandCenterOpen: useKeyboardShortcutsStore.getState().commandCenterOpen,

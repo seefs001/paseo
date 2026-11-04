@@ -3032,7 +3032,9 @@ class ClaudeAgentSession implements AgentSession {
     this.closed = true;
     await this.ensureHistoryReady();
     this.rejectAllPendingPermissions(new Error("Claude session closed"));
-    this.cancelCurrentTurn?.();
+    // AgentManager settles the run after runtime release. Preserve cleanup records
+    // without reporting this closure as an explicit turn cancellation.
+    this.flushPendingToolCalls();
     this.subscribers.clear();
     this.activeForegroundTurnId = null;
     this.activeForegroundQuery = null;
@@ -3539,6 +3541,8 @@ class ClaudeAgentSession implements AgentSession {
 
     const input = createAsyncMessageInput<SDKUserMessage>();
     const options = await this.buildOptions(launchMode);
+    // Closure can finish while launch options are being prepared.
+    if (this.closed) throw new Error("Claude session is closed");
     this.logger.debug({ options: summarizeClaudeOptionsForLog(options) }, "claude query");
     this.input = input;
     this.runtimeSafety.reset();

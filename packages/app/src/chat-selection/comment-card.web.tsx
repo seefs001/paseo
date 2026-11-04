@@ -5,13 +5,9 @@ import { Text, View, type TextInputKeyPressEvent } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { computePosition } from "@/components/ui/anchor";
+import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
 import { FormTextInput } from "@/components/ui/form-field";
-import {
-  getOverlayRoot,
-  OverlayLayerProvider,
-  useOverlayLayer,
-  useWebOverlayRegistration,
-} from "@/lib/overlay-root";
+import { getOverlayRoot, OverlayLayerProvider, useOverlayLayer } from "@/lib/overlay-root";
 import type { AnchoredChatTextSelection } from "./selection.web";
 
 interface ChatQuoteCommentCardProps {
@@ -41,7 +37,7 @@ export function ChatQuoteCommentCard({
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
 
   const onKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+    (event: KeyboardInputEvent) => {
       if (event.key !== "Escape") return false;
       event.preventDefault();
       onDiscard();
@@ -49,7 +45,12 @@ export function ChatQuoteCommentCard({
     },
     [onDiscard],
   );
-  const registerOverlay = useWebOverlayRegistration({ active: true, layer, onKeyDown });
+  const registerOverlay = useOverlayRegistration({
+    keys: ["Escape"],
+    active: true,
+    layer,
+    onKeyDown,
+  });
   const setCardRef = useCallback(
     (node: HTMLDivElement | null) => {
       cardRef.current = node;

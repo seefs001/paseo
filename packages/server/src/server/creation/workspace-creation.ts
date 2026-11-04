@@ -8,6 +8,10 @@ import type {
 import type { SessionInboundMessage, WorkspaceDescriptorPayload } from "../messages.js";
 import type { AgentManager } from "../agent/agent-manager.js";
 import type { AgentStorage } from "../agent/agent-storage.js";
+import {
+  inheritWorkspaceBackground,
+  type CreateAgentCaller,
+} from "../agent/create-agent/intent.js";
 import { resolveFirstAgentPromptTitle } from "../agent/create-agent-title.js";
 import { buildAgentPrompt } from "../agent/prompt-attachments.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
@@ -236,8 +240,7 @@ export class WorkspaceCreation {
       {
         expectsInitialAgent: Boolean(request.firstAgentContext),
         workspaceId,
-        background: request.background,
-        callerWorkspaceId: this.getCallerWorkspaceId(request.callerAgentId),
+        ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
       },
     );
     const descriptor = await effects.directoryWorkspaceCreated(workspace, request);
@@ -295,8 +298,7 @@ export class WorkspaceCreation {
         githubPrNumber: source.githubPrNumber,
         firstAgentContext: request.firstAgentContext,
         title: request.title,
-        background: request.background,
-        callerWorkspaceId: this.getCallerWorkspaceId(request.callerAgentId),
+        ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
       },
       source.baseBranch
         ? { resolveDefaultBranch: async () => source.baseBranch as string }
@@ -305,10 +307,21 @@ export class WorkspaceCreation {
     return effects.worktreeWorkspaceCreated(result, request);
   }
 
-  private getCallerWorkspaceId(callerAgentId?: string): string | undefined {
-    if (!callerAgentId) return undefined;
-    const caller = this.deps.agentManager.getAgent(callerAgentId);
+  private async workspaceBackgroundIntent(
+    background: boolean | undefined,
+    callerAgentId?: string,
+  ): Promise<{ background?: boolean; callerWorkspaceId?: string }> {
+    if (!callerAgentId) return { background };
+    let caller: (CreateAgentCaller & { background?: boolean }) | null =
+      this.deps.agentManager.getAgent(callerAgentId);
+    if (!caller) {
+      const stored = await this.deps.agentStorage.get(callerAgentId);
+      if (stored && !stored.archivedAt) caller = stored;
+    }
     if (!caller) throw new Error(`Caller agent ${callerAgentId} not found`);
-    return caller.workspaceId;
+    return {
+      background: inheritWorkspaceBackground(background, caller),
+      callerWorkspaceId: caller.workspaceId,
+    };
   }
 }

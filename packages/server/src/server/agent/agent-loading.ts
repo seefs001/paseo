@@ -41,6 +41,7 @@ export interface EnsureAgentLoadedDeps {
   agentStorage: AgentStorage;
   validProviders?: Iterable<AgentProvider>;
   broadcastTimeline?: boolean;
+  purpose?: "history" | "interactive";
   logger: Logger;
 }
 
@@ -112,13 +113,14 @@ export async function ensureAgentLoaded(
       }
 
       const handle = toAgentPersistenceHandle(validProviders, record.persistence);
+      const purpose = deps.purpose ?? (record.archivedAt ? "history" : undefined);
       if (handle) {
         snapshot = await deps.agentManager.resumeAgentFromPersistence(
           handle,
           buildConfigOverrides(record),
           agentId,
           { ...extractTimestamps(record), attention: extractAttention(record) },
-          record.archivedAt ? { purpose: "history" } : undefined,
+          purpose ? { purpose } : undefined,
         );
         deps.logger.info({ agentId, provider: record.provider }, "Agent resumed from persistence");
       } else {
@@ -135,6 +137,7 @@ export async function ensureAgentLoaded(
           labels: record.labels,
           workspaceId: record.workspaceId,
           owner: record.owner,
+          background: record.background,
           env: record.launchEnv,
         });
         deps.logger.info(
