@@ -3,6 +3,7 @@ import { posix, win32 } from "node:path";
 export interface ObserverPaths {
   isInside(root: string, path: string): boolean;
   normalizeIgnoredRoots(root: string, paths: string[]): string[];
+  createIgnoreMatcher(roots: string[]): (path: string) => boolean;
   collapse(paths: string[]): string[];
   isExpectedWatchDisappearance(error: unknown): boolean;
 }
@@ -20,6 +21,21 @@ export function createObserverPaths(platform: NodeJS.Platform): ObserverPaths {
     return (
       comparedPath === comparedRoot || comparedPath.startsWith(`${comparedRoot}${pathApi.sep}`)
     );
+  }
+
+  function createIgnoreMatcher(roots: string[]): (path: string) => boolean {
+    const ignored = new Set(roots.map(comparable));
+    return (path) => {
+      if (ignored.size === 0) return false;
+      let candidate = comparable(path);
+      // Match ancestors instead of checking thousands of excluded roots for every file.
+      while (!ignored.has(candidate)) {
+        const separator = candidate.lastIndexOf(pathApi.sep);
+        if (separator === -1) return false;
+        candidate = candidate.slice(0, separator);
+      }
+      return true;
+    };
   }
 
   function collapse(paths: string[]): string[] {
@@ -50,6 +66,7 @@ export function createObserverPaths(platform: NodeJS.Platform): ObserverPaths {
   return {
     isInside,
     collapse,
+    createIgnoreMatcher,
     normalizeIgnoredRoots(root, paths) {
       const inside = paths
         .map((path) => pathApi.resolve(path))

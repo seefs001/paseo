@@ -93,6 +93,18 @@ const DEGRADED_GIT_POLL_MAX_INTERVAL_MS = 60_000;
 // a couple of `git ls-files` runs rather than one per event.
 const WORKING_TREE_IGNORE_REFRESH_QUIET_MS = 300;
 const WORKING_TREE_IGNORE_REFRESH_MAX_DELAY_MS = 2_000;
+// Renamed dependency backups must not re-enter observation. Git only excludes
+// untracked content, so tracked dependency fixtures remain observable.
+const WORKING_TREE_DEPENDENCY_EXCLUDE_ARGS = [
+  "--exclude=node_modules/",
+  "--exclude=*-node_modules/",
+  "--exclude=node_modules.old/",
+  "--exclude=node_modules.bak/",
+  "--exclude=node_modules.backup/",
+  "--exclude=node_modules-old/",
+  "--exclude=node_modules-backup/",
+  "--exclude=node_modules_backup/",
+];
 // `knownDirectories` is a memoisation of the fast path in
 // `noteWorkingTreeDirectories`, not authoritative state — every entry is
 // rediscoverable from a later watcher event under the same path. Deletion
@@ -3203,7 +3215,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const ignored = new Set<string>();
     try {
       const result = await this.deps.runGitCommand(
-        ["ls-files", "-o", "-i", "--directory", "--exclude-standard"],
+        [
+          "ls-files",
+          "-o",
+          "-i",
+          "--directory",
+          "--exclude-standard",
+          ...WORKING_TREE_DEPENDENCY_EXCLUDE_ARGS,
+        ],
         { cwd: rootPath, env: READ_ONLY_GIT_ENV },
       );
       for (const raw of result.stdout.split("\n")) {

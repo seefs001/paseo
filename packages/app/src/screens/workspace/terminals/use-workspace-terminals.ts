@@ -175,6 +175,7 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
       onTerminalCreateFailed(error instanceof Error ? error.message : String(error));
     },
   });
+  const { mutate: mutateCreateTerminal, isPending: isCreatingTerminal } = createMutation;
   const killMutation = useMutation({
     mutationFn: async (terminalId: string) => {
       if (!client) {
@@ -193,10 +194,10 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
       return;
     }
 
-    if (canCreateNow && !createMutation.isPending) {
+    if (canCreateNow && !isCreatingTerminal) {
       const pendingInput = pendingCreateInput;
       setPendingCreateInput(null);
-      createMutation.mutate(pendingInput);
+      mutateCreateTerminal(pendingInput);
       return;
     }
 
@@ -206,7 +207,8 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     }
   }, [
     canCreateNow,
-    createMutation,
+    isCreatingTerminal,
+    mutateCreateTerminal,
     hasHydratedWorkspaces,
     isMissingWorkspaceDirectory,
     onWorkspacePathUnavailable,
@@ -215,12 +217,12 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
 
   const createTerminal = useCallback(
     (createInput: PendingTerminalCreateInput) => {
-      if (createMutation.isPending || pendingCreateInput) {
+      if (isCreatingTerminal || pendingCreateInput) {
         return;
       }
 
       if (canCreateNow) {
-        createMutation.mutate(createInput);
+        mutateCreateTerminal(createInput);
         return;
       }
 
@@ -234,7 +236,8 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     },
     [
       canCreateNow,
-      createMutation,
+      isCreatingTerminal,
+      mutateCreateTerminal,
       hasHydratedWorkspaces,
       isMissingWorkspaceDirectory,
       onTerminalCreateQueued,
