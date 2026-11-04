@@ -2045,6 +2045,33 @@ function createToolCatalog(
   );
 
   registerTool(
+    "read_artifact",
+    {
+      title: "Read artifact",
+      description:
+        "Read the stored content of one artifact by id, from any workspace on this host, including archived ones. Returns the entry, `encoding` (`base64` for images, `utf8` otherwise) and `content`. Read the content before you cite an artifact as evidence; its listing alone proves nothing.",
+      inputSchema: { artifactId: z.string() },
+      outputSchema: {
+        artifact: ArtifactOutputSchema,
+        encoding: z.enum(["utf8", "base64"]),
+        content: z.string(),
+      },
+    },
+    async ({ artifactId }: { artifactId: string }) => {
+      const { artifact, content } = await artifacts().read(artifactId);
+      const encoding = artifact.media === "image" ? "base64" : "utf8";
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          artifact,
+          encoding,
+          content: content.toString(encoding),
+        }),
+      };
+    },
+  );
+
+  registerTool(
     "list_artifacts",
     {
       title: "List artifacts",

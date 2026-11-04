@@ -195,6 +195,7 @@ Paseo 发送 `POST`，请求头为 `Content-Type: application/json`：
 | `request_decision`   | 请用户做选择。`title` 是问题，`brief` 是 Markdown 简报（发生了什么、已经准备了什么、每个选项会带来什么、你的建议），`options` 是 2 到 8 个纯文本标签或 `{ id, label }`。可选 `goalId` 和 `taskId`。立即返回决定的 ID。                                                                                                                         |
 | `register_artifact`  | 把文件加入调用方工作区的成果集合，或更新已有成果。传 `path`（工作区内）或 `content` 加 `fileName`，以及 `title` 和 `kind`（`plan`、`notes`、`diagram`、`prototype`、`screenshot`、`report`、`result`、`summary`）。daemon 保存一份副本。同一 `path` 或传 `artifactId` 会更新原条目并提升版本。`goalId` 和 `taskIds` 默认是与工作区关联的任务。 |
 | `list_artifacts`     | 调用方工作区的成果；传 `goalId` 时列出服务该目标的全部成果，包括已归档工作区的成果。                                                                                                                                                                                                                                                           |
+| `read_artifact`      | 按 ID 读取一条成果的留存内容，包括已归档工作区的成果：返回条目、`encoding`（图片为 `base64`，其余为 `utf8`）和 `content`。把成果当证据前先读正文。                                                                                                                                                                                             |
 
 调用方只主理一个目标时，`create_board_task`、`plan_board_tasks` 和 `request_decision` 的 `goalId` 默认就是这个目标。项目默认是调用方工作区所属的项目。
 

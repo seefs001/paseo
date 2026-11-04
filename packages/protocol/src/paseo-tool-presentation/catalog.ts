@@ -254,6 +254,12 @@ export const PASEO_TOOL_CATALOG = {
       outputFields: ["artifact"],
     },
   },
+  read_artifact: {
+    label: "Read artifact",
+    completedLabel: "Read artifact",
+    context: field("artifactId"),
+    detail: { inputOrder: ["artifactId"], outputFields: ["artifact", "encoding"] },
+  },
   list_artifacts: {
     label: "List artifacts",
     completedLabel: "Listed artifacts",

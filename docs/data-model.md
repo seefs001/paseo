@@ -680,8 +680,7 @@ Entries are workspace-owned: `workspaceId` is the caller's workspace, and the co
 only that workspace's entries, so two workspaces on one folder never see each other's
 ([architecture.md](architecture.md#right-sidebar-boundary-directory-backed-vs-workspace-owned)).
 Re-registering keeps the id and raises `revision` when the caller passes `artifactId` or the same
-`sourcePath` in the same workspace. Removing drops the entry and the daemon's copy, never the
-workspace file. Content is capped at 10 MiB.
+`sourcePath` in the same workspace. Removing takes the entry out of the collection and keeps every file: the daemon's copy may be the only one left after an archive. Content is capped at 10 MiB.
 
 ### Desk settings and snoozes
 

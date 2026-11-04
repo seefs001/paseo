@@ -15,6 +15,7 @@ export const PASEO_AGENT_TOOL_NAMES = [
   "request_decision",
   "register_artifact",
   "list_artifacts",
+  "read_artifact",
   "create_workspace",
   "list_workspaces",
   "archive_workspace",

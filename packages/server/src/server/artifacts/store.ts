@@ -144,12 +144,14 @@ export class ArtifactStore {
     });
   }
 
-  /** Drops the entry and the daemon's copy. The workspace file it came from is never touched. */
+  /**
+   * Takes the entry out of the collection. The daemon's stored copy stays on disk, and so does
+   * the workspace file it came from: after an archive that copy may be the only one left.
+   */
   remove(artifactId: string): Promise<void> {
     return this.enqueue(async () => {
       this.requireArtifact(artifactId);
       await this.commit((artifacts) => artifacts.delete(artifactId));
-      await rm(join(this.root, "files", artifactId), { recursive: true, force: true });
       this.announce({ kind: "remove", artifactId });
     });
   }
@@ -220,15 +222,25 @@ function nextArtifact(
     title: input.title.trim().slice(0, TITLE_MAX_LENGTH),
     fileName,
     media: artifactMediaFor(fileName),
-    sourcePath: input.sourcePath,
-    sourceAgentId: input.sourceAgentId ?? previous?.sourceAgentId ?? null,
-    sourceMessageId: input.sourceMessageId ?? previous?.sourceMessageId ?? null,
+    ...artifactSource(input, previous),
     goalId: input.goalId ?? previous?.goalId ?? null,
     taskIds: input.taskIds.length > 0 ? input.taskIds : (previous?.taskIds ?? []),
     revision: (previous?.revision ?? 0) + 1,
     size: input.content.byteLength,
     createdAt: previous?.createdAt ?? timestamp,
     updatedAt: timestamp,
+  };
+}
+
+function artifactSource(
+  input: ArtifactRegisterInput,
+  previous: Artifact | null,
+): Pick<Artifact, "sourcePath" | "sourceAgentId" | "sourceMessageId"> {
+  return {
+    // Inline updates keep the path so registering the file still matches this entry.
+    sourcePath: input.sourcePath ?? previous?.sourcePath ?? null,
+    sourceAgentId: input.sourceAgentId ?? previous?.sourceAgentId ?? null,
+    sourceMessageId: input.sourceMessageId ?? previous?.sourceMessageId ?? null,
   };
 }
 
