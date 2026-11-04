@@ -91,6 +91,7 @@ import {
 import type { PiRuntime, PiRuntimeSession, PiStartSessionInput } from "./runtime.js";
 import type {
   PiAgentSessionEvent,
+  PiAssistantMessageEvent,
   PiAgentMessage,
   PiImageContent,
   PiModel,
@@ -1506,6 +1507,9 @@ export class PiRpcAgentSession implements AgentSession {
 
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly activeToolCalls = new Map<string, PiTrackedToolCall>();
+  // Tool calls the model is still generating (toolcall_start..tool_execution_start). Shown as
+  // running so long Write/Bash argument streaming is visible before execution starts.
+  private readonly draftToolCalls = new Map<string, PiTrackedToolCall>();
   private readonly pendingExtensionUiRequests = new Map<string, AgentPermissionRequest>();
   private readonly extensionHost: ReturnType<typeof createPiExtensionHost>;
   private activeTurnId: string | null = null;
@@ -2183,6 +2187,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.activeNoTurnPromptText = null;
     this.activePromptRequestId = null;
     this.pendingNoTurnOutputs.splice(0, this.pendingNoTurnOutputs.length);
+    this.draftToolCalls.clear();
   }
 
   private emitBufferedNoTurnOutputs(turnId: string): void {
@@ -2658,6 +2663,7 @@ export class PiRpcAgentSession implements AgentSession {
         return;
       case "tool_execution_start": {
         const toolCall = parseToolArgs(event.toolName, event.args);
+        this.draftToolCalls.delete(event.toolCallId);
         this.activeToolCalls.set(event.toolCallId, toolCall);
         const request = this.extensionHost.onToolStart(
           {
@@ -2875,6 +2881,13 @@ export class PiRpcAgentSession implements AgentSession {
       });
       return;
     }
+    if (
+      event.assistantMessageEvent.type === "toolcall_start" ||
+      event.assistantMessageEvent.type === "toolcall_end"
+    ) {
+      this.handleToolCallDraft(event.assistantMessageEvent);
+      return;
+    }
     if (event.assistantMessageEvent.type === "thinking_delta") {
       this.emit({
         type: "timeline",
@@ -2886,6 +2899,52 @@ export class PiRpcAgentSession implements AgentSession {
         },
       });
     }
+  }
+
+  private handleToolCallDraft(
+    event: Extract<PiAssistantMessageEvent, { type: "toolcall_start" | "toolcall_end" }>,
+  ): void {
+    // Partial JSON from toolcall_delta is never parsed; args appear once toolcall_end delivers
+    // the complete arguments, and tool_execution_start later updates the same callId.
+    const id = event.type === "toolcall_start" ? event.id : event.toolCall?.id;
+    const toolName = event.type === "toolcall_start" ? event.toolName : event.toolCall?.name;
+    if (!id || !toolName || this.activeToolCalls.has(id)) {
+      return;
+    }
+    const toolCall = parseToolArgs(
+      toolName,
+      event.type === "toolcall_end" ? (event.toolCall?.arguments ?? null) : null,
+    );
+    this.draftToolCalls.set(id, toolCall);
+    this.emitToolCallEvent({
+      toolCallId: id,
+      toolCall,
+      status: "running",
+      result: null,
+      error: null,
+    });
+  }
+
+  private cancelDraftToolCalls(turnId: string | undefined): void {
+    for (const [callId, toolCall] of this.draftToolCalls) {
+      const detail = mapToolDetail(toolCall, null);
+      if (!detail) continue;
+      this.emit({
+        type: "timeline",
+        provider: this.provider,
+        turnId,
+        item: {
+          type: "tool_call",
+          callId,
+          name: toolCall.toolName,
+          detail,
+          metadata: buildPiToolCallMetadata(toolCall.toolName, toolCall.args),
+          status: "canceled",
+          error: null,
+        },
+      });
+    }
+    this.draftToolCalls.clear();
   }
 
   private handleMessageStart(event: Extract<PiAgentSessionEvent, { type: "message_start" }>): void {
@@ -2900,6 +2959,10 @@ export class PiRpcAgentSession implements AgentSession {
   ): void {
     if (event.message.role === "assistant") {
       this.activeAssistantMessageId = null;
+      // Drafts only execute when the message ends with tool use; otherwise they never will.
+      if (event.message.stopReason && event.message.stopReason !== "toolUse") {
+        this.cancelDraftToolCalls(turnId);
+      }
       return;
     }
     if (event.message.role === "custom") {
