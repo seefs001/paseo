@@ -5142,12 +5142,31 @@ export class DaemonClient {
     );
   }
 
+  private supportsForgeStatusObservation(): boolean {
+    // COMPAT(forgeStatusObservation): added after v0.15.0; remove negotiation after 2027-05-04.
+    return (
+      this.lastServerInfoMessage?.features?.forgeStatusObservation === true &&
+      this.lastServerInfoMessage.features.ownedSubscriptions === true &&
+      this.config.capabilities?.[CLIENT_CAPS.ownedSubscriptions] !== false
+    );
+  }
+
+  observeCheckoutPrStatus(cwd: string): OwnedSubscription<CheckoutPrStatusPayload> | null {
+    if (!this.supportsForgeStatusObservation()) return null;
+    return this.observe("checkout_pr_status_response", {
+      type: "checkout_pr_status_request",
+      cwd,
+      subscribe: {},
+    });
+  }
+
   async checkoutPrStatus(cwd: string, requestId?: string): Promise<CheckoutPrStatusPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
         type: "checkout_pr_status_request",
         cwd,
+        ...(this.supportsForgeStatusObservation() ? { subscribe: false } : {}),
       },
       responseType: "checkout_pr_status_response",
     });

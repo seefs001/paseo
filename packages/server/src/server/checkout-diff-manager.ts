@@ -374,7 +374,7 @@ export class CheckoutDiffManager {
       }
       this.rememberWorkspaceSnapshot(target, snapshot);
       const workspaceSubscription = this.workspaceGitService.registerWorkspace(
-        { cwd: target.cwd },
+        { cwd: target.cwd, includeForge: false },
         (nextSnapshot) => this.rememberWorkspaceSnapshot(target, nextSnapshot),
       );
       if (this.targets.get(target.key) !== target || target.listeners.size === 0) {

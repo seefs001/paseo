@@ -3,7 +3,10 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 
 export interface PullRequestConnection {
-  client: Pick<DaemonClient, "checkoutPrStatus" | "pullRequestTimeline"> | null;
+  client:
+    | (Pick<DaemonClient, "checkoutPrStatus" | "pullRequestTimeline"> &
+        Partial<Pick<DaemonClient, "observeCheckoutPrStatus">>)
+    | null;
   isConnected: boolean;
 }
 const ConnectionContext = createContext<((serverId: string) => PullRequestConnection) | null>(null);

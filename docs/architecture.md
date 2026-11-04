@@ -80,9 +80,17 @@ not retain non-Git directories.
 Workspace git and forge runtime data belongs to one daemon-level, directory-keyed store.
 Workspace descriptors, checkout diff subscriptions, and script metadata read the last known
 snapshot from that store, so reconnecting clients receive it before refresh completes.
-Refcounted git watches feed the store through snapshot-updated events; their lifetime controls
-refresh only. Session cleanup and workspace archive retain the data. Removing the final active
-workspace for a directory clears it. The store lives in memory and resets on daemon restart.
+Local Git watches feed the store without fetching remotes or querying PR status. Local reads and
+forge refreshes run independently, so network latency cannot hold a local snapshot or its refresh
+slot. Local-only snapshots must not populate the client PR cache as a confirmed empty result.
+
+Visible PR consumers own refcounted forge observations. The last release stops PR polling and
+repository fetch timers without clearing cached data. Automatic archive owns separate observations
+for managed workspaces only while enabled; it does not depend on an open app. Older clients retain
+remote observation after their first explicit PR read until their connection closes.
+
+Session cleanup and workspace archive retain store data. Removing the final active workspace for a
+directory clears it. The store lives in memory and resets on daemon restart.
 
 **Key modules:**
 

@@ -2940,6 +2940,7 @@ export const CheckoutPrStatusRequestSchema = z.object({
   type: z.literal("checkout_pr_status_request"),
   cwd: z.string(),
   requestId: z.string(),
+  subscribe: z.union([z.literal(false), z.object({})]).optional(),
 });
 
 export const PullRequestTimelineRequestSchema = z.object({
@@ -4401,6 +4402,7 @@ export const ServerInfoStatusPayloadSchema = z
         ownedSubscriptions: z.boolean().optional(),
         binaryChunkingV1: z.boolean().optional(),
         workspaceSetupObservation: z.boolean().optional(),
+        forgeStatusObservation: z.boolean().optional(),
         workspaceSortTimes: z.boolean().optional(),
         // COMPAT(canonicalSubmittedPrompts): added in v0.2.6, remove gate after 2027-01-30.
         canonicalSubmittedPrompts: z.boolean().optional(),
@@ -6288,6 +6290,7 @@ export const ForgeAuthStateSchema = z.unknown().optional();
 
 const CheckoutPrStatusPayloadSchema = z.object({
   cwd: z.string(),
+  subscriptionId: z.string().optional(),
   status: CheckoutPrStatusSchema.nullable(),
   githubFeaturesEnabled: z.boolean(),
   // COMPAT(forgeAuthState): added in v0.2.0-beta.1. Remove the legacy

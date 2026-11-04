@@ -1,5 +1,5 @@
 import type pino from "pino";
-import type { SessionDelivery } from "../owned-subscriptions/index.js";
+import type { OwnedSubscription, SessionDelivery } from "../owned-subscriptions/index.js";
 import { isAbsolute } from "node:path";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import { getForgeDefinitionOrNeutral } from "@getpaseo/protocol/forge-manifest";
@@ -157,6 +157,7 @@ export class CheckoutSession {
   private readonly worktreesRoot: string | undefined;
   private readonly logger: pino.Logger;
   private readonly statusUpdateFingerprints = new Map<string, string>();
+  private readonly legacyPrObservations = new WeakMap<object, Map<string, OwnedSubscription>>();
 
   constructor(options: CheckoutSessionOptions) {
     this.host = options.host;
@@ -238,7 +239,9 @@ export class CheckoutSession {
     const resolvedCwd = expandTilde(cwd);
 
     try {
-      const snapshot = await this.workspaceGitService.getSnapshot(resolvedCwd);
+      const snapshot = await this.workspaceGitService.getSnapshot(resolvedCwd, {
+        includeForge: false,
+      });
       this.host.emit({
         type: "checkout_status_response",
         payload: buildCheckoutStatusPayloadFromSnapshot({
@@ -516,6 +519,10 @@ export class CheckoutSession {
     }
   }
 
+  private canEmitForgeStatus(snapshot: WorkspaceGitRuntimeSnapshot): boolean {
+    return snapshot.forge.authState !== "no_remote" || !snapshot.git.hasRemote;
+  }
+
   emitStatusUpdate(cwd: string, snapshot: WorkspaceGitRuntimeSnapshot): void {
     try {
       const requestId = `subscription:${cwd}`;
@@ -525,11 +532,11 @@ export class CheckoutSession {
           requestId,
           snapshot,
         }),
-        prStatus: buildCheckoutPrStatusPayloadFromSnapshot({
-          cwd,
-          requestId,
-          snapshot,
-        }),
+        ...(this.canEmitForgeStatus(snapshot)
+          ? {
+              prStatus: buildCheckoutPrStatusPayloadFromSnapshot({ cwd, requestId, snapshot }),
+            }
+          : {}),
       };
       const fingerprint = JSON.stringify(payload);
       if (this.statusUpdateFingerprints.get(cwd) === fingerprint) return;
@@ -788,7 +795,7 @@ export class CheckoutSession {
     const { cwd, requestId } = msg;
 
     try {
-      const snapshot = await this.workspaceGitService.getSnapshot(cwd);
+      const snapshot = await this.workspaceGitService.getSnapshot(cwd, { includeForge: false });
       if (!snapshot.git.isGit) {
         throw new Error(`Not a git repository: ${cwd}`);
       }
@@ -850,7 +857,7 @@ export class CheckoutSession {
 
     try {
       if (msg.requireCleanTarget ?? true) {
-        const snapshot = await this.workspaceGitService.getSnapshot(cwd);
+        const snapshot = await this.workspaceGitService.getSnapshot(cwd, { includeForge: false });
         if (snapshot.git.isDirty) {
           throw new Error("Working directory has uncommitted changes.");
         }
@@ -1124,7 +1131,10 @@ export class CheckoutSession {
     operation: "merge" | "auto-merge",
     options?: WorkspaceGitSnapshotOptions,
   ): Promise<CurrentWorkspacePullRequest> {
-    const snapshot = await this.workspaceGitService.getSnapshot(cwd, options);
+    const snapshot = await this.workspaceGitService.getSnapshot(cwd, {
+      ...options,
+      includeForge: true,
+    });
     const pullRequest = snapshot.forge.pullRequest;
     if (!pullRequest || typeof pullRequest.number !== "number") {
       throw new Error(`Unable to determine current change request number for ${operation}`);
@@ -1134,11 +1144,68 @@ export class CheckoutSession {
 
   async handleCheckoutPrStatusRequest(
     msg: Extract<SessionInboundMessage, { type: "checkout_pr_status_request" }>,
+    ownership?: SessionDelivery,
   ): Promise<void> {
     const { cwd, requestId } = msg;
-
+    const resolvedCwd = expandTilde(cwd);
+    // COMPAT(forgeStatusObservation): after v0.15.0; remove implicit interest after 2027-05-04.
+    // Older readers cannot release view-scoped demand, so retain it only after a PR read.
+    const legacySlot = `forge-status-legacy:${resolvedCwd}`;
+    let subscription: ReturnType<WorkspaceGitService["registerWorkspace"]> | null = null;
+    let legacyObservations: Map<string, OwnedSubscription> | undefined;
+    const owner: OwnedSubscription | null =
+      ownership && msg.subscribe !== false
+        ? ownership.begin(
+            "forge-status",
+            undefined,
+            () => {
+              subscription?.unsubscribe();
+              if (owner && legacyObservations?.get(resolvedCwd) === owner) {
+                legacyObservations.delete(resolvedCwd);
+              }
+            },
+            msg.subscribe ? `forge-status:${resolvedCwd}` : legacySlot,
+          )
+        : null;
+    let ready = false;
     try {
-      const snapshot = await this.workspaceGitService.getSnapshot(cwd);
+      if (owner) {
+        subscription = this.workspaceGitService.registerWorkspace(
+          { cwd: resolvedCwd, includeForge: true },
+          (snapshot) => {
+            if (!ready || !msg.subscribe || !this.canEmitForgeStatus(snapshot)) return;
+            owner.emit({
+              type: "checkout_pr_status_response",
+              payload: {
+                ...buildCheckoutPrStatusPayloadFromSnapshot({ cwd, requestId, snapshot }),
+                subscriptionId: owner.responseId,
+              },
+            });
+          },
+        );
+        if (msg.subscribe === undefined) {
+          legacyObservations = this.legacyPrObservations.get(owner.source) ?? new Map();
+          const previous = legacyObservations.get(resolvedCwd);
+          legacyObservations.set(resolvedCwd, owner);
+          this.legacyPrObservations.set(owner.source, legacyObservations);
+          await previous?.release();
+        }
+      }
+      const snapshot = await this.workspaceGitService.getSnapshot(resolvedCwd, {
+        includeForge: true,
+      });
+      if (owner?.signal.aborted) return;
+      if (owner && msg.subscribe) {
+        this.host.emit({
+          type: "checkout_pr_status_response",
+          payload: {
+            ...buildCheckoutPrStatusPayloadFromSnapshot({ cwd, requestId, snapshot }),
+            subscriptionId: owner.responseId,
+          },
+        });
+        ready = true;
+        return;
+      }
       this.host.emit({
         type: "checkout_pr_status_response",
         payload: buildCheckoutPrStatusPayloadFromSnapshot({
@@ -1148,6 +1215,10 @@ export class CheckoutSession {
         }),
       });
     } catch (error) {
+      if (owner) {
+        await owner.release();
+        throw error;
+      }
       const { forge, authState } = await this.resolveForgeContextForError(cwd, error);
       this.host.emit({
         type: "checkout_pr_status_response",

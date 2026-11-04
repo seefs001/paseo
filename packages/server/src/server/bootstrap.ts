@@ -195,6 +195,7 @@ import {
   type ActiveWorkspaceRef,
 } from "./workspace-archive-service.js";
 import { setupAutoArchiveOnMerge } from "./auto-archive-on-merge/index.js";
+import { observeAutoArchiveWorkspaces } from "./auto-archive-on-merge/observation.js";
 import { wrapSessionMessage, type SessionOutboundMessage } from "./messages.js";
 import type { TerminalManager } from "../terminal/terminal-manager.js";
 import { startWorkerTerminalManager } from "../terminal/worker-terminal-manager.js";
@@ -1297,6 +1298,13 @@ export async function createPaseoDaemon(
     emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
   });
 
+  const autoArchiveObservation = observeAutoArchiveWorkspaces({
+    daemonConfigStore,
+    workspaceRegistry,
+    workspaceGitService,
+    logger,
+  });
+
   const createPaseoWorktreeForTools = async (
     input: Parameters<typeof createPaseoWorktreeWorkflow>[1],
     serviceOptions?: Parameters<typeof createPaseoWorktreeWorkflow>[2],
@@ -2180,6 +2188,7 @@ export async function createPaseoDaemon(
     unsubscribeBoardTaskHooks();
     unsubscribeBoardDecisionPush();
     await boardAutopilotRunner.stop();
+    autoArchiveObservation.unsubscribe();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();
     scriptHealthMonitor.stop();

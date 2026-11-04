@@ -54,7 +54,7 @@ export function createGitMutationService(deps: {
 
   async function isWorkingTreeDirty(cwd: string): Promise<boolean> {
     try {
-      const snapshot = await workspaceGitService.getSnapshot(cwd);
+      const snapshot = await workspaceGitService.getSnapshot(cwd, { includeForge: false });
       return snapshot.git.isDirty === true;
     } catch (error) {
       throw new Error(`Unable to inspect git status for ${cwd}: ${getErrorMessage(error)}`, {
@@ -81,7 +81,7 @@ export function createGitMutationService(deps: {
       workspaceGitService.invalidateForge(cwd);
     }
     try {
-      await workspaceGitService.getSnapshot(cwd, { force: true, reason });
+      await workspaceGitService.getSnapshot(cwd, { force: true, includeForge: false, reason });
     } catch (error) {
       logger.warn(
         { err: error, cwd, reason },

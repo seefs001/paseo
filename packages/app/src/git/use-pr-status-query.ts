@@ -1,6 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { usePullRequestConnection } from "@/git/pull-request-connection";
+import { useRetainedPanelActive } from "@/components/retained-panel";
+import { useAppVisible } from "@/hooks/use-app-visible";
+import {
+  usePullRequestConnection,
+  type PullRequestConnection,
+} from "@/git/pull-request-connection";
 import { checkoutPrStatusQueryKey } from "@/git/query-keys";
 import { normalizeForge } from "@/git/forge";
 import { selectPrHintFromStatus, type PrHint } from "@/git/pr-hint";
@@ -10,6 +16,7 @@ interface UseCheckoutPrStatusQueryOptions {
   serverId: string;
   cwd: string;
   enabled?: boolean;
+  observe?: boolean;
 }
 
 export type { CheckoutPrStatusPayload } from "@/git/pr-status";
@@ -19,26 +26,68 @@ function selectWorkspacePrHint(payload: CheckoutPrStatusPayload): PrHint | null 
   return selectPrHintFromStatus(payload.status, payload.forge);
 }
 
+interface PrStatusObservationOptions extends Required<UseCheckoutPrStatusQueryOptions> {
+  connection: PullRequestConnection;
+}
+
+function usePrStatusObservation({
+  connection,
+  serverId,
+  cwd,
+  enabled,
+  observe,
+}: PrStatusObservationOptions) {
+  const queryClient = useQueryClient();
+  const retainedPanelActive = useRetainedPanelActive();
+  const appVisible = useAppVisible();
+  const queryEnabled = enabled && retainedPanelActive && appVisible;
+  const { client, isConnected } = connection;
+
+  useEffect(() => {
+    if (!observe || !queryEnabled || !isConnected || !cwd || !client?.observeCheckoutPrStatus)
+      return;
+    const observation = client.observeCheckoutPrStatus(cwd);
+    if (!observation) return;
+    const receive = (payload: Parameters<typeof normalizeCheckoutPrStatusPayload>[0]) => {
+      queryClient.setQueryData(
+        checkoutPrStatusQueryKey(serverId, cwd),
+        normalizeCheckoutPrStatusPayload(payload),
+      );
+    };
+    observation.subscribe({
+      snapshot: receive,
+      update: (message) => {
+        if (message.type === "checkout_pr_status_response") receive(message.payload);
+      },
+    });
+    return () => {
+      void observation.release();
+    };
+  }, [client, isConnected, observe, queryEnabled, serverId, cwd, queryClient]);
+
+  return queryEnabled;
+}
+
 export function useCheckoutPrStatusQuery({
   serverId,
   cwd,
   enabled = true,
+  observe = true,
 }: UseCheckoutPrStatusQueryOptions) {
   const { t } = useTranslation();
-  const { client, isConnected } = usePullRequestConnection(serverId);
+  const connection = usePullRequestConnection(serverId);
+  const { client, isConnected } = connection;
+  const queryEnabled = usePrStatusObservation({ connection, serverId, cwd, enabled, observe });
 
   const query = useQuery({
     queryKey: checkoutPrStatusQueryKey(serverId, cwd),
     queryFn: async () => {
-      if (!client) {
-        throw new Error(t("common.errors.daemonClientUnavailable"));
-      }
+      if (!client) throw new Error(t("common.errors.daemonClientUnavailable"));
       return normalizeCheckoutPrStatusPayload(await client.checkoutPrStatus(cwd));
     },
-    enabled: !!client && isConnected && !!cwd && enabled,
+    enabled: !!client && isConnected && !!cwd && queryEnabled,
     staleTime: Infinity,
-    // Refetch on mount only after explicit invalidation (e.g. reconnect) — see
-    // useCheckoutStatusQuery for the rationale.
+    // Explicit invalidation repairs missed push updates after reconnect.
     refetchOnMount: true,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
@@ -49,8 +98,6 @@ export function useCheckoutPrStatusQuery({
     githubFeaturesEnabled: query.data?.githubFeaturesEnabled ?? true,
     authState: query.data?.authState,
     forge: normalizeForge(query.data?.forge),
-    // Null until a response arrives, so callers that can infer the forge from
-    // the remote URL (e.g. web-URL grammar) don't act on the github default.
     resolvedForge: query.data === undefined ? null : normalizeForge(query.data.forge),
     payloadError: query.data?.error ?? null,
     isLoading: query.isLoading,
@@ -64,22 +111,21 @@ export function useWorkspacePrHint({
   serverId,
   cwd,
   enabled = true,
+  observe = true,
 }: UseCheckoutPrStatusQueryOptions): PrHint | null {
   const { t } = useTranslation();
-  const { client, isConnected } = usePullRequestConnection(serverId);
+  const connection = usePullRequestConnection(serverId);
+  const { client, isConnected } = connection;
+  const queryEnabled = usePrStatusObservation({ connection, serverId, cwd, enabled, observe });
 
   const query = useQuery<CheckoutPrStatusPayload, Error, PrHint | null>({
     queryKey: checkoutPrStatusQueryKey(serverId, cwd),
     queryFn: async () => {
-      if (!client) {
-        throw new Error(t("common.errors.daemonClientUnavailable"));
-      }
+      if (!client) throw new Error(t("common.errors.daemonClientUnavailable"));
       return normalizeCheckoutPrStatusPayload(await client.checkoutPrStatus(cwd));
     },
-    enabled: !!client && isConnected && !!cwd && enabled,
+    enabled: !!client && isConnected && !!cwd && queryEnabled,
     staleTime: Infinity,
-    // Refetch on mount only after explicit invalidation (e.g. reconnect) — see
-    // useCheckoutStatusQuery for the rationale.
     refetchOnMount: true,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,

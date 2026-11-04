@@ -245,7 +245,7 @@ export class WorkspaceCreation {
     );
     const descriptor = await effects.directoryWorkspaceCreated(workspace, request);
     void this.deps.workspaceGitService
-      .getSnapshot(workspace.cwd, { force: true, includeForge: true, reason: "open_project" })
+      .getSnapshot(workspace.cwd, { force: true, includeForge: false, reason: "open_project" })
       .catch((error) => {
         this.deps.logger.warn(
           { err: error, cwd: workspace.cwd },

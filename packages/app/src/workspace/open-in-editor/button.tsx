@@ -26,7 +26,7 @@ import { resolveWorkspaceFilePaths, type WorkspaceFileLocation } from "@/workspa
 import { planWorkspaceOpenTargets } from "@/workspace/open-in-editor/planner";
 import type { Theme } from "@/styles/theme";
 import { ForgeBrandIcon } from "@/git/forge-icon";
-import { getForgePresentation } from "@/git/forge";
+import { forgeFromRemoteUrl, getForgePresentation } from "@/git/forge";
 import { CONTROL_HEIGHTS, HEADER_CONTROL_HEIGHT } from "@/components/ui/control-geometry";
 import { extraMutedIconColorMapping } from "@/components/ui/icon-button-chrome";
 
@@ -119,6 +119,9 @@ export function WorkspaceOpenInEditorButton({
   const { resolvedForge } = useCheckoutPrStatusQuery({
     serverId,
     cwd: shouldQueryCheckout ? cwd : "",
+    enabled:
+      checkoutStatus?.isGit === true && forgeFromRemoteUrl(checkoutStatus.remoteUrl) === null,
+    observe: false,
   });
 
   const targets = useMemo<OpenTarget[]>(

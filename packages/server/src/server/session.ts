@@ -3218,7 +3218,7 @@ export class Session {
       case "checkout.github.get_check_details.request":
         return this.checkoutSession.handleCheckoutForgeGetCheckDetailsRequest(msg);
       case "checkout_pr_status_request":
-        return this.checkoutSession.handleCheckoutPrStatusRequest(msg);
+        return this.checkoutSession.handleCheckoutPrStatusRequest(msg, this.delivery);
       case "pull_request_timeline_request":
         return this.checkoutSession.handlePullRequestTimelineRequest(msg);
       case "forge.search.request":
@@ -7138,7 +7138,7 @@ export class Session {
       void this.workspaceGitService
         .getSnapshot(workspace.cwd, {
           force: true,
-          includeForge: true,
+          includeForge: false,
           reason: "open_project",
         })
         .catch((error) => {
