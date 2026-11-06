@@ -18,6 +18,10 @@ import { DaemonLinkEndpoint, VirtualHostSocket } from "./connected-hosts/index.j
 import { ConnectedHosts } from "./connected-hosts/index.js";
 import { stat } from "node:fs/promises";
 import type { BoardDecision, CreationSnapshot } from "@getpaseo/protocol/messages";
+import {
+  createWorkspaceBaseBranchService,
+  type WorkspaceBaseBranchService,
+} from "./session/workspace-base-branch/service.js";
 import { CreationService } from "./creation/index.js";
 import { WorkspaceCreation, type WorkspaceCreationEffects } from "./creation/workspace-creation.js";
 import { createDaemonWorkspaceEffects } from "./creation/daemon-workspace-effects.js";
@@ -583,6 +587,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly daemonWorkspaceEffects: WorkspaceCreationEffects;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
+  private readonly workspaceBaseBranch: WorkspaceBaseBranchService;
   private readonly workspaceLabelService: WorkspaceLabelService | null;
   private readonly board: BoardServices | undefined;
   private readonly scheduleService: ScheduleService;
@@ -775,12 +780,18 @@ export class VoiceAssistantWebSocketServer {
     this.checkoutDiffManager = requiredServices.checkoutDiffManager;
     this.github = github ?? createGitHubService();
     this.workspaceGitService = workspaceGitService ?? createFallbackWorkspaceGitService();
+    this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
+    this.workspaceBaseBranch = createWorkspaceBaseBranchService({
+      paseoHome,
+      worktreesRoot: this.worktreesRoot,
+      workspaceRegistry: this.workspaceRegistry,
+      workspaceGitService: this.workspaceGitService,
+    });
     this.workspaceAutoName = workspaceAutoName;
     this.downloadTokenStore = downloadTokenStore;
     this.paseoHome = paseoHome;
     this.connectedHosts = new ConnectedHosts(paseoHome, { serverId, label: getHostName() });
     this.passwordHash = auth?.password;
-    this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
     this.daemonConfigStore = daemonConfigStore;
     this.mcpBaseUrl = mcpBaseUrl;
     this.assignOptionalServices({
@@ -1816,6 +1827,7 @@ export class VoiceAssistantWebSocketServer {
       startBoardTask: (input) => this.startBoardTask(input),
       projectRegistry: this.projectRegistry,
       workspaceRegistry: this.workspaceRegistry,
+      workspaceBaseBranch: this.workspaceBaseBranch,
       workspaceLabelService: this.workspaceLabelService ?? undefined,
       board: this.board,
       directorySync: this.directorySync,
@@ -2175,6 +2187,7 @@ export class VoiceAssistantWebSocketServer {
         backgroundWorkspaces: true,
         // COMPAT(backgroundAgents): added in v0.15.0; remove gate after 2027-05-03.
         backgroundAgents: true,
+        workspaceBaseBranch: true,
         // COMPAT(directorySync): added in v0.3.x, remove gate after 2027-02-12.
         directorySync: true,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.

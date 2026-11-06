@@ -293,6 +293,7 @@ interface ProviderSummary {
 }
 
 const WorkspaceAutomationSummarySchema = z.object({
+  parentWorkspaceId: z.string().optional(),
   workspaceId: z.string(),
   projectId: z.string(),
   cwd: z.string(),
@@ -313,6 +314,7 @@ function toWorkspaceAutomationSummary(workspace: PersistedWorkspaceRecord) {
     title: workspace.title,
     background: workspace.background,
     residentAt: workspace.residentAt ?? null,
+    parentWorkspaceId: workspace.parentWorkspaceId,
   };
 }
 
