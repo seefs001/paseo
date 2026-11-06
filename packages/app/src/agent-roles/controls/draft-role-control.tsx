@@ -11,6 +11,7 @@ import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/com
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
+import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
@@ -53,15 +54,16 @@ function DraftRoleGlyph({
   isBlocked,
   hasRole,
   role,
+  size,
 }: {
   isBlocked: boolean;
   hasRole: boolean;
   role: AgentRole | null;
+  size: number;
 }): ReactElement {
-  if (isBlocked) return <ThemedUserRound size={ICON_SIZE.sm} uniProps={dangerColorMapping} />;
-  if (hasRole)
-    return <AgentProfileGlyph icon={role?.icon} color={role?.color} size={ICON_SIZE.sm} />;
-  return <ThemedUserRound size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
+  if (isBlocked) return <ThemedUserRound size={size} uniProps={dangerColorMapping} />;
+  if (hasRole) return <AgentProfileGlyph icon={role?.icon} color={role?.color} size={size} />;
+  return <ThemedUserRound size={size} uniProps={mutedColorMapping} />;
 }
 
 function RoleOption({
@@ -128,6 +130,7 @@ export function DraftAgentRoleControl({
 }: DraftAgentRoleControlProps): ReactElement | null {
   const { t } = useTranslation();
   const router = useRouter();
+  const { glyphs } = useComposerControlLayout();
   const anchorRef = useRef<View>(null);
   const [open, setOpen] = useState(false);
   const { roles, isSupported } = useAgentRoles(serverId);
@@ -238,6 +241,7 @@ export function DraftAgentRoleControl({
 
   if (!isSupported || !serverId || roles === null) return null;
 
+  const glyphRole = showLabel && selectedRoleId ? "label" : "icon";
   const roleName = selectedRole?.name ?? selectedRoleId ?? "";
   let tooltip = t("agentControls.role.title");
   if (isBlocked) tooltip = t("agentControls.role.unsupportedProvider");
@@ -259,8 +263,9 @@ export function DraftAgentRoleControl({
               accessibilityRole="button"
               accessibilityLabel={tooltip}
             >
-              <ComposerToolbarGlyph size={ICON_SIZE.sm}>
+              <ComposerToolbarGlyph role={glyphRole}>
                 <DraftRoleGlyph
+                  size={glyphs[glyphRole].size}
                   isBlocked={isBlocked}
                   hasRole={selectedRoleId !== null}
                   role={selectedRole}

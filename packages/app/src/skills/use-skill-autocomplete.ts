@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useFetchQuery } from "@/data/query";
 import { useTranslation } from "react-i18next";
-import type { AutocompleteOption } from "@/components/ui/autocomplete";
+import type { AutocompleteOption, AutocompleteStatus } from "@/components/ui/autocomplete";
 import type {
   AgentAutocompleteInputSnapshot,
   AgentAutocompleteKeyPressEvent,
@@ -12,6 +12,25 @@ import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { applySkillReplacement, findActiveSkill, rankSkills } from "./autocomplete";
+
+function buildSkillAutocompleteMenu(input: {
+  options: AutocompleteOption[];
+  errorMessage: string | undefined;
+  isLoading: boolean;
+  loadingText: string;
+  emptyText: string;
+}): { options: AutocompleteOption[]; status: AutocompleteStatus | null } {
+  if (input.errorMessage) {
+    return { options: [], status: { kind: "error", title: input.errorMessage } };
+  }
+  if (input.isLoading) {
+    return { options: [], status: { kind: "loading", message: input.loadingText } };
+  }
+  if (input.options.length === 0) {
+    return { options: [], status: { kind: "empty", message: input.emptyText } };
+  }
+  return { options: input.options, status: null };
+}
 
 export function useSkillAutocomplete(input: UseAgentAutocompleteInput) {
   const { t } = useTranslation();
@@ -64,15 +83,6 @@ export function useSkillAutocomplete(input: UseAgentAutocompleteInput) {
     [input, query.data, connected, supported],
   );
   const onEscape = useCallback(() => setDismissed(inputKey), [inputKey]);
-  const keyboard = useAutocomplete<AutocompleteOption, AgentAutocompleteKeyPressEvent>({
-    isVisible,
-    options,
-    query: search,
-    // Skills read top to bottom by frequency, including in the above-input popover.
-    optionsPosition: "below-input",
-    onSelectOption: (option, event) => onSelectOption(option, event?.input),
-    onEscape,
-  });
   let errorMessage: string | undefined;
   if (!connected) errorMessage = t("workspace.terminal.hostDisconnected");
   else if (!supported) errorMessage = t("skillPicker.updateHost");
@@ -80,15 +90,28 @@ export function useSkillAutocomplete(input: UseAgentAutocompleteInput) {
   const directory = query.data?.directory ?? "~/.agents/skills";
   let emptyText = t("skillPicker.noMatches");
   if (query.data?.skills.length === 0) emptyText = t("skillPicker.empty", { directory });
+  const isLoading = supported && connected && query.isPending;
+  const menu = buildSkillAutocompleteMenu({
+    options,
+    errorMessage,
+    isLoading,
+    loadingText: t("skillPicker.loading"),
+    emptyText,
+  });
+  const keyboard = useAutocomplete<AutocompleteOption, AgentAutocompleteKeyPressEvent>({
+    isVisible,
+    options: menu.options,
+    query: search,
+    // Skills read top to bottom by frequency, including in the above-input popover.
+    optionsPosition: "below-input",
+    onSelectOption: (option, event) => onSelectOption(option, event?.input),
+    onEscape,
+  });
   return {
     isActive,
     isVisible,
-    options: errorMessage ? [] : options,
+    ...menu,
     selectedIndex: keyboard.selectedIndex,
-    isLoading: supported && connected && query.isPending,
-    errorMessage,
-    loadingText: t("skillPicker.loading"),
-    emptyText,
     onSelectOption,
     onKeyPress: (event: AgentAutocompleteKeyPressEvent) => {
       // The input publishes text after paint; a second Enter can precede that publication.

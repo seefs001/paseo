@@ -8,7 +8,11 @@ import {
   type WorktreeArchiveWarningLabels,
 } from "@/git/worktree-archive-warning";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
-import { archiveWorkspaceOptimistically } from "@/workspace/workspace-archive";
+import { archiveWorkspaceWithUndo, supportsWorkspaceArchiveUndo } from "@/workspace/archive-undo";
+import {
+  archiveWorkspaceOptimistically,
+  purgeArchivedWorkspaceState,
+} from "@/workspace/workspace-archive";
 
 export interface ArchiveWorkspaceInput {
   serverId: string;
@@ -49,16 +53,21 @@ export function useWorkspaceArchive(input: ArchiveWorkspaceInput): WorkspaceArch
       toast.error(t("sidebar.workspace.toasts.hostDisconnected"));
       return;
     }
+    const workspace = { serverId, workspaceId };
     onSetHiding?.(true);
     try {
       onArchiveStarted();
-      await archiveWorkspaceOptimistically({
-        client,
-        workspace: {
-          serverId,
-          workspaceId,
-        },
-      });
+      if (supportsWorkspaceArchiveUndo(serverId)) {
+        await archiveWorkspaceWithUndo({
+          client,
+          workspace,
+          toast,
+          onArchiveCommitted: () => purgeArchivedWorkspaceState(workspace),
+        });
+      } else {
+        // COMPAT(workspaceArchiveUndo): hosts before v0.15.3 cannot undo; remove after 2027-05-06.
+        await archiveWorkspaceOptimistically({ client, workspace });
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("sidebar.workspace.toasts.archiveFailed"),

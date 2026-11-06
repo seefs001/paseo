@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import type { AgentRole } from "@getpaseo/protocol/messages";
 import { useAgentProfiles } from "@/agent-profiles";
 import { useAgentRoles } from "@/agent-roles";
@@ -58,7 +57,6 @@ function roleOption(
 }
 
 export function useRoleReferenceAutocomplete(input: UseAgentAutocompleteInput) {
-  const { t } = useTranslation();
   const { roles, isSupported } = useAgentRoles(input.serverId);
   const { profiles } = useAgentProfiles(input.serverId);
   const retainedPanelActive = useRetainedPanelActive();
@@ -122,10 +120,7 @@ export function useRoleReferenceAutocomplete(input: UseAgentAutocompleteInput) {
     isVisible,
     options,
     selectedIndex: keyboard.selectedIndex,
-    isLoading: false,
-    errorMessage: undefined,
-    loadingText: "",
-    emptyText: t("agentAutocomplete.noRoles"),
+    status: null,
     onSelectOption,
     onKeyPress: (event: AgentAutocompleteKeyPressEvent) => {
       // The input publishes text after paint; a second key can precede that publication.

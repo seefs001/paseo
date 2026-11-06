@@ -15,7 +15,7 @@ import {
 import type { MenuTriggerState } from "@/components/ui/menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
-import { ICON_SIZE } from "@/styles/theme";
+import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { useAgentRoles } from "../internal/use-agent-roles";
 
@@ -39,6 +39,8 @@ export function AgentRoleBadge({
 }: AgentRoleBadgeProps): ReactElement {
   const { t } = useTranslation();
   const router = useRouter();
+  const { glyphs } = useComposerControlLayout();
+  const glyphRole = showLabel ? "label" : "icon";
   const [open, setOpen] = useState(false);
   const { roles } = useAgentRoles(serverId);
   const liveRole = useMemo(
@@ -74,8 +76,12 @@ export function AgentRoleBadge({
               accessibilityRole="button"
               accessibilityLabel={t("agentControls.role.selectedTooltip", { name: label })}
             >
-              <ComposerToolbarGlyph size={ICON_SIZE.sm}>
-                <AgentProfileGlyph icon={role.icon} color={role.color} size={ICON_SIZE.sm} />
+              <ComposerToolbarGlyph role={glyphRole}>
+                <AgentProfileGlyph
+                  icon={role.icon}
+                  color={role.color}
+                  size={glyphs[glyphRole].size}
+                />
               </ComposerToolbarGlyph>
               {showLabel ? (
                 <Text style={styles.triggerLabel} numberOfLines={1}>

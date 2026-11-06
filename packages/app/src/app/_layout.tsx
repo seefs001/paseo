@@ -58,6 +58,7 @@ import { WorkspaceRenameHost } from "@/components/workspace-rename-host";
 import { BoardTaskSheetHostView } from "@/components/board/task-sheet-host";
 import { DeskGoalSheetHost } from "@/components/board/goal-sheet-host";
 import { ArtifactViewerHost } from "@/artifacts/viewer";
+import { WorkspaceArchiveUndoShortcutHost } from "@/workspace/archive-undo";
 import { WorkspaceExplorerOpenGesture } from "@/mobile-panels/explorer-open-gesture";
 import { ProviderSettingsHost } from "@/components/provider-settings-host";
 import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
@@ -563,6 +564,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <BoardTaskSheetHostView />
         <DeskGoalSheetHost />
         <ArtifactViewerHost />
+        <WorkspaceArchiveUndoShortcutHost />
         <CommandCenter />
         <AddProjectFlowHost />
         <HostChooserModal />

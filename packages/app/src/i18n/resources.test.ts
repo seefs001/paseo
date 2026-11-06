@@ -838,7 +838,7 @@ describe("translation resources", () => {
     expect(en.agentAutocomplete.noSessions).toBe("No agent sessions found");
     expect(en.agentAutocomplete.noProfiles).toBe("No agent profiles found");
     expect(en.agentAutocomplete.noMentions).toBe("No agent sessions or files found");
-    expect(en.agentAutocomplete.failedToLoad).toBe("Failed to load");
+    expect(en.agentAutocomplete.filesFailed).toBe("Couldn't search files");
     expect(en.message.attachments.agentSession).toBe("Agent session");
     expect(en.message.attachments.agentProfile).toBe("Agent profile");
     expect(en.message.attachments.detailAgentId).toBe("Agent ID");
@@ -847,6 +847,7 @@ describe("translation resources", () => {
     expect(en.composer.attachments.removeAgentProfile).toBe("Remove agent profile attachment");
     expect(en.composer.attachments.openAgentSession).toBe("Open agent session attachment");
     expect(en.composer.attachments.removeAgentSession).toBe("Remove agent session attachment");
+    expect(en.agentAutocomplete.commandsFailed).toBe("Couldn't load commands");
     expect(en.loadOlderHistory.failed).toBe("Couldn't load older history");
     expect(en.agentControls.thinking.extraHigh).toBe("Extra high");
     expect(en.agentControls.model.unknown).toBe("Unknown model");

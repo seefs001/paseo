@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
 import { useAgentProfiles } from "@/agent-profiles";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
@@ -56,7 +55,6 @@ function profileOption(profile: AgentProfileMention): AutocompleteOption {
 }
 
 export function useProfileReferenceAutocomplete(input: UseAgentAutocompleteInput) {
-  const { t } = useTranslation();
   const { profiles, isSupported } = useAgentProfiles(input.serverId);
   const retainedPanelActive = useRetainedPanelActive();
   const boundRanges = input.boundReferenceRanges ?? NO_RANGES;
@@ -113,10 +111,7 @@ export function useProfileReferenceAutocomplete(input: UseAgentAutocompleteInput
     isVisible,
     options,
     selectedIndex: keyboard.selectedIndex,
-    isLoading: false,
-    errorMessage: undefined,
-    loadingText: "",
-    emptyText: t("agentAutocomplete.noProfiles"),
+    status: null,
     onSelectOption,
     onKeyPress: (event: AgentAutocompleteKeyPressEvent) => {
       // The input publishes text after paint; a second key can precede that publication.

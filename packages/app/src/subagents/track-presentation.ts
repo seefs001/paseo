@@ -21,11 +21,10 @@ function presentationStatus(row: SubagentRow) {
  */
 export function deriveSubagentStatusBucket(
   status: AgentLifecycleStatus,
-  pendingPermissionCount = 0,
+  backgroundWork?: { count: number } | null,
 ): SidebarStateBucket {
-  if (pendingPermissionCount > 0) return "needs_input";
   if (status === "error") return "failed";
-  if (status === "running") return "running";
+  if (status === "running" || (backgroundWork?.count ?? 0) > 0) return "running";
   return "done";
 }
 
@@ -47,16 +46,17 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
   const providerSubtitle = row.kind === "provider" ? resolveRowLabel(row.subtitle) : null;
   const subtitle = providerSubtitle ?? (description ? title : null);
   const status = presentationStatus(row);
+  const needsInput = row.kind === "paseo" && (row.pendingPermissionCount ?? 0) > 0;
+  const statusBucket = needsInput
+    ? "needs_input"
+    : deriveSubagentStatusBucket(status, row.kind === "paseo" ? row.backgroundWork : undefined);
   return {
     key: `${row.kind}_subagent_${row.id}`,
     kind: "agent",
     label: label ?? "",
     subtitle: subtitle ?? "",
     titleState: label ? "ready" : "loading",
-    statusBucket: deriveSubagentStatusBucket(
-      status,
-      row.kind === "paseo" ? row.pendingPermissionCount : undefined,
-    ),
+    statusBucket,
   };
 }
 

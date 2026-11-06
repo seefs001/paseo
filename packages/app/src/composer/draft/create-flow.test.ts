@@ -78,17 +78,7 @@ describe("useDraftAgentCreateFlow", () => {
 
     expect(result.current.isSubmitting).toBe(true);
     expect(result.current.draftAgent).toEqual({ currentAttempt: attempt });
-    expect(result.current.submittedStreamItems).toEqual([
-      {
-        kind: "user_message",
-        id: "msg-prepared",
-        clientMessageId: "msg-prepared",
-        text: encodedText,
-        timestamp: attempt.timestamp,
-        images: [image],
-        attachments: [attachment],
-      },
-    ]);
+
     expect(createRequest).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -211,7 +201,10 @@ describe("useDraftAgentCreateFlow", () => {
     expect(useCreateFlowStore.getState().pendingByDraftId["draft-manual"]?.text).toBe(
       submittedText,
     );
-    expect(result.current.submittedStreamItems[0]).toMatchObject({ text: submittedText });
+    expect(result.current.machine).toMatchObject({
+      tag: "creating",
+      attempt: { text: submittedText },
+    });
     rerender({ provider: null });
     expect(result.current.draftAgent).toEqual({ provider: "codex" });
     await act(async () => {
