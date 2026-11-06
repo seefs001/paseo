@@ -761,6 +761,8 @@ export const es: TranslationResources = {
         copyTerminalId: "Copiar ID del terminal",
         copyFilePath: "Copy file path",
         rename: "Rebautizar",
+        pin: "Fijar pestaña",
+        unpin: "Desfijar pestaña",
         closeAbove: "Cerrar pestañas arriba",
         closeBelow: "Cerrar pestañas a continuación",
         closeLeft: "Cerrar pestañas a la izquierda",

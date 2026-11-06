@@ -57,6 +57,8 @@ export interface WorkspaceTab {
   tabId: string;
   target: WorkspaceTabTarget;
   createdAt: number;
+  /** Browser-style tab pinning, independent of agent visibility pins. */
+  pinned?: boolean;
   state?: JsonValue;
 }
 

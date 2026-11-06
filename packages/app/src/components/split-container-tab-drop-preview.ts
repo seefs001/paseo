@@ -9,6 +9,7 @@ export interface TabDropPreview {
 interface ComputeTabDropPreviewInput {
   activePaneId: string;
   activeTabId: string;
+  activeTabPinned?: boolean;
   overPaneId: string;
   overTabId: string;
   targetTabs: WorkspaceTabDescriptor[];
@@ -32,7 +33,11 @@ export function computeTabDropPreview(input: ComputeTabDropPreviewInput): TabDro
   const overCenterX = input.overRect.left + input.overRect.width / 2;
   const insertAfterTarget = activeCenterX >= overCenterX;
 
-  const indicatorIndex = targetIndex + (insertAfterTarget ? 1 : 0);
+  const requestedIndicatorIndex = targetIndex + (insertAfterTarget ? 1 : 0);
+  const pinnedTabCount = input.targetTabs.filter((tab) => tab.pinned).length;
+  const indicatorIndex = input.activeTabPinned
+    ? Math.min(pinnedTabCount, requestedIndicatorIndex)
+    : Math.max(pinnedTabCount, requestedIndicatorIndex);
   let insertionIndex = indicatorIndex;
   if (input.activePaneId === input.overPaneId) {
     const sourceIndex = input.targetTabs.findIndex((tab) => tab.tabId === input.activeTabId);

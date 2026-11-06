@@ -760,6 +760,8 @@ export const ptBR: TranslationResources = {
         copyTerminalId: "Copiar ID do terminal",
         copyFilePath: "Copiar caminho do arquivo",
         rename: "Renomear",
+        pin: "Fixar aba",
+        unpin: "Desafixar aba",
         closeAbove: "Fechar abas acima",
         closeBelow: "Fechar abas abaixo",
         closeLeft: "Fechar à esquerda",

@@ -85,6 +85,7 @@ function resolveDragMoveRects(
 
 function computeTabOverDropPreview(input: {
   activeData: WorkspaceTabDragData;
+  activeTabPinned: boolean;
   overData: WorkspaceTabDragData;
   rects: DragMoveRects;
   panesById: Map<string, SplitPane>;
@@ -99,6 +100,7 @@ function computeTabOverDropPreview(input: {
   return computeTabDropPreview({
     activePaneId: activeData.paneId,
     activeTabId: activeData.tabId,
+    activeTabPinned: input.activeTabPinned,
     overPaneId: overData.paneId,
     overTabId: overData.tabId,
     targetTabs,
@@ -267,6 +269,7 @@ export function WorkspaceTabDragScope({
       if (overData?.kind === "workspace-tab") {
         const preview = computeTabOverDropPreview({
           activeData,
+          activeTabPinned: activeTab.pinned === true,
           overData,
           rects,
           panesById,

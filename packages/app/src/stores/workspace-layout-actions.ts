@@ -390,6 +390,7 @@ function normalizeWorkspaceTab(value: unknown): WorkspaceTab | null {
     tabId,
     target,
     createdAt: typeof tab.createdAt === "number" ? tab.createdAt : Date.now(),
+    ...(tab.pinned === true ? { pinned: true } : {}),
     ...(tab.state !== undefined ? { state: tab.state } : {}),
   };
 }
@@ -408,7 +409,9 @@ function normalizeWorkspaceTabs(input: unknown): WorkspaceTab[] {
     seen.add(tab.tabId);
     next.push(tab);
   }
-  return next;
+  const pinnedTabs = next.filter((tab) => tab.pinned);
+  const regularTabs = next.filter((tab) => !tab.pinned);
+  return [...pinnedTabs, ...regularTabs];
 }
 
 function normalizeSizes(input: NormalizeSizesInput): number[] {
@@ -911,6 +914,7 @@ function replaceTabInTree(
             tabId: input.nextTabId,
             target: input.target,
             createdAt: tab.createdAt,
+            ...(tab.pinned === true ? { pinned: true } : {}),
             ...(input.state !== undefined ? { state: input.state } : {}),
           };
         }),
@@ -1831,6 +1835,37 @@ function transferReplacedTabParent(input: {
       parentTabId === input.replacedTabId ? input.replacementTabId : parentTabId;
   }
   return Object.keys(renamed).length > 0 ? renamed : undefined;
+}
+
+export function setTabPinnedInLayout(input: {
+  layout: WorkspaceLayout;
+  tabId: string;
+  pinned: boolean;
+}): WorkspaceLayout | null {
+  const layout = asInternalLayout(input.layout);
+  const pane = findPaneContainingTab(layout.root, input.tabId);
+  if (!pane) return null;
+  const tabs = collectAllTabs({ kind: "pane", pane });
+  const tab = tabs.find((candidate) => candidate.tabId === input.tabId);
+  if (!tab || Boolean(tab.pinned) === input.pinned) return null;
+
+  const root = updatePaneInTree(layout.root, {
+    paneId: pane.id,
+    updater: (current) =>
+      normalizePaneAfterTabChange({
+        ...current,
+        tabs: current.tabs.map((candidate) => {
+          if (candidate.tabId !== input.tabId) return candidate;
+          const { pinned: _pinned, ...unpinnedTab } = candidate;
+          return input.pinned ? { ...unpinnedTab, pinned: true } : unpinnedTab;
+        }),
+      }),
+  });
+  return withNormalizedParentTabMap({
+    root,
+    focusedPaneId: layout.focusedPaneId,
+    parentTabIdByTabId: input.layout.parentTabIdByTabId,
+  });
 }
 
 export function setTabStateInLayout(input: {

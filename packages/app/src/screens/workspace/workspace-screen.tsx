@@ -411,6 +411,7 @@ function useStableTabDescriptorMap(tabDescriptors: WorkspaceTabDescriptor[]) {
         cachedDescriptor.key === tabDescriptor.key &&
         cachedDescriptor.kind === tabDescriptor.kind &&
         cachedDescriptor.state === tabDescriptor.state &&
+        cachedDescriptor.pinned === tabDescriptor.pinned &&
         workspaceTabTargetsEqual(cachedDescriptor.target, tabDescriptor.target)
       ) {
         next.set(tabDescriptor.tabId, cachedDescriptor);
@@ -2344,7 +2345,7 @@ function WorkspaceScreenContent({
         return;
       }
       await handleBulkCloseTabs({
-        tabsToClose: paneTabs.slice(0, index),
+        tabsToClose: paneTabs.slice(0, index).filter((tab) => !tab.pinned),
         title: t("workspace.tabs.confirmations.closeTabsLeftTitle"),
         logLabel: "to the left",
       });
@@ -2366,7 +2367,7 @@ function WorkspaceScreenContent({
         return;
       }
       await handleBulkCloseTabs({
-        tabsToClose: paneTabs.slice(index + 1),
+        tabsToClose: paneTabs.slice(index + 1).filter((tab) => !tab.pinned),
         title: t("workspace.tabs.confirmations.closeTabsRightTitle"),
         logLabel: "to the right",
       });
@@ -2383,7 +2384,7 @@ function WorkspaceScreenContent({
 
   const handleCloseOtherTabsInPane = useCallback(
     async (tabId: string, paneTabs: WorkspaceTabDescriptor[]) => {
-      const tabsToClose = paneTabs.filter((tab) => tab.tabId !== tabId);
+      const tabsToClose = paneTabs.filter((tab) => tab.tabId !== tabId && !tab.pinned);
       await handleBulkCloseTabs({
         tabsToClose,
         title: t("workspace.tabs.confirmations.closeOtherTabsTitle"),

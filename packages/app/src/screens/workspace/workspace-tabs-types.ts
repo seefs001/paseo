@@ -5,5 +5,6 @@ export interface WorkspaceTabDescriptor {
   tabId: string;
   kind: WorkspaceTabTarget["kind"];
   target: WorkspaceTabTarget;
+  pinned?: boolean;
   state?: import("@getpaseo/protocol/agent-types").JsonValue;
 }

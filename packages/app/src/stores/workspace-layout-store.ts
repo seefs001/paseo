@@ -45,6 +45,7 @@ import {
   reorderPaneTabsInLayout,
   setPaneHiddenInLayout,
   setTabStateInLayout,
+  setTabPinnedInLayout,
   selectTabInPaneInLayout,
   splitPaneEmptyInLayout,
   splitWorkspaceRootRightInLayout,
@@ -186,6 +187,7 @@ interface WorkspaceLayoutStore {
     state?: JsonValue,
   ) => string | null;
   setTabState: (workspaceKey: string, tabId: string, state: JsonValue | undefined) => void;
+  setTabPinned: (input: { workspaceKey: string; tabId: string; pinned: boolean }) => void;
   convertDraftToAgent: (workspaceKey: string, tabId: string, agentId: string) => string | null;
   reconcileTabs: (workspaceKey: string, snapshot: WorkspaceTabSnapshot) => void;
   reorderTabs: (workspaceKey: string, tabIds: string[]) => void;
@@ -1638,6 +1640,25 @@ export function createWorkspaceLayoutStore(
               layout: getWorkspaceLayout(state.layoutByWorkspace, normalizedWorkspaceKey),
               tabId: normalizedTabId,
               state: tabState,
+            });
+            if (!layout) return state;
+            return {
+              layoutByWorkspace: {
+                ...state.layoutByWorkspace,
+                [normalizedWorkspaceKey]: layout,
+              },
+            };
+          });
+        },
+        setTabPinned: ({ workspaceKey, tabId, pinned }) => {
+          const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);
+          const normalizedTabId = trimNonEmpty(tabId);
+          if (!normalizedWorkspaceKey || !normalizedTabId) return;
+          set((state) => {
+            const layout = setTabPinnedInLayout({
+              layout: getWorkspaceLayout(state.layoutByWorkspace, normalizedWorkspaceKey),
+              tabId: normalizedTabId,
+              pinned,
             });
             if (!layout) return state;
             return {

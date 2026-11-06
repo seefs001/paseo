@@ -763,6 +763,8 @@ export const fr: TranslationResources = {
         copyTerminalId: "Copier l’ID du terminal",
         copyFilePath: "Copier le chemin du fichier",
         rename: "Renommer",
+        pin: "Épingler l’onglet",
+        unpin: "Désépingler l’onglet",
         closeAbove: "Fermer les onglets au-dessus",
         closeBelow: "Fermer les onglets en dessous",
         closeLeft: "Fermer les onglets à gauche",

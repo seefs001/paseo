@@ -752,6 +752,8 @@ export const ar: TranslationResources = {
         copyTerminalId: "نسخ معرف المحطة",
         copyFilePath: "Copy file path",
         rename: "إعادة تسمية",
+        pin: "تثبيت علامة التبويب",
+        unpin: "إلغاء تثبيت علامة التبويب",
         closeAbove: "إغلاق علامات التبويب أعلاه",
         closeBelow: "إغلاق علامات التبويب أدناه",
         closeLeft: "بالقرب من اليسار",

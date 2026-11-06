@@ -75,6 +75,7 @@ function useStableTabs(tabs: WorkspaceTabDescriptor[]) {
           cached.key === tab.key &&
           cached.kind === tab.kind &&
           cached.state === tab.state &&
+          cached.pinned === tab.pinned &&
           workspaceTabTargetsEqual(cached.target, tab.target)
           ? cached
           : tab,

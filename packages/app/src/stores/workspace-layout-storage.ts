@@ -68,6 +68,7 @@ const WorkspaceTabStorageSchema = z.strictObject({
   tabId: z.string(),
   target: WorkspaceTabTargetStorageSchema,
   createdAt: z.number(),
+  pinned: z.boolean().optional(),
   state: z.json().optional(),
 });
 const SplitNodeStorageSchema: z.ZodType<SplitNode> = z.lazy(() =>
