@@ -41,6 +41,8 @@ export interface DraggableListProps<T> {
    * passed to `renderItem` (prevents nested lists from fighting).
    */
   useDragHandle?: boolean;
+  /** Web-only: share a parent DndContext for cross-list drops. */
+  externalDndContext?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
   /** Fill remaining space when content is smaller than container */

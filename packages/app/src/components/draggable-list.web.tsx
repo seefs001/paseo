@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, type ReactElement } from "react";
+import { memo, useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import {
   DndContext,
@@ -9,6 +9,7 @@ import {
   type Modifier,
   useSensor,
   useSensors,
+  useDndMonitor,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -19,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { DraggableListProps, DraggableRenderItemInfo } from "./draggable-list.types";
 import { getDragActivationConstraints, useDragReorderState } from "./drag-reorder";
+import type { DragReorderHandlers } from "./drag-reorder/use-drag-reorder-state";
 
 export type { DraggableListProps, DraggableRenderItemInfo };
 
@@ -96,6 +98,7 @@ interface SortableItemProps<T> {
   renderItem: (info: DraggableRenderItemInfo<T>) => ReactElement;
   activeId: string | null;
   useDragHandle: boolean;
+  externalDndContext: boolean;
 }
 
 function SortableItemInner<T>({
@@ -105,6 +108,7 @@ function SortableItemInner<T>({
   renderItem,
   activeId,
   useDragHandle,
+  externalDndContext,
 }: SortableItemProps<T>) {
   const {
     attributes,
@@ -138,14 +142,15 @@ function SortableItemInner<T>({
   const scaleTransform = isDragging ? "scale(1.02)" : "";
   const combinedTransform = [baseTransform, scaleTransform].filter(Boolean).join(" ");
 
+  const draggingOpacity = externalDndContext ? 0.3 : 0.9;
   const style = useMemo(
     () => ({
       transform: combinedTransform || undefined,
       transition,
-      opacity: isDragging ? 0.9 : 1,
+      opacity: isDragging ? draggingOpacity : 1,
       zIndex: isDragging ? 1000 : 1,
     }),
-    [combinedTransform, transition, isDragging],
+    [combinedTransform, transition, isDragging, draggingOpacity],
   );
   const stableAttributes = useShallowStableRecord(attributes as unknown as Record<string, unknown>);
   const stableListeners = useStableListenerRecord(
@@ -184,6 +189,25 @@ function SortableItemInner<T>({
 
 const SortableItem = memo(SortableItemInner) as typeof SortableItemInner;
 
+function ExternalDragMonitor({
+  ids,
+  handlers,
+  children,
+}: {
+  ids: string[];
+  handlers: DragReorderHandlers;
+  children: ReactNode;
+}) {
+  useDndMonitor({
+    onDragStart(event) {
+      if (ids.includes(String(event.active.id))) handlers.onDragStart(event);
+    },
+    onDragCancel: handlers.onDragCancel,
+    onDragEnd: handlers.onDragEnd,
+  });
+  return children;
+}
+
 export function DraggableList<T>({
   data,
   keyExtractor,
@@ -200,6 +224,7 @@ export function DraggableList<T>({
   scrollEnabled = true,
   extraData: _extraData,
   useDragHandle = false,
+  externalDndContext = false,
   // simultaneousGestureRef is native-only, ignored on web
   onDragBegin,
   nestable: _nestable = false,
@@ -237,6 +262,42 @@ export function DraggableList<T>({
     [scrollEnabled, containerStyle],
   );
 
+  const renderedItems = (
+    <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      {items.map((item, index) => {
+        const id = keyExtractor(item, index);
+        return (
+          <SortableItem
+            key={id}
+            id={id}
+            item={item}
+            index={index}
+            renderItem={renderItem}
+            activeId={activeId}
+            useDragHandle={useDragHandle}
+            externalDndContext={externalDndContext}
+          />
+        );
+      })}
+    </SortableContext>
+  );
+  const dragContent = externalDndContext ? (
+    <ExternalDragMonitor ids={ids} handlers={handlers}>
+      {renderedItems}
+    </ExternalDragMonitor>
+  ) : (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={DND_MODIFIERS}
+      onDragStart={handlers.onDragStart}
+      onDragCancel={handlers.onDragCancel}
+      onDragEnd={handlers.onDragEnd}
+    >
+      {renderedItems}
+    </DndContext>
+  );
+
   return (
     <View style={wrapperStyle}>
       {scrollEnabled ? (
@@ -248,62 +309,14 @@ export function DraggableList<T>({
         >
           {ListHeaderComponent}
           {items.length === 0 && ListEmptyComponent}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            modifiers={DND_MODIFIERS}
-            onDragStart={handlers.onDragStart}
-            onDragCancel={handlers.onDragCancel}
-            onDragEnd={handlers.onDragEnd}
-          >
-            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-              {items.map((item, index) => {
-                const id = keyExtractor(item, index);
-                return (
-                  <SortableItem
-                    key={id}
-                    id={id}
-                    item={item}
-                    index={index}
-                    renderItem={renderItem}
-                    activeId={activeId}
-                    useDragHandle={useDragHandle}
-                  />
-                );
-              })}
-            </SortableContext>
-          </DndContext>
+          {dragContent}
           {ListFooterComponent}
         </ScrollView>
       ) : (
         <>
           {ListHeaderComponent}
           {items.length === 0 && ListEmptyComponent}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            modifiers={DND_MODIFIERS}
-            onDragStart={handlers.onDragStart}
-            onDragCancel={handlers.onDragCancel}
-            onDragEnd={handlers.onDragEnd}
-          >
-            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-              {items.map((item, index) => {
-                const id = keyExtractor(item, index);
-                return (
-                  <SortableItem
-                    key={id}
-                    id={id}
-                    item={item}
-                    index={index}
-                    renderItem={renderItem}
-                    activeId={activeId}
-                    useDragHandle={useDragHandle}
-                  />
-                );
-              })}
-            </SortableContext>
-          </DndContext>
+          {dragContent}
           {ListFooterComponent}
         </>
       )}

@@ -75,6 +75,10 @@ import {
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { SidebarPinnedSectionHeader } from "@/components/sidebar/sidebar-pinned-section-header";
 import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
+import {
+  SidebarWorkspaceDragSource,
+  SidebarWorkspaceDropSection,
+} from "@/components/sidebar/workspace-drag";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
 import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pin";
@@ -223,49 +227,46 @@ export function SidebarStatusWorkspaceList({
   );
   const content = (
     <>
-      {residentWorkspaces.length > 0 ? (
-        <View style={styles.pinnedSection} testID="sidebar-resident-section">
-          <SidebarSectionHeader
-            title={t("sidebar.resident.title")}
-            testID="sidebar-resident-section-header"
-          />
-          {residentWorkspaces.map((workspace) => renderPinnedWorkspaceRow(workspace))}
-        </View>
-      ) : null}
-      {pinnedWorkspaces.length > 0 ? (
-        <View style={styles.pinnedSection} testID="sidebar-pinned-section">
-          <SidebarPinnedSectionHeader
-            workspaces={pinnedWorkspaces}
-            supportsPinningByServerId={supportsPinningByServerId}
-            collapsed={pinnedCollapsed}
-            onToggle={togglePinnedCollapsed}
-          />
-          {pinnedCollapsed ? null : (
-            <>
-              {leadingPinnedWorkspace ? renderPinnedWorkspaceRow(leadingPinnedWorkspace) : null}
-              <DraggableList
-                testID="sidebar-pinned-list"
-                data={visiblePinnedWorkspaces}
-                keyExtractor={statusWorkspaceKeyExtractor}
-                renderItem={renderPinnedWorkspace}
-                onDragEnd={onPinnedWorkspaceReorder}
-                scrollEnabled={false}
-                useDragHandle
-                nestable={platformIsNative}
-                simultaneousGestureRef={parentGestureRef}
-                gestureHostPresented={dragGestureHostActive}
+      <SidebarWorkspaceDropSection section="resident" hasItems={residentWorkspaces.length > 0}>
+        <SidebarSectionHeader
+          title={t("sidebar.resident.title")}
+          testID="sidebar-resident-section-header"
+        />
+        {residentWorkspaces.map((workspace) => renderPinnedWorkspaceRow(workspace))}
+      </SidebarWorkspaceDropSection>
+      <SidebarWorkspaceDropSection section="pinned" hasItems={pinnedWorkspaces.length > 0}>
+        <SidebarPinnedSectionHeader
+          workspaces={pinnedWorkspaces}
+          supportsPinningByServerId={supportsPinningByServerId}
+          collapsed={pinnedCollapsed}
+          onToggle={togglePinnedCollapsed}
+        />
+        {pinnedCollapsed ? null : (
+          <>
+            {leadingPinnedWorkspace ? renderPinnedWorkspaceRow(leadingPinnedWorkspace) : null}
+            <DraggableList
+              testID="sidebar-pinned-list"
+              data={visiblePinnedWorkspaces}
+              keyExtractor={statusWorkspaceKeyExtractor}
+              renderItem={renderPinnedWorkspace}
+              onDragEnd={onPinnedWorkspaceReorder}
+              externalDndContext
+              scrollEnabled={false}
+              useDragHandle
+              nestable={platformIsNative}
+              simultaneousGestureRef={parentGestureRef}
+              gestureHostPresented={dragGestureHostActive}
+            />
+            {canTogglePinnedWorkspaces ? (
+              <SidebarGroupToggleRow
+                expanded={pinnedWorkspacesExpanded}
+                onPress={togglePinnedWorkspacesExpanded}
+                testID="sidebar-pinned-show-more"
               />
-              {canTogglePinnedWorkspaces ? (
-                <SidebarGroupToggleRow
-                  expanded={pinnedWorkspacesExpanded}
-                  onPress={togglePinnedWorkspacesExpanded}
-                  testID="sidebar-pinned-show-more"
-                />
-              ) : null}
-            </>
-          )}
-        </View>
-      ) : null}
+            ) : null}
+          </>
+        )}
+      </SidebarWorkspaceDropSection>
       {listHeaderComponent}
       {sidebarFilterEmpty ? (
         <SidebarFilterEmptyState />
@@ -589,23 +590,31 @@ const StatusWorkspaceRow = memo(function StatusWorkspaceRow({
   }, [workspace.serverId, workspace.workspaceId]);
 
   return (
-    <StatusWorkspaceRowWithMenu
-      workspace={workspace}
-      hostBadge={hostBadge}
-      projectName={projectName}
-      projectIconDataUri={projectIconDataUri}
-      selected={selected}
-      shortcutNumber={shortcutNumber}
-      showShortcutBadge={showShortcutBadge}
-      canPin={canPin}
-      onToggleWorkspacePin={onToggleWorkspacePin}
-      reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-      inStatusGroup={inStatusGroup}
-      onPress={handlePress}
-      drag={drag}
+    <SidebarWorkspaceDragSource
+      workspaceKey={workspace.workspaceKey}
       isDragging={isDragging}
       dragHandleProps={dragHandleProps}
-    />
+    >
+      {(presentation) => (
+        <StatusWorkspaceRowWithMenu
+          workspace={workspace}
+          hostBadge={hostBadge}
+          projectName={projectName}
+          projectIconDataUri={projectIconDataUri}
+          selected={selected}
+          shortcutNumber={shortcutNumber}
+          showShortcutBadge={showShortcutBadge}
+          canPin={canPin}
+          onToggleWorkspacePin={onToggleWorkspacePin}
+          reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+          inStatusGroup={inStatusGroup}
+          onPress={handlePress}
+          drag={drag}
+          isDragging={presentation.isDragging}
+          dragHandleProps={presentation.dragHandleProps}
+        />
+      )}
+    </SidebarWorkspaceDragSource>
   );
 });
 
@@ -1106,9 +1115,6 @@ const styles = StyleSheet.create((theme) => ({
     // Keep status mode's Pinned/Workspaces boundary identical to project mode.
     paddingTop: 2,
     paddingBottom: theme.spacing[4],
-  },
-  pinnedSection: {
-    marginBottom: theme.spacing[1],
   },
   // Matches `projectBlockExpanded` in sidebar-workspace-list.tsx. See the note there.
   statusGroupBlockExpanded: {

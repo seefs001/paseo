@@ -98,6 +98,11 @@ import {
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import { SidebarPinnedSectionHeader } from "@/components/sidebar/sidebar-pinned-section-header";
+import {
+  SidebarWorkspaceDragScope,
+  SidebarWorkspaceDragSource,
+  SidebarWorkspaceDropSection,
+} from "@/components/sidebar/workspace-drag";
 import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { createWorkspaceVisibilityPolicy } from "@/components/sidebar/sidebar-group-visibility";
@@ -1419,29 +1424,38 @@ function WorkspaceRowItem({
   }, [workspace.serverId, workspace.workspaceId]);
 
   return (
-    <WorkspaceRow
-      workspaceEntry={workspaceEntry}
-      hostBadge={hostBadge}
-      leadingProjectName={leadingProjectName}
-      leadingProjectIconDataUri={leadingProjectIconDataUri}
-      shortcutNumber={shortcutNumber}
-      showShortcutBadge={showShortcutBadge}
-      canCopyBranchName={canCopyBranchName}
-      canPin={canPin}
-      onToggleWorkspacePin={onToggleWorkspacePin}
-      reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-      isCreating={isCreating}
-      selected={isWorkspaceSelected({
-        selection: activeWorkspaceSelection,
-        serverId: workspace.serverId,
-        workspaceId: workspace.workspaceId,
-        enabled: selectionEnabled,
-      })}
-      onPress={handlePress}
-      drag={drag}
+    <SidebarWorkspaceDragSource
+      workspaceKey={workspace.workspaceKey}
+      disabled={isCreating}
       isDragging={isDragging}
       dragHandleProps={dragHandleProps}
-    />
+    >
+      {(presentation) => (
+        <WorkspaceRow
+          workspaceEntry={workspaceEntry}
+          hostBadge={hostBadge}
+          leadingProjectName={leadingProjectName}
+          leadingProjectIconDataUri={leadingProjectIconDataUri}
+          shortcutNumber={shortcutNumber}
+          showShortcutBadge={showShortcutBadge}
+          canCopyBranchName={canCopyBranchName}
+          canPin={canPin}
+          onToggleWorkspacePin={onToggleWorkspacePin}
+          reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+          isCreating={isCreating}
+          selected={isWorkspaceSelected({
+            selection: activeWorkspaceSelection,
+            serverId: workspace.serverId,
+            workspaceId: workspace.workspaceId,
+            enabled: selectionEnabled,
+          })}
+          onPress={handlePress}
+          drag={drag}
+          isDragging={presentation.isDragging}
+          dragHandleProps={presentation.dragHandleProps}
+        />
+      )}
+    </SidebarWorkspaceDragSource>
   );
 }
 
@@ -1783,6 +1797,7 @@ function ProjectBlock({
                 keyExtractor={workspaceKeyExtractor}
                 renderItem={renderWorkspace}
                 onDragEnd={handleWorkspaceDragEnd}
+                externalDndContext
                 extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
                 scrollEnabled={false}
                 useDragHandle
@@ -2065,7 +2080,11 @@ export function SidebarWorkspaceList({
       />
     );
 
-  return content;
+  return (
+    <SidebarWorkspaceDragScope workspacesByKey={workspaceEntriesByKey}>
+      {content}
+    </SidebarWorkspaceDragScope>
+  );
 }
 
 /**
@@ -2496,6 +2515,7 @@ function ProjectModeList({
         keyExtractor={projectViewKeyExtractor}
         renderItem={renderProject}
         onDragEnd={handleProjectDragEnd}
+        externalDndContext
         extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
         scrollEnabled={false}
         useDragHandle
@@ -2508,51 +2528,48 @@ function ProjectModeList({
 
   const content = (
     <>
-      {residentChats.length > 0 ? (
-        <View style={styles.pinnedSection} testID="sidebar-resident-section">
-          <SidebarSectionHeader
-            title={t("sidebar.resident.title")}
-            testID="sidebar-resident-section-header"
-          />
-          {residentChats.map((workspace) => renderPinnedChatRow(workspace))}
-        </View>
-      ) : null}
-      {pinnedChats.length > 0 ? (
-        <View style={styles.pinnedSection} testID="sidebar-pinned-section">
-          <SidebarPinnedSectionHeader
-            workspaces={pinnedChats}
-            supportsPinningByServerId={supportsPinningByServerId}
-            collapsed={pinnedCollapsed}
-            onToggle={togglePinnedCollapsed}
-          />
-          {pinnedCollapsed ? null : (
-            <>
-              {leadingPinnedChat ? renderPinnedChatRow(leadingPinnedChat) : null}
-              <DraggableList
-                testID="sidebar-pinned-list"
-                data={visiblePinnedChats}
-                keyExtractor={workspaceKeyExtractor}
-                renderItem={renderPinnedChat}
-                onDragEnd={onPinnedWorkspaceReorder}
-                extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
-                scrollEnabled={false}
-                useDragHandle
-                nestable={platformIsNative}
-                simultaneousGestureRef={parentGestureRef}
-                gestureHostPresented={dragGestureHostActive}
-                containerStyle={styles.workspaceListContainer}
+      <SidebarWorkspaceDropSection section="resident" hasItems={residentChats.length > 0}>
+        <SidebarSectionHeader
+          title={t("sidebar.resident.title")}
+          testID="sidebar-resident-section-header"
+        />
+        {residentChats.map((workspace) => renderPinnedChatRow(workspace))}
+      </SidebarWorkspaceDropSection>
+      <SidebarWorkspaceDropSection section="pinned" hasItems={pinnedChats.length > 0}>
+        <SidebarPinnedSectionHeader
+          workspaces={pinnedChats}
+          supportsPinningByServerId={supportsPinningByServerId}
+          collapsed={pinnedCollapsed}
+          onToggle={togglePinnedCollapsed}
+        />
+        {pinnedCollapsed ? null : (
+          <>
+            {leadingPinnedChat ? renderPinnedChatRow(leadingPinnedChat) : null}
+            <DraggableList
+              testID="sidebar-pinned-list"
+              data={visiblePinnedChats}
+              keyExtractor={workspaceKeyExtractor}
+              renderItem={renderPinnedChat}
+              onDragEnd={onPinnedWorkspaceReorder}
+              externalDndContext
+              extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
+              scrollEnabled={false}
+              useDragHandle
+              nestable={platformIsNative}
+              simultaneousGestureRef={parentGestureRef}
+              gestureHostPresented={dragGestureHostActive}
+              containerStyle={styles.workspaceListContainer}
+            />
+            {canTogglePinnedChats ? (
+              <SidebarGroupToggleRow
+                expanded={pinnedChatsExpanded}
+                onPress={togglePinnedChatsExpanded}
+                testID="sidebar-pinned-show-more"
               />
-              {canTogglePinnedChats ? (
-                <SidebarGroupToggleRow
-                  expanded={pinnedChatsExpanded}
-                  onPress={togglePinnedChatsExpanded}
-                  testID="sidebar-pinned-show-more"
-                />
-              ) : null}
-            </>
-          )}
-        </View>
-      ) : null}
+            ) : null}
+          </>
+        )}
+      </SidebarWorkspaceDropSection>
       {/* The header carries the display menu, which is the only way back out of a filter, so it
         stays for as long as a filter is what emptied the list. It is absent only when the
         sidebar is genuinely empty, where a section heading would sit over nothing.
@@ -2612,9 +2629,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   projectListContainer: {
     width: "100%",
-  },
-  pinnedSection: {
-    marginBottom: theme.spacing[1],
   },
   // Three times the gap a row keeps from its neighbour, so the break between two groups reads as
   // a break rather than as one more row of pitch. Kept equal to `statusGroupBlockExpanded` — the
