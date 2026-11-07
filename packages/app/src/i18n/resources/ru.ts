@@ -2,6 +2,28 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  scheduleTargets: {
+    workspace: "Рабочая область (необязательно)",
+    conversation: "Диалог (необязательно)",
+    newWorkspace: "Новая область при каждом запуске",
+    newConversation: "Новый диалог при каждом запуске",
+    newWorkspaceHint:
+      "Каждый запуск создаёт рабочую область и диалог с проектом и настройками агента, указанными ниже.",
+    newConversationHint:
+      "Каждый запуск создаёт диалог в этой области. Область и её диалоги не архивируются автоматически.",
+    existingConversationHint:
+      "Каждый запуск отправляет запрос в этот диалог с его текущими настройками. Занятый диалог не прерывается; запуск отмечается как неудачный.",
+    updateHost: "Обновите этот хост, чтобы выбрать существующую область или диалог.",
+    loading: "Загрузка областей и диалогов…",
+    workspaceUnavailable:
+      "Эта область недоступна на данном хосте. Возможно, она архивирована или удалена. Выберите другую область.",
+    conversationUnavailable:
+      "Этот диалог недоступен в выбранной области. Возможно, он архивирован, удалён или перемещён. Выберите другой диалог.",
+    searchWorkspaces: "Поиск областей…",
+    searchConversations: "Поиск диалогов…",
+    noWorkspaces: "Нет доступных областей",
+    noConversations: "Нет доступных диалогов",
+  },
   sessionShare: {
     title: "Поделиться сеансом",
     privacy:

@@ -419,8 +419,10 @@ One file per schedule. ID is 8 hex characters.
 
 ### Nested: ScheduleTarget (discriminated union on `type`)
 
-- `{ type: "agent", agentId: string }` — send to existing agent
-- `{ type: "new-agent", config: { provider, cwd, modeId?, model?, thinkingOptionId?, title?, providerOptions?, featureValues?, systemPrompt?, mcpServers? } }` — create a new agent
+- `{ type: "agent", agentId: string, workspaceId?: string }` — send to an existing agent. A workspace-scoped target is a managed schedule; an unscoped target keeps the lightweight heartbeat surface.
+- `{ type: "new-agent", workspaceId?: string, config: { provider, cwd, modeId?, model?, thinkingOptionId?, title?, providerOptions?, featureValues?, systemPrompt?, mcpServers? } }` — create a new agent. An explicit workspace ID selects an existing workspace; the registry supplies its directory. Without it, each run creates a workspace.
+
+Workspace ownership belongs to the run, not to the current schedule target. `ScheduleRun.ownsWorkspace` records that authority so editing a schedule cannot authorize cleanup of a user-owned workspace. Missing ownership on legacy runs retains their original new-workspace cleanup policy. Client target selection requires `server_info.features.scheduleWorkspaceTargets`; existing requests without a target change remain supported on older hosts.
 
 ### Nested: ScheduleRun
 

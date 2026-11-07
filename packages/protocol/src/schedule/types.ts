@@ -22,9 +22,12 @@ export const ScheduleTargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent"),
     agentId: z.guid(),
+    // Present for a managed schedule; absent for the lightweight heartbeat surface.
+    workspaceId: z.string().trim().min(1).optional(),
   }),
   z.object({
     type: z.literal("new-agent"),
+    workspaceId: z.string().trim().min(1).optional(),
     config: z.object({
       provider: AgentProviderSchema,
       cwd: z.string().trim().min(1),
@@ -51,6 +54,10 @@ export const ScheduleTargetSchema = z.discriminatedUnion("type", [
 ]);
 export type ScheduleTarget = z.infer<typeof ScheduleTargetSchema>;
 
+export function isHeartbeatTarget(target: ScheduleTarget): boolean {
+  return target.type === "agent" && target.workspaceId === undefined;
+}
+
 export const ScheduleRunSchema = z.object({
   id: z.string(),
   scheduledFor: z.string(),
@@ -59,6 +66,8 @@ export const ScheduleRunSchema = z.object({
   status: z.enum(["running", "succeeded", "failed"]),
   agentId: z.guid().nullable(),
   workspaceId: z.string().nullable().optional(),
+  // Snapshot ownership per run so editing the target cannot change cleanup authority.
+  ownsWorkspace: z.boolean().optional(),
   taskId: z.string().optional(),
   output: z.string().nullable(),
   error: z.string().nullable(),
@@ -114,6 +123,7 @@ export interface UpdateScheduleInput {
   prompt?: string;
   cadence?: ScheduleCadence;
   newAgentConfig?: UpdateScheduleNewAgentConfig;
+  target?: ScheduleTarget;
   maxRuns?: number | null;
   expiresAt?: string | null;
 }

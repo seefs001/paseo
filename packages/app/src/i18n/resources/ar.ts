@@ -2,6 +2,27 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  scheduleTargets: {
+    workspace: "مساحة العمل (اختياري)",
+    conversation: "المحادثة (اختياري)",
+    newWorkspace: "مساحة عمل جديدة في كل تشغيل",
+    newConversation: "محادثة جديدة في كل تشغيل",
+    newWorkspaceHint: "ينشئ كل تشغيل مساحة عمل ومحادثة باستخدام المشروع وإعدادات الوكيل أدناه.",
+    newConversationHint:
+      "ينشئ كل تشغيل محادثة جديدة في مساحة العمل هذه. لا تتم أرشفة المساحة أو محادثاتها تلقائياً.",
+    existingConversationHint:
+      "يرسل كل تشغيل الطلب إلى هذه المحادثة باستخدام إعداداتها الحالية. لا تتم مقاطعة المحادثة المشغولة؛ ويُسجَّل التشغيل كفشل.",
+    updateHost: "حدّث هذا المضيف لاختيار مساحة عمل أو محادثة موجودة.",
+    loading: "جارٍ تحميل مساحات العمل والمحادثات…",
+    workspaceUnavailable:
+      "مساحة العمل غير متاحة على هذا المضيف. ربما تمت أرشفتها أو حذفها. اختر مساحة أخرى.",
+    conversationUnavailable:
+      "المحادثة غير متاحة في مساحة العمل المحددة. ربما تمت أرشفتها أو حذفها أو نقلها. اختر محادثة أخرى.",
+    searchWorkspaces: "البحث في مساحات العمل…",
+    searchConversations: "البحث في المحادثات…",
+    noWorkspaces: "لا توجد مساحات عمل متاحة",
+    noConversations: "لا توجد محادثات متاحة",
+  },
   sessionShare: {
     title: "مشاركة الجلسة",
     privacy:

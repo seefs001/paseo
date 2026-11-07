@@ -4,7 +4,13 @@ import type {
   AgentProvider,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
-import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import {
+  isHeartbeatTarget,
+  type ScheduleCadence,
+  type ScheduleSummary,
+  type ScheduleTarget,
+} from "@getpaseo/protocol/schedule/types";
+import type { ScheduleWorkspaceTarget } from "./schedule-workspace-targets";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import {
@@ -38,6 +44,7 @@ export interface ScheduleFormHost {
   serverId: string;
   label: string;
   supportsWorkspaceMultiplicity?: boolean;
+  supportsScheduleWorkspaceTargets?: boolean;
 }
 
 export interface ScheduleFormSnapshot {
@@ -47,6 +54,8 @@ export interface ScheduleFormSnapshot {
   defaults: {
     serverId?: string | null;
     projectTargets: readonly ScheduleProjectTarget[];
+    workspaceTargets?: readonly ScheduleWorkspaceTarget[];
+    targetsLoading?: boolean;
     preferences?: FormPreferences;
     timezone?: string;
   };
@@ -84,6 +93,20 @@ type ProviderResolutionStatus = "idle" | "pending" | "complete";
 export interface ScheduleFormState {
   mode: "create" | "edit";
   targetKind: ScheduleFormTargetKind;
+  isHeartbeat: boolean;
+  supportsWorkspaceTargets: boolean;
+  selectedWorkspaceId: string | null;
+  selectedAgentId: string | null;
+  workspaceDisplay: ScheduleFormDisplay | null;
+  conversationDisplay: ScheduleFormDisplay | null;
+  workspaceOptions: ScheduleFormProjectOption[];
+  conversationOptions: ScheduleFormProjectOption[];
+  targetAvailability:
+    | "ready"
+    | "loading"
+    | "workspace-unavailable"
+    | "agent-unavailable"
+    | "unsupported";
   name: string;
   prompt: string;
   maxRuns: string;
@@ -124,6 +147,9 @@ export interface ScheduleFormModel {
   close: () => void;
   applyHosts: (hosts: readonly ScheduleFormHost[]) => void;
   applyProjectTargets: (targets: readonly ScheduleProjectTarget[]) => void;
+  applyWorkspaceTargets: (targets: readonly ScheduleWorkspaceTarget[], loading: boolean) => void;
+  setWorkspace: (workspaceId: string | null) => void;
+  setConversation: (agentId: string | null) => void;
   applyPreferences: (preferences: FormPreferences | undefined) => void;
   applyProviderSnapshot: (serverId: string, snapshot: ScheduleFormProviderSnapshot) => void;
   setHost: (serverId: string | null) => void;
@@ -138,6 +164,41 @@ export interface ScheduleFormModel {
   setIsolation: (value: "local" | "worktree") => void;
   setArchiveOnFinish: (value: boolean) => void;
   setSubmitError: (value: string | null) => void;
+}
+
+export function buildFormTarget(
+  state: ScheduleFormState,
+  schedule?: ScheduleSummary,
+): ScheduleTarget {
+  if (state.selectedWorkspaceId && state.selectedAgentId) {
+    return {
+      type: "agent",
+      workspaceId: state.selectedWorkspaceId,
+      agentId: state.selectedAgentId,
+    };
+  }
+  if (!state.selectedProvider || !state.workingDir.trim()) {
+    throw new Error("Choose a project or workspace and an agent model");
+  }
+  const existingConfig = schedule?.target.type === "new-agent" ? schedule.target.config : undefined;
+  const title = existingConfig ? existingConfig.title : state.name.trim() || undefined;
+  return {
+    type: "new-agent",
+    ...(state.selectedWorkspaceId ? { workspaceId: state.selectedWorkspaceId } : {}),
+    config: {
+      ...existingConfig,
+      provider: state.selectedProvider,
+      cwd: state.workingDir.trim(),
+      model: state.selectedModel || undefined,
+      modeId: state.selectedMode || undefined,
+      thinkingOptionId: state.selectedThinkingOptionId || undefined,
+      ...(state.submitArchiveOnFinish !== undefined
+        ? { archiveOnFinish: state.submitArchiveOnFinish }
+        : {}),
+      ...(state.submitIsolation !== undefined ? { isolation: state.submitIsolation } : {}),
+      title,
+    },
+  };
 }
 
 const DEFAULT_CADENCE: ScheduleCadence = { type: "every", everyMs: 60 * 60 * 1000 };
@@ -524,7 +585,8 @@ function resolveDisclosure(state: ScheduleFormState): ScheduleDisclosureState {
   const hasProject = state.workingDir.trim().length > 0;
   const hasSelectedProvider = Boolean(state.selectedProvider);
   const hasSelectedModel = Boolean(state.selectedProvider && state.selectedModel.trim());
-  const showProjectField = state.mode === "edit" || Boolean(state.selectedServerId);
+  const showProjectField =
+    !state.selectedWorkspaceId && (state.mode === "edit" || Boolean(state.selectedServerId));
   const showModelField = hasProject;
   return {
     showProjectField,
@@ -532,8 +594,9 @@ function resolveDisclosure(state: ScheduleFormState): ScheduleDisclosureState {
     showThinkingField:
       showModelField && hasSelectedModel && state.availableThinkingOptions.length > 0,
     showModeField: showModelField && hasSelectedProvider && state.modeOptions.length > 0,
-    showIsolationField: hasProject && state.canUseWorktreeIsolation,
+    showIsolationField: !state.selectedWorkspaceId && hasProject && state.canUseWorktreeIsolation,
     showArchiveOnFinishField:
+      !state.selectedWorkspaceId &&
       hasProject &&
       selectedHostSupportsWorkspaceMultiplicity({
         hosts: state.hosts,
@@ -543,15 +606,19 @@ function resolveDisclosure(state: ScheduleFormState): ScheduleDisclosureState {
 }
 
 function resolveCanSubmit(state: ScheduleFormState): boolean {
-  if (state.targetKind === "agent") {
+  if (state.isHeartbeat) {
     return state.submitCadence !== undefined;
+  }
+  if (state.selectedWorkspaceId && state.targetAvailability !== "ready") return false;
+  if (state.targetKind === "agent") {
+    return Boolean(state.selectedAgentId && state.prompt.trim());
   }
   if (state.prompt.trim().length === 0) {
     return false;
   }
   const hasWorkingDir = state.workingDir.trim().length > 0;
   const hasMatchedProject = state.selectedProjectOptionId.trim().length > 0;
-  if (state.mode === "create" && !hasMatchedProject) {
+  if (state.mode === "create" && !state.selectedWorkspaceId && !hasMatchedProject) {
     return false;
   }
   if (!hasWorkingDir) {
@@ -569,6 +636,8 @@ function updateDerivedState(input: {
   hosts: readonly ScheduleFormHost[];
   targets: readonly ScheduleProjectTarget[];
   providerEntries: readonly ProviderSnapshotEntry[];
+  workspaceTargets: readonly ScheduleWorkspaceTarget[];
+  targetsLoading: boolean;
 }): ScheduleFormState {
   const modeOptions = resolveModeOptions(input.providerEntries, input.state.selectedProvider);
   const availableThinkingOptions = resolveThinkingOptions(
@@ -581,10 +650,12 @@ function updateDerivedState(input: {
     hosts: input.hosts,
     targets: input.targets,
   });
-  const canSubmitWorkspaceLifecycleOptions = selectedHostSupportsWorkspaceMultiplicity({
-    hosts: input.hosts,
-    selectedServerId: input.state.selectedServerId,
-  });
+  const canSubmitWorkspaceLifecycleOptions =
+    !input.state.selectedWorkspaceId &&
+    selectedHostSupportsWorkspaceMultiplicity({
+      hosts: input.hosts,
+      selectedServerId: input.state.selectedServerId,
+    });
   const effectiveIsolation = resolveEffectiveIsolation({
     isolation: input.state.isolation,
     canUseWorktreeIsolation,
@@ -596,8 +667,40 @@ function updateDerivedState(input: {
     serverId: input.state.selectedServerId,
     cwd: input.state.workingDir,
   });
+  const host = input.hosts.find((entry) => entry.serverId === input.state.selectedServerId);
+  const supportsWorkspaceTargets = host?.supportsScheduleWorkspaceTargets === true;
+  const workspaces = input.workspaceTargets.filter(
+    (target) => target.serverId === input.state.selectedServerId,
+  );
+  const workspace = workspaces.find(
+    (target) => target.workspaceId === input.state.selectedWorkspaceId,
+  );
+  const conversation = workspace?.conversations.find(
+    (target) => target.agentId === input.state.selectedAgentId,
+  );
+  let targetAvailability: ScheduleFormState["targetAvailability"] = "ready";
+  if (input.state.selectedWorkspaceId) {
+    if (!supportsWorkspaceTargets) targetAvailability = "unsupported";
+    else if (input.targetsLoading) targetAvailability = "loading";
+    else if (!workspace) targetAvailability = "workspace-unavailable";
+    else if (input.state.selectedAgentId && !conversation) targetAvailability = "agent-unavailable";
+  }
   const nextState: ScheduleFormState = {
     ...input.state,
+    supportsWorkspaceTargets,
+    targetAvailability,
+    workspaceOptions: workspaces.map((target) => ({
+      id: target.workspaceId,
+      value: target.workspaceId,
+      label: target.label,
+      testID: `schedule-workspace-option-${target.workspaceId}`,
+    })),
+    conversationOptions: (workspace?.conversations ?? []).map((target) => ({
+      id: target.agentId,
+      value: target.agentId,
+      label: target.title || target.agentId,
+      testID: `schedule-conversation-option-${target.agentId}`,
+    })),
     hosts: [...input.hosts],
     projectOptions: buildProjectOptions(input.targets, input.state.selectedServerId),
     projectDisplay: resolveProjectDisplay({
@@ -629,11 +732,42 @@ function updateDerivedState(input: {
   return { ...nextState, disclosure, canSubmit: resolveCanSubmit({ ...nextState, disclosure }) };
 }
 
+function buildStoredTargetDisplay(
+  id: string | null,
+  label: string | null | undefined,
+): ScheduleFormDisplay | null {
+  return id ? { label: label || id } : null;
+}
+
+function buildInitialTargetSelection(
+  snapshot: ScheduleFormSnapshot,
+  selectedServerId: string | null,
+) {
+  const config = newAgentConfig(snapshot.schedule);
+  const target = snapshot.schedule?.target;
+  const selectedWorkspaceId =
+    target && target.type !== "board-task" ? (target.workspaceId ?? null) : null;
+  const selectedAgentId = target?.type === "agent" && selectedWorkspaceId ? target.agentId : null;
+  const workspace = snapshot.defaults.workspaceTargets?.find(
+    (entry) => entry.serverId === selectedServerId && entry.workspaceId === selectedWorkspaceId,
+  );
+  const conversation = workspace?.conversations.find((entry) => entry.agentId === selectedAgentId);
+  return {
+    selectedWorkspaceId,
+    selectedAgentId,
+    workingDir: workspace?.cwd ?? config?.cwd ?? "",
+    isHeartbeat: target ? isHeartbeatTarget(target) : false,
+    workspaceDisplay: buildStoredTargetDisplay(selectedWorkspaceId, workspace?.label),
+    conversationDisplay: buildStoredTargetDisplay(selectedAgentId, conversation?.title),
+  };
+}
+
 function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
   const selectedServerId = resolveInitialServerId(snapshot);
   const config = newAgentConfig(snapshot.schedule);
   const targetKind = resolveTargetKind(snapshot);
-  const workingDir = config?.cwd ?? "";
+  const targetSelection = buildInitialTargetSelection(snapshot, selectedServerId);
+  const workingDir = targetSelection.workingDir;
   const selectedProjectTarget = resolveProjectTarget({
     targets: snapshot.defaults.projectTargets,
     serverId: selectedServerId,
@@ -654,6 +788,11 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
   const state: ScheduleFormState = {
     mode: snapshot.mode,
     targetKind,
+    ...targetSelection,
+    supportsWorkspaceTargets: false,
+    workspaceOptions: [],
+    conversationOptions: [],
+    targetAvailability: "ready",
     name: snapshot.schedule?.name ?? "",
     prompt: snapshot.schedule?.prompt ?? "",
     maxRuns: formatInitialMaxRuns(snapshot.schedule),
@@ -703,6 +842,8 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
     hosts: snapshot.hosts,
     targets: snapshot.defaults.projectTargets,
     providerEntries: [],
+    workspaceTargets: snapshot.defaults.workspaceTargets ?? [],
+    targetsLoading: snapshot.defaults.targetsLoading ?? false,
   });
 }
 
@@ -843,6 +984,8 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
   let closed = false;
   let hosts = snapshot.hosts;
   let projectTargets = snapshot.defaults.projectTargets;
+  let workspaceTargets = snapshot.defaults.workspaceTargets ?? [];
+  let targetsLoading = snapshot.defaults.targetsLoading ?? false;
   let preferences = snapshot.defaults.preferences ?? null;
   const thinkingDrafts = new Map<string, string>();
   seedThinkingDrafts(thinkingDrafts, preferences);
@@ -871,6 +1014,8 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       hosts,
       targets: projectTargets,
       providerEntries,
+      workspaceTargets,
+      targetsLoading,
     });
     for (const listener of listeners) {
       listener();
@@ -965,6 +1110,65 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       projectTargets = nextTargets;
       publish(state);
     },
+    applyWorkspaceTargets(targets, loading) {
+      if (closed) return;
+      workspaceTargets = targets;
+      targetsLoading = loading;
+      const workspace = targets.find(
+        (entry) =>
+          entry.serverId === state.selectedServerId &&
+          entry.workspaceId === state.selectedWorkspaceId,
+      );
+      const conversation = workspace?.conversations.find(
+        (entry) => entry.agentId === state.selectedAgentId,
+      );
+      const needsProviderSnapshot =
+        workspace && state.targetKind === "new-agent" && state.workingDir !== workspace.cwd;
+      publish({
+        ...state,
+        workingDir: workspace?.cwd ?? state.workingDir,
+        workspaceDisplay: workspace ? { label: workspace.label } : state.workspaceDisplay,
+        conversationDisplay: conversation
+          ? { label: conversation.title || conversation.agentId }
+          : state.conversationDisplay,
+      });
+      if (needsProviderSnapshot) requestProviderSnapshot(state.selectedServerId, state.workingDir);
+    },
+    setWorkspace(workspaceId) {
+      if (closed || state.isHeartbeat || !state.supportsWorkspaceTargets) return;
+      if (state.selectedWorkspaceId === workspaceId) return;
+      const workspace = workspaceTargets.find(
+        (entry) => entry.serverId === state.selectedServerId && entry.workspaceId === workspaceId,
+      );
+      if (workspaceId && !workspace) return;
+      publish(
+        clearProviderSelection({
+          ...state,
+          targetKind: "new-agent",
+          selectedWorkspaceId: workspaceId,
+          selectedAgentId: null,
+          workspaceDisplay: workspace ? { label: workspace.label } : null,
+          conversationDisplay: null,
+          workingDir: workspace?.cwd ?? "",
+          projectDisplay: null,
+          selectedProjectOptionId: "",
+        }),
+      );
+      requestProviderSnapshot(state.selectedServerId, state.workingDir);
+    },
+    setConversation(agentId) {
+      if (closed || state.isHeartbeat || !state.selectedWorkspaceId) return;
+      const conversation = state.conversationOptions.find((entry) => entry.id === agentId);
+      if (agentId && !conversation) return;
+      publish({
+        ...state,
+        targetKind: agentId ? "agent" : "new-agent",
+        selectedAgentId: agentId,
+        conversationDisplay: conversation ? { label: conversation.label } : null,
+        providerSnapshotRequest: null,
+      });
+      if (!agentId) requestProviderSnapshot(state.selectedServerId, state.workingDir);
+    },
     applyPreferences(nextPreferences) {
       const normalizedPreferences = nextPreferences ?? null;
       if (closed || preferences === normalizedPreferences) {
@@ -1013,6 +1217,11 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
         clearProviderSelection({
           ...state,
           selectedServerId: serverId,
+          targetKind: "new-agent",
+          selectedWorkspaceId: null,
+          selectedAgentId: null,
+          workspaceDisplay: null,
+          conversationDisplay: null,
           workingDir: "",
           projectDisplay: null,
           selectedProjectOptionId: "",

@@ -1,4 +1,9 @@
 import equal from "fast-deep-equal";
+import { useTranslation } from "react-i18next";
+import {
+  buildScheduleWorkspaceTargets,
+  type ScheduleWorkspaceTarget,
+} from "@/schedules/schedule-workspace-targets";
 import {
   useCallback,
   useEffect,
@@ -46,12 +51,13 @@ import { useSessionStore } from "@/stores/session-store";
 import { buildScheduleProjectTargets } from "@/schedules/schedule-project-targets";
 import { useScheduleFormModel } from "@/schedules/use-schedule-form-model";
 import { useScheduleFormProviderSnapshot } from "@/schedules/use-schedule-form-provider-snapshot";
-import type {
-  ScheduleFormDisplay,
-  ScheduleFormHost,
-  ScheduleFormModel,
-  ScheduleFormSnapshot,
-  ScheduleFormState,
+import {
+  buildFormTarget,
+  type ScheduleFormDisplay,
+  type ScheduleFormHost,
+  type ScheduleFormModel,
+  type ScheduleFormSnapshot,
+  type ScheduleFormState,
 } from "@/schedules/schedule-form-model";
 import { validateCron } from "@/utils/schedule-format";
 import { toErrorMessage } from "@/utils/error-messages";
@@ -120,7 +126,22 @@ function selectScheduleHosts(
       label: host.label,
       supportsWorkspaceMultiplicity:
         state.sessions[host.serverId]?.serverInfo?.features?.workspaceMultiplicity === true,
+      supportsScheduleWorkspaceTargets:
+        state.sessions[host.serverId]?.serverInfo?.features?.scheduleWorkspaceTargets === true,
     }));
+}
+
+function selectWorkspaceTargets(hosts: readonly ScheduleFormHost[]) {
+  return (state: ReturnType<typeof useSessionStore.getState>): ScheduleWorkspaceTarget[] =>
+    hosts.flatMap((host) => {
+      const session = state.sessions[host.serverId];
+      if (!session) return [];
+      return buildScheduleWorkspaceTargets({
+        serverId: host.serverId,
+        workspaces: session.workspaces.values(),
+        agents: session.agents.values(),
+      });
+    });
 }
 
 function buildSnapshot(input: {
@@ -129,6 +150,8 @@ function buildSnapshot(input: {
   schedule: ScheduleSummary | undefined;
   hosts: readonly ScheduleFormHost[];
   projectTargets: ReturnType<typeof buildScheduleProjectTargets>;
+  workspaceTargets: readonly ScheduleWorkspaceTarget[];
+  targetsLoading: boolean;
   preferences: FormPreferences;
   timezone: string;
 }): ScheduleFormSnapshot {
@@ -146,6 +169,8 @@ function buildSnapshot(input: {
         hosts: input.hosts,
       }),
       projectTargets: input.projectTargets,
+      workspaceTargets: input.workspaceTargets,
+      targetsLoading: input.targetsLoading,
       preferences: input.preferences,
       timezone: input.timezone,
     },
@@ -239,11 +264,16 @@ function OpenScheduleFormSheet({
   schedule,
 }: ScheduleFormSheetProps & { onDismiss: () => void }): ReactElement {
   const controlSize: ControlSize = "md";
-  const { projects } = useProjects();
+  const { projects, isLoading: targetsLoading } = useProjects();
   const hostProfiles = useHosts();
   const hosts = useStoreWithEqualityFn(
     useSessionStore,
     useMemo(() => selectScheduleHosts(hostProfiles), [hostProfiles]),
+    equal,
+  );
+  const workspaceTargets = useStoreWithEqualityFn(
+    useSessionStore,
+    useMemo(() => selectWorkspaceTargets(hosts), [hosts]),
     equal,
   );
   const { preferences, updatePreferences } = useFormPreferences();
@@ -257,10 +287,22 @@ function OpenScheduleFormSheet({
         schedule,
         hosts,
         projectTargets,
+        workspaceTargets,
+        targetsLoading,
         preferences,
         timezone,
       }),
-    [hosts, mode, preferences, projectTargets, schedule, serverId, timezone],
+    [
+      hosts,
+      mode,
+      preferences,
+      projectTargets,
+      workspaceTargets,
+      targetsLoading,
+      schedule,
+      serverId,
+      timezone,
+    ],
   );
   const model = useScheduleFormModel(snapshot);
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
@@ -291,7 +333,7 @@ function OpenScheduleFormSheet({
 
   const persistPreferences = useCallback(async () => {
     const provider = state.selectedProvider;
-    if (!provider) {
+    if (!provider || state.targetKind === "agent") {
       return;
     }
     await updatePreferences((current) =>
@@ -306,6 +348,7 @@ function OpenScheduleFormSheet({
     );
   }, [
     state.isolation,
+    state.targetKind,
     state.selectedMode,
     state.selectedModel,
     state.selectedProvider,
@@ -324,16 +367,25 @@ function OpenScheduleFormSheet({
     return true;
   }, [schedule, state.submitCadence, updateSchedule]);
 
-  const submitNewAgent = useCallback(async (): Promise<boolean> => {
-    const provider = state.selectedProvider;
-    const cwd = state.workingDir.trim();
-    if (!provider || !cwd) {
-      return false;
-    }
-
+  const submitSchedule = useCallback(async (): Promise<boolean> => {
+    const target = buildFormTarget(state, schedule);
     await persistPreferences();
     const maxRuns = parseMaxRuns(state.maxRuns);
-    if (mode === "edit" && schedule) {
+    if (mode === "edit" && schedule && state.supportsWorkspaceTargets) {
+      await updateSchedule({
+        id: schedule.id,
+        name: state.name.trim() || null,
+        prompt: state.prompt.trim(),
+        ...(state.submitCadence ? { cadence: state.submitCadence } : {}),
+        target,
+        maxRuns,
+      });
+      return true;
+    }
+    // COMPAT(scheduleWorkspaceTargets): added after v0.15.3; remove after 2027-05-07.
+    // Hosts without target replacement still accept edits to existing new-agent settings.
+    if (mode === "edit" && schedule && target.type === "new-agent") {
+      const { provider, cwd } = target.config;
       await updateSchedule({
         id: schedule.id,
         name: state.name.trim() || null,
@@ -359,21 +411,7 @@ function OpenScheduleFormSheet({
       prompt: state.prompt.trim(),
       name: state.name.trim() || undefined,
       cadence: requireCronCadence(state.submitCadence),
-      target: {
-        type: "new-agent",
-        config: {
-          provider,
-          cwd,
-          model: state.selectedModel || undefined,
-          modeId: state.selectedMode || undefined,
-          thinkingOptionId: state.selectedThinkingOptionId || undefined,
-          ...(state.submitArchiveOnFinish !== undefined
-            ? { archiveOnFinish: state.submitArchiveOnFinish }
-            : {}),
-          ...(state.submitIsolation !== undefined ? { isolation: state.submitIsolation } : {}),
-          title: state.name.trim() || undefined,
-        },
-      },
+      target,
       ...(maxRuns != null ? { maxRuns } : {}),
     });
     return true;
@@ -385,15 +423,14 @@ function OpenScheduleFormSheet({
     }
     model.setSubmitError(null);
     try {
-      const submitted =
-        state.targetKind === "agent" ? await submitAgentTarget() : await submitNewAgent();
+      const submitted = state.isHeartbeat ? await submitAgentTarget() : await submitSchedule();
       if (submitted) {
         onClose();
       }
     } catch (error) {
       model.setSubmitError(toErrorMessage(error));
     }
-  }, [canSubmit, model, onClose, state.targetKind, submitAgentTarget, submitNewAgent]);
+  }, [canSubmit, model, onClose, state.isHeartbeat, submitAgentTarget, submitSchedule]);
 
   const handleSubmitPress = useCallback(() => {
     void handleSubmit();
@@ -403,8 +440,8 @@ function OpenScheduleFormSheet({
     if (mode !== "edit") {
       return { title: "New schedule" };
     }
-    return { title: schedule?.target.type === "agent" ? "Edit heartbeat" : "Edit schedule" };
-  }, [mode, schedule?.target.type]);
+    return { title: state.isHeartbeat ? "Edit heartbeat" : "Edit schedule" };
+  }, [mode, state.isHeartbeat]);
 
   const footer = useMemo(
     () => (
@@ -473,7 +510,7 @@ function ScheduleFormFields({
   cadenceError,
   mutationServerId,
 }: ScheduleFormFieldsProps): ReactElement {
-  if (state.targetKind === "agent") {
+  if (state.isHeartbeat) {
     return (
       <>
         <ScheduleAgentTargetField label={agentTargetLabel} size={controlSize} />
@@ -547,6 +584,104 @@ function ScheduleFormFields({
       </Field>
 
       {state.submitError ? <Text style={styles.submitError}>{state.submitError}</Text> : null}
+    </>
+  );
+}
+
+function ScheduleWorkspaceFields({
+  model,
+  state,
+  size,
+}: {
+  model: ScheduleFormModel;
+  state: ScheduleFormState;
+  size: ControlSize;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  const workspaceOptions = useMemo(
+    () => [
+      {
+        id: "",
+        value: "",
+        label: t("scheduleTargets.newWorkspace"),
+        testID: "schedule-workspace-option-none",
+      },
+      ...state.workspaceOptions,
+    ],
+    [state.workspaceOptions, t],
+  );
+  const conversationOptions = useMemo(
+    () => [
+      {
+        id: "",
+        value: "",
+        label: t("scheduleTargets.newConversation"),
+        testID: "schedule-conversation-option-none",
+      },
+      ...state.conversationOptions,
+    ],
+    [state.conversationOptions, t],
+  );
+  const workspaceDisplay = useMemo(
+    () => state.workspaceDisplay ?? { label: t("scheduleTargets.newWorkspace") },
+    [state.workspaceDisplay, t],
+  );
+  const conversationDisplay = useMemo(
+    () => state.conversationDisplay ?? { label: t("scheduleTargets.newConversation") },
+    [state.conversationDisplay, t],
+  );
+  const selectWorkspace = useCallback((id: string) => model.setWorkspace(id || null), [model]);
+  const selectConversation = useCallback(
+    (id: string) => model.setConversation(id || null),
+    [model],
+  );
+  if (!state.selectedServerId) return null;
+  let hint = t("scheduleTargets.newWorkspaceHint");
+  if (state.selectedWorkspaceId) hint = t("scheduleTargets.newConversationHint");
+  if (state.selectedAgentId) hint = t("scheduleTargets.existingConversationHint");
+  let error: string | undefined;
+  if (state.targetAvailability === "workspace-unavailable")
+    error = t("scheduleTargets.workspaceUnavailable");
+  if (state.targetAvailability === "agent-unavailable")
+    error = t("scheduleTargets.conversationUnavailable");
+  if (state.targetAvailability === "loading") hint = t("scheduleTargets.loading");
+  if (!state.supportsWorkspaceTargets) hint = t("scheduleTargets.updateHost");
+  return (
+    <>
+      <SelectField
+        label={t("scheduleTargets.workspace")}
+        value={state.selectedWorkspaceId ?? ""}
+        selectedDisplay={workspaceDisplay}
+        options={workspaceOptions}
+        onChange={selectWorkspace}
+        disabled={!state.supportsWorkspaceTargets}
+        hint={hint}
+        error={error}
+        searchable
+        title={t("scheduleTargets.workspace")}
+        placeholder={t("scheduleTargets.newWorkspace")}
+        searchPlaceholder={t("scheduleTargets.searchWorkspaces")}
+        emptyText={t("scheduleTargets.noWorkspaces")}
+        size={size}
+        triggerTestID="schedule-workspace-trigger"
+      />
+      {state.selectedWorkspaceId ? (
+        <SelectField
+          label={t("scheduleTargets.conversation")}
+          value={state.selectedAgentId ?? ""}
+          selectedDisplay={conversationDisplay}
+          options={conversationOptions}
+          onChange={selectConversation}
+          disabled={!state.supportsWorkspaceTargets}
+          searchable
+          title={t("scheduleTargets.conversation")}
+          placeholder={t("scheduleTargets.newConversation")}
+          searchPlaceholder={t("scheduleTargets.searchConversations")}
+          emptyText={t("scheduleTargets.noConversations")}
+          size={size}
+          triggerTestID="schedule-conversation-trigger"
+        />
+      ) : null}
     </>
   );
 }
@@ -695,7 +830,7 @@ function ScheduleTargetFields({
     [controlSize, modelTriggerLeading, state.selectedModel, state.selectedModelDisplay],
   );
 
-  if (state.targetKind === "agent") {
+  if (state.isHeartbeat) {
     return <ScheduleAgentTargetField label={agentTargetLabel} size={controlSize} />;
   }
 
@@ -718,6 +853,8 @@ function ScheduleTargetFields({
           renderOption={renderHostOption}
         />
       ) : null}
+
+      <ScheduleWorkspaceFields model={model} state={state} size={controlSize} />
 
       {state.disclosure.showProjectField ? (
         <SelectField

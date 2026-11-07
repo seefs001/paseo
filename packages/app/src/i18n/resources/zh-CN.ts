@@ -2,6 +2,24 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  scheduleTargets: {
+    workspace: "工作区（可选）",
+    conversation: "对话（可选）",
+    newWorkspace: "每次新建工作区",
+    newConversation: "每次新建对话",
+    newWorkspaceHint: "每次运行按下方项目和 Agent 设置新建工作区及对话。",
+    newConversationHint: "每次在此工作区新建对话，不会自动归档该工作区及其中的对话。",
+    existingConversationHint:
+      "每次向此对话发送提示词，沿用它当前的设置。对话忙碌时不会中断其工作，本次运行会记为失败。",
+    updateHost: "更新此主机后即可选择已有工作区或对话。",
+    loading: "正在加载工作区和对话…",
+    workspaceUnavailable: "此工作区在该主机上不可用，可能已归档或删除。请选择其他工作区。",
+    conversationUnavailable: "此对话在所选工作区中不可用，可能已归档、删除或移动。请选择其他对话。",
+    searchWorkspaces: "搜索工作区…",
+    searchConversations: "搜索对话…",
+    noWorkspaces: "没有可用的工作区",
+    noConversations: "没有可用的对话",
+  },
   sessionShare: {
     title: "分享会话",
     privacy: "将会话和工具输出上传为未公开列出的 GitHub Gist。任何获得链接的人都能查看。",

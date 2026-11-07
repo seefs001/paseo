@@ -1,4 +1,8 @@
-import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import {
+  isHeartbeatTarget,
+  type ScheduleCadence,
+  type ScheduleSummary,
+} from "@getpaseo/protocol/schedule/types";
 import { validateCronExpression } from "@getpaseo/protocol/schedule/cron-expression";
 
 export type IntervalUnit = "minutes" | "hours" | "days";
@@ -29,7 +33,7 @@ export function isNewAgentSchedule(schedule: ScheduleSummary): boolean {
 }
 
 export function scheduleProductName(schedule: ScheduleSummary): "Heartbeat" | "Schedule" {
-  return schedule.target.type === "agent" ? "Heartbeat" : "Schedule";
+  return isHeartbeatTarget(schedule.target) ? "Heartbeat" : "Schedule";
 }
 
 export function resolveScheduleTitle(schedule: ScheduleSummary): string {

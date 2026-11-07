@@ -25,9 +25,11 @@ export type ScheduleTarget =
   | {
       type: "agent";
       agentId: string;
+      workspaceId?: string;
     }
   | {
       type: "new-agent";
+      workspaceId?: string;
       config: {
         provider: string;
         cwd: string;
@@ -47,6 +49,8 @@ export interface ScheduleRunRecord {
   status: "running" | "succeeded" | "failed";
   agentId: string | null;
   taskId?: string;
+  workspaceId?: string | null;
+  ownsWorkspace?: boolean;
   output: string | null;
   error: string | null;
 }

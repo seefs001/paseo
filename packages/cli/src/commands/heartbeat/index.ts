@@ -1,3 +1,4 @@
+import { isHeartbeatTarget } from "@getpaseo/protocol/schedule/types";
 import { Command } from "commander";
 import type { CommandOptions, OutputSchema, SingleResult } from "../../output/index.js";
 import { withOutput } from "../../output/index.js";
@@ -49,7 +50,11 @@ async function requireOwnedHeartbeat(
   if (payload.error || !payload.schedule) {
     throw new Error(payload.error ?? `Heartbeat not found: ${id}`);
   }
-  if (payload.schedule.target.type !== "agent" || payload.schedule.target.agentId !== agentId) {
+  if (
+    !isHeartbeatTarget(payload.schedule.target) ||
+    payload.schedule.target.type !== "agent" ||
+    payload.schedule.target.agentId !== agentId
+  ) {
     throw new Error(`Heartbeat ${id} does not belong to agent ${agentId}`);
   }
 }

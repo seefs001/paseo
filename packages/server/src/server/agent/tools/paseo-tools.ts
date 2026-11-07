@@ -90,6 +90,7 @@ import {
   type ScheduleService,
 } from "../../schedule/service.js";
 import {
+  isHeartbeatTarget,
   ScheduleRunSchema,
   ScheduleSummarySchema,
   StoredScheduleSchema,
@@ -1162,7 +1163,10 @@ function createToolCatalog(
       }
       throw error;
     }
-    if (schedule.target.type !== type) {
+    const heartbeat = isHeartbeatTarget(schedule.target);
+    const matches =
+      type === "agent" ? heartbeat : !heartbeat && schedule.target.type !== "board-task";
+    if (!matches) {
       throw new PaseoToolInputError(
         type === "agent" ? `Heartbeat not found: ${id}` : `Schedule not found: ${id}`,
       );
@@ -3732,7 +3736,10 @@ function createToolCatalog(
       }
 
       const schedules = (await scheduleService.list())
-        .filter((schedule) => schedule.target.type === "new-agent")
+        .filter(
+          (schedule) =>
+            !isHeartbeatTarget(schedule.target) && schedule.target.type !== "board-task",
+        )
         .map((schedule) => toScheduleSummary(schedule));
       return {
         content: [],

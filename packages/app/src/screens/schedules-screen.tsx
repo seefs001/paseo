@@ -113,10 +113,28 @@ function SchedulesScreenContent(): ReactElement {
   const agentsByKey = useMemo(() => {
     const map = new Map<string, ScheduleTargetAgent>();
     for (const agent of agents) {
-      map.set(`${agent.serverId}:${agent.id}`, { title: agent.title, provider: agent.provider });
+      map.set(`${agent.serverId}:${agent.id}`, {
+        title: agent.title,
+        provider: agent.provider,
+        workspaceId: agent.workspaceId,
+        archived: Boolean(agent.archivedAt),
+      });
     }
     return map;
   }, [agents]);
+
+  const workspaceNamesByKey = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const project of projects) {
+      for (const host of project.hosts) {
+        for (const workspace of host.workspaces) {
+          if (!workspace.archivingAt)
+            names.set(`${host.serverId}:${workspace.id}`, workspace.title || workspace.name);
+        }
+      }
+    }
+    return names;
+  }, [projects]);
 
   const projectNameByCwd = useMemo(
     () => buildProjectNameByCwd(buildScheduleProjectTargets(projects)),
@@ -136,10 +154,11 @@ function SchedulesScreenContent(): ReactElement {
         now,
         agentsByKey,
         projectNameByCwd,
+        workspaceNamesByKey,
         agentDataLoaded: agentDirReadyHosts.has(schedule.serverId),
       }),
     }));
-  }, [schedules, agentsByKey, projectNameByCwd, agentDirReadyHosts]);
+  }, [schedules, agentsByKey, projectNameByCwd, workspaceNamesByKey, agentDirReadyHosts]);
 
   const visibleRows = useMemo<ScheduleRowView[]>(() => {
     const singleHost = hosts.length <= 1;

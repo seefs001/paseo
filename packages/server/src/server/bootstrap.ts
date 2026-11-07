@@ -1537,6 +1537,7 @@ export async function createPaseoDaemon(
     createDirectoryWorkspace: createScheduleLocalWorkspaceExternal,
     createPaseoWorktreeWorkspace: createSchedulePaseoWorktreeExternal,
     archiveWorkspace: archiveScheduleWorkspaceExternal,
+    getWorkspace: (workspaceId) => workspaceRegistry.get(workspaceId),
     boardTaskService,
   });
   await scheduleService.start();

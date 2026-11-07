@@ -1,3 +1,4 @@
+import { isHeartbeatTarget } from "@getpaseo/protocol/schedule/types";
 import type { Command } from "commander";
 import type { ListResult } from "../../output/index.js";
 import {
@@ -22,7 +23,7 @@ export async function runInspectCommand(
     if (payload.error || !payload.schedule) {
       throw new Error(payload.error ?? `Schedule not found: ${id}`);
     }
-    if (payload.schedule.target.type === "agent") {
+    if (isHeartbeatTarget(payload.schedule.target)) {
       throw new Error(`Schedule not found: ${id}`);
     }
     const rows = createScheduleInspectRows(payload.schedule);

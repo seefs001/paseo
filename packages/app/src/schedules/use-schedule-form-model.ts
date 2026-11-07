@@ -14,7 +14,18 @@ export function useScheduleFormModel(snapshot: ScheduleFormSnapshot) {
     model.applyHosts(snapshot.hosts);
     model.applyProjectTargets(snapshot.defaults.projectTargets);
     model.applyPreferences(snapshot.defaults.preferences);
-  }, [model, snapshot.hosts, snapshot.defaults.preferences, snapshot.defaults.projectTargets]);
+    model.applyWorkspaceTargets(
+      snapshot.defaults.workspaceTargets ?? [],
+      snapshot.defaults.targetsLoading ?? false,
+    );
+  }, [
+    model,
+    snapshot.hosts,
+    snapshot.defaults.preferences,
+    snapshot.defaults.projectTargets,
+    snapshot.defaults.workspaceTargets,
+    snapshot.defaults.targetsLoading,
+  ]);
 
   return model;
 }

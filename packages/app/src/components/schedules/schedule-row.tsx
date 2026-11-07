@@ -192,7 +192,7 @@ export function ScheduleRow({
   const title = resolveScheduleTitle(schedule);
   const productName = scheduleProductName(schedule);
   const badge = stateBadge(state);
-  const canRun = schedule.target.type === "new-agent" && (state === "active" || state === "paused");
+  const canRun = productName === "Schedule" && (state === "active" || state === "paused");
 
   const rowStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
@@ -272,7 +272,7 @@ function ScheduleExecutionMenuItems({
 }: Pick<ScheduleRowProps, "schedule" | "pending" | "onPause" | "onResume" | "onRunNow"> & {
   canRun: boolean;
 }): ReactElement | null {
-  if (schedule.target.type === "agent") {
+  if (scheduleProductName(schedule) === "Heartbeat") {
     return null;
   }
 

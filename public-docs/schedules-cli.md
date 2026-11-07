@@ -10,7 +10,9 @@ category: Schedules
 
 `paseo schedule` creates and manages [schedules](/docs/schedules) from your terminal. By default, each run starts a fresh agent. Use `--board-task` to file work in the Board without starting an agent.
 
-Run workspaces are archived when each run ends by default. The CLI has no **Archive on finish** flag; [change the option in the app](/docs/schedules#keep-run-workspaces) to keep subsequent run workspaces active.
+Choose an existing workspace or conversation in the [app schedule form](/docs/schedules#choose-a-workspace-and-conversation). These schedules appear in `paseo schedule ls` and support all the management commands below. The CLI does not expose workspace or conversation selection flags; `--cwd` selects a directory, not an existing workspace.
+
+Workspaces created by a run are archived when that run ends by default. The CLI has no **Archive on finish** flag; [change the option in the app](/docs/schedules#keep-run-workspaces) to keep subsequent run workspaces active.
 
 ## Create
 

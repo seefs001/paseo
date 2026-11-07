@@ -251,6 +251,7 @@ export class ScheduleSession {
         ...(request.prompt !== undefined ? { prompt: request.prompt } : {}),
         ...(request.cadence !== undefined ? { cadence: request.cadence } : {}),
         ...(request.newAgentConfig !== undefined ? { newAgentConfig: request.newAgentConfig } : {}),
+        ...(request.target !== undefined ? { target: request.target } : {}),
         ...(request.maxRuns !== undefined ? { maxRuns: request.maxRuns } : {}),
         ...(request.expiresAt !== undefined ? { expiresAt: request.expiresAt } : {}),
       });

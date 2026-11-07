@@ -57,12 +57,14 @@ function targetIdentity(target: ScheduleTarget): unknown {
     return {
       type: target.type,
       agentId: target.agentId,
+      workspaceId: target.workspaceId,
     };
   }
 
   return {
     type: target.type,
     config: target.config,
+    workspaceId: target.workspaceId,
   };
 }
 

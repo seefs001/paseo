@@ -1,3 +1,4 @@
+import type { ScheduleTarget } from "@getpaseo/protocol/schedule/types";
 import type { SessionTitleProposal } from "@getpaseo/protocol/session-titles";
 import { submittedSkillPaths } from "@getpaseo/protocol/skills";
 import {
@@ -939,37 +940,7 @@ export interface CreateScheduleOptions {
     expression: string;
     timezone?: string;
   };
-  target:
-    | {
-        type: "self";
-        agentId: string;
-      }
-    | {
-        type: "agent";
-        agentId: string;
-      }
-    | {
-        type: "new-agent";
-        config: {
-          provider: AgentProvider;
-          cwd: string;
-          modeId?: string;
-          model?: string;
-          thinkingOptionId?: string;
-          archiveOnFinish?: boolean;
-          isolation?: "local" | "worktree";
-          title?: string | null;
-          providerOptions?: AgentSessionConfig["providerOptions"];
-          systemPrompt?: string;
-          mcpServers?: AgentSessionConfig["mcpServers"];
-        };
-      }
-    | {
-        type: "board-task";
-        title: string;
-        notes?: string;
-        projectId?: string;
-      };
+  target: ScheduleTarget | { type: "self"; agentId: string };
   maxRuns?: number;
   expiresAt?: string;
   runOnCreate?: boolean;
@@ -998,6 +969,7 @@ export interface UpdateScheduleOptions {
     timezone?: string;
   };
   newAgentConfig?: UpdateScheduleNewAgentConfig;
+  target?: ScheduleTarget;
   maxRuns?: number | null;
   expiresAt?: string | null;
   requestId?: string;
@@ -7141,6 +7113,9 @@ export class DaemonClient {
   }
 
   async scheduleCreate(options: CreateScheduleOptions): Promise<ScheduleCreatePayload> {
+    if ("workspaceId" in options.target && options.target.workspaceId) {
+      this.requireScheduleWorkspaceTargets();
+    }
     if (
       options.target.type === "board-task" &&
       this.getLastServerInfoMessage()?.features?.boardTasks !== true
@@ -7247,7 +7222,14 @@ export class DaemonClient {
     });
   }
 
+  private requireScheduleWorkspaceTargets(): void {
+    if (this.getLastServerInfoMessage()?.features?.scheduleWorkspaceTargets !== true) {
+      throw new Error("Update the host to choose schedule workspaces and conversations");
+    }
+  }
+
   async scheduleUpdate(options: UpdateScheduleOptions): Promise<ScheduleUpdatePayload> {
+    if (options.target !== undefined) this.requireScheduleWorkspaceTargets();
     return this.sendCorrelatedSessionRequest({
       requestId: options.requestId,
       message: {
@@ -7258,6 +7240,7 @@ export class DaemonClient {
         ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
         ...(options.cadence !== undefined ? { cadence: options.cadence } : {}),
         ...(options.newAgentConfig !== undefined ? { newAgentConfig: options.newAgentConfig } : {}),
+        ...(options.target !== undefined ? { target: options.target } : {}),
         ...(options.maxRuns !== undefined ? { maxRuns: options.maxRuns } : {}),
         ...(options.expiresAt !== undefined ? { expiresAt: options.expiresAt } : {}),
       },

@@ -1,3 +1,4 @@
+import { i18n } from "@/i18n/i18next";
 import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import { describeScheduleCwd } from "@/schedules/schedule-project-targets";
 
@@ -11,6 +12,8 @@ export type ScheduleBucket = "runnable" | "ended";
 export interface ScheduleTargetAgent {
   title: string | null;
   provider: string | null;
+  workspaceId?: string;
+  archived?: boolean;
 }
 
 export interface ScheduleTargetResolution {
@@ -34,6 +37,7 @@ export interface ResolveScheduleInput {
   agentsByKey: ReadonlyMap<string, ScheduleTargetAgent>;
   /** Known project roots keyed by `${serverId}:${cwd}`. */
   projectNameByCwd: ReadonlyMap<string, string>;
+  workspaceNamesByKey?: ReadonlyMap<string, string>;
   /**
    * Whether the agent directory has finished its first load. While false we do
    * not claim an agent target is gone — absence would just be a cold cache.
@@ -58,7 +62,10 @@ function isAgentTargetGone(input: ResolveScheduleInput): boolean {
   if (schedule.target.type !== "agent" || !agentDataLoaded) {
     return false;
   }
-  return !agentsByKey.has(agentKey(serverId, schedule.target.agentId));
+  const agent = agentsByKey.get(agentKey(serverId, schedule.target.agentId));
+  if (!agent) return true;
+  if (!schedule.target.workspaceId) return false;
+  return Boolean(agent.archived || agent.workspaceId !== schedule.target.workspaceId);
 }
 
 function resolveTarget(input: ResolveScheduleInput): ScheduleTargetResolution {
@@ -66,12 +73,24 @@ function resolveTarget(input: ResolveScheduleInput): ScheduleTargetResolution {
   if (schedule.target.type === "board-task") {
     return { label: schedule.target.title, provider: null };
   }
+  const workspaceId = schedule.target.workspaceId;
+  const workspaceName = workspaceId
+    ? (input.workspaceNamesByKey?.get(`${serverId}:${workspaceId}`) ?? workspaceId)
+    : null;
   if (schedule.target.type === "agent") {
     const agent = agentsByKey.get(agentKey(serverId, schedule.target.agentId));
     if (agent) {
-      return { label: agent.title?.trim() || "Untitled agent", provider: agent.provider };
+      const title = agent.title?.trim() || "Untitled agent";
+      const label = workspaceName ? `${workspaceName} / ${title}` : title;
+      return { label, provider: agent.provider };
     }
     return { label: "Agent unavailable", provider: null };
+  }
+  if (workspaceName) {
+    return {
+      label: `${workspaceName} / ${i18n.t("scheduleTargets.newConversation")}`,
+      provider: schedule.target.config.provider,
+    };
   }
   return {
     label: describeScheduleCwd({ serverId, cwd: schedule.target.config.cwd, projectNameByCwd }),
@@ -86,7 +105,14 @@ function deriveState(input: ResolveScheduleInput): ScheduleDerivedState {
   if (isExpired(schedule, now)) {
     return "expired";
   }
-  if (isAgentTargetGone(input)) {
+  const workspaceId =
+    schedule.target.type !== "board-task" ? schedule.target.workspaceId : undefined;
+  const workspaceGone =
+    workspaceId &&
+    input.agentDataLoaded &&
+    input.workspaceNamesByKey &&
+    !input.workspaceNamesByKey.has(`${input.serverId}:${workspaceId}`);
+  if (workspaceGone || isAgentTargetGone(input)) {
     return "targetGone";
   }
   if (schedule.status === "completed") {

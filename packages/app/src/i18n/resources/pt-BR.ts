@@ -2,6 +2,28 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  scheduleTargets: {
+    workspace: "Espaço de trabalho (opcional)",
+    conversation: "Conversa (opcional)",
+    newWorkspace: "Novo espaço a cada execução",
+    newConversation: "Nova conversa a cada execução",
+    newWorkspaceHint:
+      "Cada execução cria um espaço e uma conversa com o projeto e as configurações do agente abaixo.",
+    newConversationHint:
+      "Cada execução cria uma conversa neste espaço. O espaço e suas conversas não são arquivados automaticamente.",
+    existingConversationHint:
+      "Cada execução envia o prompt a esta conversa com as configurações atuais. Uma conversa ocupada não é interrompida; a execução é registrada como falha.",
+    updateHost: "Atualize este host para escolher um espaço ou uma conversa existente.",
+    loading: "Carregando espaços e conversas…",
+    workspaceUnavailable:
+      "Este espaço não está disponível neste host. Ele pode ter sido arquivado ou excluído. Escolha outro espaço.",
+    conversationUnavailable:
+      "Esta conversa não está disponível no espaço selecionado. Ela pode ter sido arquivada, excluída ou movida. Escolha outra conversa.",
+    searchWorkspaces: "Buscar espaços…",
+    searchConversations: "Buscar conversas…",
+    noWorkspaces: "Nenhum espaço disponível",
+    noConversations: "Nenhuma conversa disponível",
+  },
   sessionShare: {
     title: "Compartilhar sessão",
     privacy:

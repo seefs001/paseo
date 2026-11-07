@@ -14,7 +14,7 @@ import type {
 import { parseDuration } from "../../utils/duration.js";
 import { resolveProviderAndModel } from "../../utils/provider-model.js";
 import { everyMsToFiveFieldCron } from "@getpaseo/protocol/schedule/cadence";
-import { ScheduleTargetSchema } from "@getpaseo/protocol/schedule/types";
+import { isHeartbeatTarget, ScheduleTargetSchema } from "@getpaseo/protocol/schedule/types";
 
 export interface ScheduleCommandOptions extends CommandOptions {
   host?: string;
@@ -56,7 +56,7 @@ export async function requireRecurringSchedule(
   id: string,
 ): Promise<void> {
   const payload = await client.scheduleInspect({ id });
-  if (payload.error || !payload.schedule || payload.schedule.target.type === "agent") {
+  if (payload.error || !payload.schedule || isHeartbeatTarget(payload.schedule.target)) {
     throw new Error(payload.error ?? `Schedule not found: ${id}`);
   }
 }
@@ -75,10 +75,12 @@ export function formatTarget(target: ScheduleTarget | ScheduleListItem["target"]
     return `self:${target.agentId.slice(0, 7)}`;
   }
   if (target.type === "agent") {
-    return `agent:${target.agentId.slice(0, 7)}`;
+    const workspace = target.workspaceId ? ` workspace:${target.workspaceId}` : "";
+    return `agent:${target.agentId.slice(0, 7)}${workspace}`;
   }
   const modelSuffix = target.config.model ? `/${target.config.model}` : "";
-  return `new-agent:${target.config.provider}${modelSuffix}`;
+  const workspace = target.workspaceId ? ` workspace:${target.workspaceId}` : "";
+  return `new-agent:${target.config.provider}${modelSuffix}${workspace}`;
 }
 
 export function formatDurationMs(durationMs: number): string {

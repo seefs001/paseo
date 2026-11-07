@@ -2,6 +2,28 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  scheduleTargets: {
+    workspace: "작업 공간(선택 사항)",
+    conversation: "대화(선택 사항)",
+    newWorkspace: "실행마다 새 작업 공간",
+    newConversation: "실행마다 새 대화",
+    newWorkspaceHint:
+      "실행할 때마다 아래 프로젝트 및 에이전트 설정으로 작업 공간과 대화를 만듭니다.",
+    newConversationHint:
+      "실행할 때마다 이 작업 공간에 새 대화를 만듭니다. 작업 공간과 대화는 자동 보관되지 않습니다.",
+    existingConversationHint:
+      "현재 설정을 유지하여 이 대화에 프롬프트를 보냅니다. 작업 중인 대화를 중단하지 않으며 해당 실행은 실패로 기록됩니다.",
+    updateHost: "기존 작업 공간이나 대화를 선택하려면 이 호스트를 업데이트하세요.",
+    loading: "작업 공간 및 대화 로드 중…",
+    workspaceUnavailable:
+      "이 호스트에서 작업 공간을 사용할 수 없습니다. 보관 또는 삭제되었을 수 있습니다. 다른 작업 공간을 선택하세요.",
+    conversationUnavailable:
+      "선택한 작업 공간에서 이 대화를 사용할 수 없습니다. 보관, 삭제 또는 이동되었을 수 있습니다. 다른 대화를 선택하세요.",
+    searchWorkspaces: "작업 공간 검색…",
+    searchConversations: "대화 검색…",
+    noWorkspaces: "사용 가능한 작업 공간 없음",
+    noConversations: "사용 가능한 대화 없음",
+  },
   sessionShare: {
     title: "세션 공유",
     privacy:

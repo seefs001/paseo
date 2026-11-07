@@ -1,4 +1,26 @@
 export const en = {
+  scheduleTargets: {
+    workspace: "Workspace (optional)",
+    conversation: "Conversation (optional)",
+    newWorkspace: "New workspace each run",
+    newConversation: "New conversation each run",
+    newWorkspaceHint:
+      "Each run creates a workspace and a new conversation using the project and agent settings below.",
+    newConversationHint:
+      "Each run creates a new conversation in this workspace. The workspace and its conversations are not archived automatically.",
+    existingConversationHint:
+      "Each run sends the prompt to this conversation using its current settings. A busy conversation is not interrupted; that run is recorded as failed.",
+    updateHost: "Update this host to choose an existing workspace or conversation.",
+    loading: "Loading workspaces and conversations…",
+    workspaceUnavailable:
+      "This workspace is unavailable on this host. It may have been archived or deleted. Choose another workspace.",
+    conversationUnavailable:
+      "This conversation is unavailable in the selected workspace. It may have been archived, deleted, or moved. Choose another conversation.",
+    searchWorkspaces: "Search workspaces…",
+    searchConversations: "Search conversations…",
+    noWorkspaces: "No available workspaces",
+    noConversations: "No available conversations",
+  },
   sessionShare: {
     title: "Share session",
     privacy:

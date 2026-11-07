@@ -1,3 +1,4 @@
+import { isHeartbeatTarget } from "@getpaseo/protocol/schedule/types";
 import type { Command } from "commander";
 import type { ListResult } from "../../output/index.js";
 import { scheduleSchema } from "./schema.js";
@@ -22,7 +23,7 @@ export async function runLsCommand(
     return {
       type: "list",
       data: payload.schedules
-        .filter((schedule) => schedule.target.type !== "agent")
+        .filter((schedule) => !isHeartbeatTarget(schedule.target))
         .map(toScheduleRow),
       schema: scheduleSchema,
     };

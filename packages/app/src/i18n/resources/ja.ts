@@ -2,6 +2,28 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  scheduleTargets: {
+    workspace: "ワークスペース（任意）",
+    conversation: "会話（任意）",
+    newWorkspace: "実行ごとに新しいワークスペース",
+    newConversation: "実行ごとに新しい会話",
+    newWorkspaceHint:
+      "実行ごとに、下のプロジェクトとエージェント設定でワークスペースと会話を作成します。",
+    newConversationHint:
+      "実行ごとにこのワークスペースで新しい会話を作成します。ワークスペースと会話は自動でアーカイブされません。",
+    existingConversationHint:
+      "この会話の現在の設定でプロンプトを送信します。実行中の会話は中断せず、その実行を失敗として記録します。",
+    updateHost: "既存のワークスペースや会話を選ぶには、このホストを更新してください。",
+    loading: "ワークスペースと会話を読み込み中…",
+    workspaceUnavailable:
+      "このホストではワークスペースを利用できません。アーカイブまたは削除された可能性があります。別のワークスペースを選んでください。",
+    conversationUnavailable:
+      "選択したワークスペースではこの会話を利用できません。アーカイブ、削除、移動された可能性があります。別の会話を選んでください。",
+    searchWorkspaces: "ワークスペースを検索…",
+    searchConversations: "会話を検索…",
+    noWorkspaces: "利用できるワークスペースはありません",
+    noConversations: "利用できる会話はありません",
+  },
   sessionShare: {
     title: "セッションを共有",
     privacy:
