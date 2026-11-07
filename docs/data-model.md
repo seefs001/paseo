@@ -692,18 +692,18 @@ Re-registering keeps the id and raises `revision` when the caller passes `artifa
 `{ version: 1, settings: BoardDeskSettings, snoozes: { key, until }[] }`. A missing file means the
 defaults.
 
-| Field                          | Default                                        | Description                                                      |
-| ------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
-| `settings.zones`               | Decide, Flight, Ahead, Landed; visible         | Order, visibility and custom name (up to 40 characters) per zone |
-| `settings.decideKinds`         | every checkpoint kind                          | Checkpoint kinds shown in Decide                                 |
-| `settings.grouping`            | `goal`                                         | `goal`, `project`, `host` or `agent`                             |
-| `settings.landedRetentionDays` | `7`                                            | How long Landed keeps finished work, 1 to 365                    |
-| `settings.notifyKinds`         | `permission`, `question`, `failed`, `decision` | Checkpoint kinds that send a push notification                   |
-| `snoozes[].key`                | —                                              | Opaque to the daemon; the app derives it per checkpoint          |
-| `snoozes[].until`              | —                                              | ISO 8601. Woken snoozes are dropped on the next write            |
+| Field                          | Default                                        | Description                                                  |
+| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------------ |
+| `settings.zones`               | Decide, Flight, Ahead, Landed; visible         | Kept for old clients; the app ignores it and fixes the order |
+| `settings.decideKinds`         | every checkpoint kind                          | Checkpoint kinds shown in Decide                             |
+| `settings.grouping`            | `goal`                                         | Kept for old clients; the app always groups by goal          |
+| `settings.landedRetentionDays` | `7`                                            | How long Landed keeps finished work, 1 to 365                |
+| `settings.notifyKinds`         | `permission`, `question`, `failed`, `decision` | Checkpoint kinds that send a push notification               |
+| `snoozes[].key`                | —                                              | Opaque to the daemon; the app derives it per checkpoint      |
+| `snoozes[].until`              | —                                              | ISO 8601. Woken snoozes are dropped on the next write        |
 
-Settings are how the Desk works on this host and apply to every device. How it looks (density,
-card fields, zone widths) is device-local in the app.
+Settings are how the Desk works on this host and apply to every device. Zone widths and the last
+[Desk mode](glossary.md) are device-local in the app.
 
 ---
 

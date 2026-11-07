@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { BoardCard } from "@/board/columns";
-import { useDeskPrefs, type DeskPrefs } from "@/board/desk-prefs";
 import type { BoardAgentItem, BoardItem } from "@/board/items";
 import {
   BoardAgentMenu,
@@ -13,7 +12,6 @@ import {
   useBoardAgentActions,
 } from "@/components/board/agent-card-actions";
 import {
-  BoardAgentContextMeter,
   BoardBranchPill,
   BoardModelPills,
   BoardSubagentPill,
@@ -57,9 +55,6 @@ export const BoardAgentCard = memo(function BoardAgentCard({
   const { agent, workspace, task, serverId } = item;
   const title = agent.title?.trim() || workspace.name;
   const actions = useBoardAgentActions(item, title);
-  const { prefs } = useDeskPrefs();
-  const { fields } = prefs;
-  const compact = prefs.density === "compact";
   const isCompact = useIsCompactFormFactor();
   const [isHovered, setIsHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -71,12 +66,11 @@ export const BoardAgentCard = memo(function BoardAgentCard({
   const cardStyle = useCallback(
     ({ hovered, pressed }: HoverState) => [
       styles.card,
-      compact && styles.cardCompact,
       hovered && styles.cardHovered,
       selected && styles.cardSelected,
       pressed && styles.cardPressed,
     ],
-    [compact, selected],
+    [selected],
   );
   return (
     <View
@@ -96,18 +90,17 @@ export const BoardAgentCard = memo(function BoardAgentCard({
         <AgentMetaLine item={item} showHost={showHost} onSelect={onSelect} />
         <View style={styles.titleRow}>
           <BoardAgentStateIndicator bucket={item.bucket} />
-          <Text style={styles.title} numberOfLines={compact ? 1 : 2}>
+          <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
         </View>
         <AgentChips item={item} />
-        <AgentPills item={item} fields={fields} />
-        {fields.pullRequest ? <AgentPullRequest item={item} /> : null}
-        <AgentStateDetails item={item} compact={compact} />
+        <AgentPills item={item} />
+        <AgentPullRequest item={item} />
+        <AgentStateDetails item={item} />
         <View style={styles.footer}>
-          {fields.timer ? <BoardAgentTimer item={item} style={styles.timer} /> : null}
+          <BoardAgentTimer item={item} style={styles.timer} />
           <View style={styles.footerSpacer} />
-          {fields.context ? <BoardAgentContextMeter serverId={serverId} agent={agent} /> : null}
           <BoardAgentQuickActions actions={actions} visible={showActions} agentId={agent.id} />
         </View>
       </PressHighlight>
@@ -158,13 +151,7 @@ function AgentPullRequest({ item }: { item: BoardAgentItem }): ReactElement | nu
 }
 
 /** What the state asks for: the error, the pending permission, or the task to review. */
-function AgentStateDetails({
-  item,
-  compact,
-}: {
-  item: BoardAgentItem;
-  compact: boolean;
-}): ReactElement {
+function AgentStateDetails({ item }: { item: BoardAgentItem }): ReactElement {
   const { agent, workspace, task, column, serverId } = item;
   const showError = item.bucket === "failed" && Boolean(agent.lastError);
   const reviewTask = column === "review" ? task : null;
@@ -179,7 +166,7 @@ function AgentStateDetails({
         <BoardPermissionRequest serverId={serverId} agentId={agent.id} />
       ) : null}
       {reviewTask?.task.summary ? (
-        <Text style={styles.notes} numberOfLines={compact ? 2 : 3}>
+        <Text style={styles.notes} numberOfLines={3}>
           {reviewTask.task.summary}
         </Text>
       ) : null}
@@ -274,22 +261,13 @@ function TaskChip({ card }: { card: BoardCard }): ReactElement {
   );
 }
 
-function AgentPills({
-  item,
-  fields,
-}: {
-  item: BoardAgentItem;
-  fields: DeskPrefs["fields"];
-}): ReactElement {
+function AgentPills({ item }: { item: BoardAgentItem }): ReactElement {
   const { serverId, agent, workspace, children } = item;
-  const branch = fields.branch ? (workspace.gitRuntime?.currentBranch ?? null) : null;
-  const labels = useWorkspaceLabelDefinitions(
-    serverId,
-    fields.labels ? workspace.labels : undefined,
-  );
+  const branch = workspace.gitRuntime?.currentBranch ?? null;
+  const labels = useWorkspaceLabelDefinitions(serverId, workspace.labels);
   return (
     <View style={styles.pills}>
-      {fields.model ? <BoardModelPills serverId={serverId} agent={agent} /> : null}
+      <BoardModelPills serverId={serverId} agent={agent} />
       {branch ? <BoardBranchPill branch={branch} /> : null}
       {labels.map((label) => (
         <WorkspaceLabelChip key={label.name} label={label} />

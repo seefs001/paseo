@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { BoardCard } from "@/board/columns";
-import { useDeskPrefs } from "@/board/desk-prefs";
 import type { BoardItem, BoardTaskItem } from "@/board/items";
 import { updateBoardTask } from "@/board/tasks";
 import { boardCardStyles } from "@/components/board/card-styles";
@@ -47,31 +46,25 @@ export const DeskLandedRow = memo(function DeskLandedRow({
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const press = useCallback(() => onOpenDetail(item), [item, onOpenDetail]);
-  const { prefs } = useDeskPrefs();
   const task = itemTask(item);
   const workspace = item.kind === "agent" ? item.workspace : item.card.workspace;
   const title = item.kind === "agent" ? itemName(item) : (task?.title ?? "");
   const landedAt = useMemo(() => new Date(item.sortTime), [item.sortTime]);
   const landedAgo = useCompactTimeAgo(landedAt);
   const prHint = useMemo(
-    () =>
-      prefs.fields.pullRequest
-        ? selectPrHintFromStatus(workspace?.githubRuntime?.pullRequest, workspace?.forge)
-        : null,
-    [prefs.fields.pullRequest, workspace?.forge, workspace?.githubRuntime?.pullRequest],
+    () => selectPrHintFromStatus(workspace?.githubRuntime?.pullRequest, workspace?.forge),
+    [workspace?.forge, workspace?.githubRuntime?.pullRequest],
   );
-  const compact = prefs.density === "compact";
-  const summary = compact ? null : (task?.summary ?? null);
+  const summary = task?.summary ?? null;
   const rowStyle = useCallback(
     ({ hovered, pressed, open }: HoverState) => [
       boardCardStyles.card,
       styles.row,
-      compact && styles.rowCompact,
       actionsAlwaysShown && styles.rowReserve,
       (hovered || open) && boardCardStyles.hovered,
       pressed && boardCardStyles.pressed,
     ],
-    [actionsAlwaysShown, compact],
+    [actionsAlwaysShown],
   );
   const triggerProps = useMemo(
     () => ({

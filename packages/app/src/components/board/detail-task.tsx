@@ -1,4 +1,4 @@
-import type { BoardTask, BoardTaskAttachment } from "@getpaseo/protocol/messages";
+import type { BoardGoal, BoardTask, BoardTaskAttachment } from "@getpaseo/protocol/messages";
 import { CloudFog, ListChecks, Pencil, Play, SquareArrowOutUpRight } from "lucide-react-native";
 import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,16 +7,15 @@ import { StyleSheet } from "react-native-unistyles";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
 import type { BoardCard } from "@/board/columns";
 import { setTaskStage } from "@/board/desk-actions";
+import { openDeskGoalSheet } from "@/board/goal-sheet";
 import type { BoardTaskItem } from "@/board/items";
 import { openBoardTaskSheet } from "@/board/sheet";
 import { startBoardTask } from "@/board/start";
 import { useBoardTasks } from "@/board/tasks";
 import {
   DetailCriteria,
-  DetailGoalProperty,
   DetailListRow,
   DetailMarkdown,
-  DetailProperty,
   DetailSection,
 } from "@/components/board/detail-parts";
 import { BoardPermissionRequest } from "@/components/board/permission-request";
@@ -131,12 +130,9 @@ function StageButton({ card }: { card: BoardCard }): ReactElement {
 export function BoardTaskDetailBody({
   item,
   onEditTask,
-  showProperties = true,
 }: {
   item: BoardTaskItem;
   onEditTask: (card: BoardCard) => void;
-  /** False when the properties render in their own column. */
-  showProperties?: boolean;
 }): ReactElement {
   const { t } = useTranslation();
   const { card } = item;
@@ -155,6 +151,7 @@ export function BoardTaskDetailBody({
 
   return (
     <>
+      <TaskMetaStrip item={item} />
       {claimantName ? (
         <BoardReviewClaim serverId={serverId} taskId={task.id} claimantName={claimantName} />
       ) : null}
@@ -164,7 +161,9 @@ export function BoardTaskDetailBody({
       {item.column === "review" && workspace ? (
         <BoardReviewActions card={card} workspace={workspace} />
       ) : null}
-      {showProperties ? <BoardTaskProperties item={item} /> : null}
+      {task.summary ? (
+        <DetailMarkdown title={t("board.detail.summary")} text={task.summary} />
+      ) : null}
       {task.notes ? <DetailMarkdown title={t("board.form.notes")} text={task.notes} /> : null}
       {!task.notes && task.completedAt === null ? (
         <NotesPlaceholder card={card} onEditTask={onEditTask} />
@@ -173,9 +172,6 @@ export function BoardTaskDetailBody({
         <DetailSection title={t("board.plan.acceptanceCriteria")}>
           <DetailCriteria criteria={task.acceptanceCriteria} />
         </DetailSection>
-      ) : null}
-      {task.summary ? (
-        <DetailMarkdown title={t("board.detail.summary")} text={task.summary} />
       ) : null}
       {task.attachments.length > 0 ? (
         <DetailSection title={t("board.capture.attachments")}>
@@ -205,48 +201,54 @@ export function BoardTaskDetailBody({
   );
 }
 
-export function BoardTaskProperties({ item }: { item: BoardTaskItem }): ReactElement {
+/** One quiet line of context: goal, project, who it is for, host. Replaces a property table. */
+function TaskMetaStrip({ item }: { item: BoardTaskItem }): ReactElement | null {
   const { t } = useTranslation();
   const { card, serverName } = item;
-  const { task, project, workspace } = card;
-  const planned = task.completedAt === null && task.workspaceId === null;
-  return (
-    <DetailSection title={t("board.detail.properties")}>
-      <DetailProperty label={t("board.detail.id")} value={`T-${task.number}`} />
-      {planned ? (
-        <DetailProperty
-          label={t("board.detail.stage")}
-          value={t(task.stage === "ready" ? "board.desk.stages.ready" : "board.desk.stages.fog")}
-        />
-      ) : null}
-      <DetailGoalProperty serverId={card.serverId} goalId={task.goalId} />
-      <DetailProperty
-        label={t("board.plan.readyFor")}
-        value={
-          task.readyFor === "agent" ? t("board.plan.readyForAgent") : t("board.plan.readyForHuman")
-        }
-      />
-      {project ? (
-        <DetailProperty
-          label={t("board.detail.project")}
-          value={project.projectCustomName ?? project.projectDisplayName}
-        />
-      ) : null}
-      {workspace ? (
-        <DetailProperty
-          label={t("board.detail.workspace")}
-          value={workspace.title ?? workspace.name}
-        />
-      ) : null}
-      {task.workspaceId !== null && workspace === null && task.completedAt === null ? (
-        <DetailProperty
-          label={t("board.detail.workspace")}
-          value={t("board.workspaceUnavailable")}
-        />
-      ) : null}
-      <DetailProperty label={t("board.detail.host")} value={serverName} />
-    </DetailSection>
+  const { task, project, serverId } = card;
+  const goal = useBoardTasks((state): BoardGoal | null => {
+    const host = state.hosts[serverId];
+    if (host?.status !== "ready" || task.goalId === null) return null;
+    return host.goals.get(task.goalId) ?? null;
+  });
+  const multiHost = useBoardTasks(
+    (state) => Object.values(state.hosts).filter((host) => host.status === "ready").length > 1,
   );
+  const editGoal = useCallback(() => {
+    if (goal) openDeskGoalSheet({ mode: "edit", serverId, goal });
+  }, [goal, serverId]);
+  if (!goal && !project && task.readyFor !== "human" && !multiHost) return null;
+  return (
+    <View style={styles.metaRow} testID="board-detail-meta">
+      {goal ? (
+        <PressHighlight
+          accessibilityRole="button"
+          accessibilityLabel={t("board.desk.detail.goal")}
+          onPress={editGoal}
+          style={metaChipStyle}
+          highlightStyle={styles.metaChipPressed}
+          testID="board-detail-meta-goal"
+        >
+          <Text style={styles.metaChipText} numberOfLines={1}>
+            {`G-${goal.number} ${goal.title}`}
+          </Text>
+        </PressHighlight>
+      ) : null}
+      {project ? (
+        <Text style={styles.metaText} numberOfLines={1}>
+          {project.projectCustomName ?? project.projectDisplayName}
+        </Text>
+      ) : null}
+      {task.readyFor === "human" ? (
+        <Text style={styles.metaText}>{t("board.review.forHuman")}</Text>
+      ) : null}
+      {multiHost ? <Text style={styles.metaText}>{serverName}</Text> : null}
+    </View>
+  );
+}
+
+function metaChipStyle({ hovered, pressed }: HoverState) {
+  return [styles.metaChip, hovered && styles.metaChipHovered, pressed && styles.metaChipPressed];
 }
 
 /** An open task with no notes invites them; pressing it edits the task. */
@@ -321,6 +323,36 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing[2],
+  },
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  metaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    maxWidth: "100%",
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.full,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+  },
+  metaChipHovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  metaChipPressed: {
+    backgroundColor: theme.colors.surface3,
+  },
+  metaChipText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  metaText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   notesPlaceholder: {
     // Lines the text up with the section title while the hover fill reaches past it.

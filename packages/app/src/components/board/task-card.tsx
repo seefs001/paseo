@@ -6,7 +6,6 @@ import type { TFunction } from "i18next";
 import { Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { BacklogMove, BoardCard, BoardColumnId } from "@/board/columns";
-import { useDeskPrefs, type DeskPrefs } from "@/board/desk-prefs";
 import { toBoardTaskItem, type BoardItem } from "@/board/items";
 import { boardCardStyles } from "@/components/board/card-styles";
 import { GoalChip, useReadyBoardHost } from "@/components/board/desk-brief-parts";
@@ -71,14 +70,12 @@ export const BoardTaskCard = memo(function BoardTaskCard({
   showGoal,
 }: BoardTaskCardProps): ReactElement {
   const { t } = useTranslation();
-  const { prefs } = useDeskPrefs();
   const [menuOpen, setMenuOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const active = selected === true || menuOpen || contextOpen;
   const { showChrome, handlePointerEnter, handlePointerLeave } = useHoverChrome(active);
   const { task, workspace, serverId } = card;
   const isDone = task.completedAt !== null;
-  const compact = prefs.density === "compact";
   const claimantName = useClaimantName(serverId, task.claimedBy);
   const menu = useTaskMenu(card, { onEdit, move });
 
@@ -95,12 +92,11 @@ export const BoardTaskCard = memo(function BoardTaskCard({
     ({ hovered, pressed, open }: CardState) => [
       boardCardStyles.card,
       styles.card,
-      compact && styles.cardCompact,
       hovered && boardCardStyles.hovered,
       (selected || open) && boardCardStyles.selected,
       pressed && boardCardStyles.pressed,
     ],
-    [compact, selected],
+    [selected],
   );
   return (
     <View
@@ -125,10 +121,10 @@ export const BoardTaskCard = memo(function BoardTaskCard({
             <CardStateIcon column={card.column} />
             <Text style={styles.number}>{`T-${task.number}`}</Text>
           </View>
-          <Text style={isDone ? styles.titleDone : styles.title} numberOfLines={compact ? 1 : 2}>
+          <Text style={isDone ? styles.titleDone : styles.title} numberOfLines={2}>
             {task.title}
           </Text>
-          <BoardTaskCardDetails card={card} showHost={showHost} showGoal={showGoal} prefs={prefs} />
+          <BoardTaskCardDetails card={card} showHost={showHost} showGoal={showGoal} />
           <TaskAssigneeLine card={card} claimantName={claimantName} />
           <TaskStateActions card={card} />
         </ContextMenuTrigger>
@@ -199,19 +195,16 @@ function BoardTaskCardDetails({
   card,
   showHost,
   showGoal,
-  prefs,
 }: {
   card: BoardCard;
   showHost: boolean;
   showGoal: boolean;
-  prefs: DeskPrefs;
 }): ReactElement {
   const { task, workspace, serverId } = card;
   const isDone = task.completedAt !== null;
-  const compact = prefs.density === "compact";
   const hostGoal = useReadyBoardHost(serverId)?.goals.get(task.goalId ?? "") ?? null;
   const goal = showGoal ? hostGoal : null;
-  const showNotes = !compact && card.column === "fog" && task.notes.length > 0;
+  const showNotes = card.column === "fog" && task.notes.length > 0;
   const showSummary = (card.column === "done" || card.column === "review") && Boolean(task.summary);
 
   return (
@@ -230,11 +223,9 @@ function BoardTaskCardDetails({
       {card.column === "review" ? (
         <BoardReviewCriteria taskId={task.id} criteria={task.acceptanceCriteria} />
       ) : null}
-      {prefs.fields.labels ? (
-        <WorkspaceLabelChips serverId={serverId} workspace={workspace} />
-      ) : null}
-      <TaskMetaRow card={card} showHost={showHost} goal={goal} showTimer={prefs.fields.timer} />
-      {prefs.fields.pullRequest ? <TaskPullRequest workspace={workspace} /> : null}
+      <WorkspaceLabelChips serverId={serverId} workspace={workspace} />
+      <TaskMetaRow card={card} showHost={showHost} goal={goal} showTimer />
+      <TaskPullRequest workspace={workspace} />
     </>
   );
 }

@@ -21,6 +21,7 @@ import {
   probeHostViaCliAuthStatus,
   ForgeCommandError,
   type ForgeCommandFailureParams,
+  type ForgeCliRunnerOptions,
 } from "./forge-cli-command.js";
 import {
   computeChecksStatus,
@@ -133,6 +134,9 @@ const GITHUB_ENV = {
 // Matches the glab/tea adapters' command timeout so a hung `gh` invocation
 // (e.g. a stalled network call) fails the same way across every forge.
 const GITHUB_COMMAND_TIMEOUT_MS = 30_000;
+// Automatic status reads must not occupy foreground requests and poll slots
+// for the full timeout reserved for user-triggered operations.
+const GITHUB_STATUS_COMMAND_TIMEOUT_MS = 10_000;
 const REPO_HOST_NULL_TTL_MS = 60_000;
 const GIT_ORIGIN_URL_READ_TIMEOUT_MS = 5_000;
 
@@ -961,9 +965,7 @@ interface GitHubServiceDependencies {
   resolveRepoSlug: (cwd: string) => Promise<string | null>;
 }
 
-export interface GitHubCommandRunnerOptions {
-  cwd: string;
-  envOverlay?: Record<string, string>;
+export interface GitHubCommandRunnerOptions extends ForgeCliRunnerOptions {
   repositoryScope?: "origin";
 }
 
@@ -1353,6 +1355,7 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
       throw githubCliRunner.normalizeError(error, {
         args,
         cwd: runOptions.cwd,
+        timeoutMs: runOptions.timeoutMs,
       });
     }
   }
@@ -1689,7 +1692,10 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     args: string[];
   }): Promise<GitHubBatchQueryResponse | null> {
     try {
-      const stdout = await run(input.args, { cwd: input.firstEntry.target.cwd });
+      const stdout = await run(input.args, {
+        cwd: input.firstEntry.target.cwd,
+        timeoutMs: GITHUB_STATUS_COMMAND_TIMEOUT_MS,
+      });
       return { aliases: parseGraphqlBatchAliases(stdout), stdout };
     } catch (error) {
       const isPaused = await pauseGitHubPollsAfterRateLimit(input.firstEntry, error);
@@ -1865,7 +1871,10 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     let aliasData: Record<string, unknown>;
     let responseStdout: string;
     try {
-      responseStdout = await run(args, { cwd: firstItem.entry.target.cwd });
+      responseStdout = await run(args, {
+        cwd: firstItem.entry.target.cwd,
+        timeoutMs: GITHUB_STATUS_COMMAND_TIMEOUT_MS,
+      });
       aliasData = parseGraphqlBatchAliases(responseStdout);
     } catch (error) {
       const isPaused = await pauseGitHubPollsAfterRateLimit(firstItem.entry, error);
@@ -2188,9 +2197,19 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
             headRef: input.headRef,
             headSha: input.headSha,
             headRepositoryOwner: input.headRepositoryOwner,
-            run: (args, runOptions) => run(args, { ...runOptions, repositoryScope: "origin" }),
+            run: (args, runOptions) =>
+              run(args, {
+                ...runOptions,
+                repositoryScope: "origin",
+                timeoutMs: GITHUB_STATUS_COMMAND_TIMEOUT_MS,
+              }),
           });
-          return addCurrentPullRequestGithubFacts({ cwd: input.cwd, status, run });
+          return addCurrentPullRequestGithubFacts({
+            cwd: input.cwd,
+            status,
+            run: (args, runOptions) =>
+              run(args, { ...runOptions, timeoutMs: GITHUB_STATUS_COMMAND_TIMEOUT_MS }),
+          });
         },
       }).then((status) => {
         updatePollTargetAfterSuccess({

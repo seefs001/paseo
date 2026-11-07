@@ -742,7 +742,9 @@ export interface AgentSession {
   close(): Promise<void>;
   shareSession?(): Promise<AgentSessionShareResult>;
   listCommands?(): Promise<AgentSlashCommand[]>;
-  setModel?(modelId: string | null): Promise<void>;
+  /** A returned model is the effective selection committed by this mutation.
+   * Returning void means the requested selection was accepted. No status read is required. */
+  setModel?(modelId: string | null): Promise<void | { model: string | null }>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;
   setFeature?(featureId: string, value: unknown): Promise<void>;
   revertConversation?(input: { messageId: string }): Promise<void>;

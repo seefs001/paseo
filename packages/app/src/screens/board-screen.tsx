@@ -1,4 +1,4 @@
-import type { BoardDeskSettings } from "@getpaseo/protocol/messages";
+import { BOARD_DESK_ZONE_IDS, type BoardDeskSettings } from "@getpaseo/protocol/messages";
 import { useIsFocused } from "expo-router/react-navigation";
 import { Plus, SquareKanban, Target } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
@@ -10,8 +10,8 @@ import { buildDeskModel, type DeskGoalFocus, type DeskHostInput } from "@/board/
 import { openDeskGoalSheet } from "@/board/goal-sheet";
 import { buildBoardItems, hasBoardFilters, type BoardFilters } from "@/board/items";
 import { openBoardTaskSheet } from "@/board/sheet";
+import { DESK_MODES, modeShowsCapture, zonesForMode, type DeskMode } from "@/board/desk-mode";
 import { useBoardTasks } from "@/board/tasks";
-import { BOARD_BUILTIN_VIEWS, useSavedBoardViews, type BoardView } from "@/board/views";
 import { BoardActions } from "@/components/board/board-actions";
 import { BoardCompactPager } from "@/components/board/board-compact-pager";
 import {
@@ -28,19 +28,16 @@ import { useBoardLayoutPrefs } from "@/components/board/board-prefs";
 import { useBoardSelection } from "@/components/board/board-selection";
 import { BoardToolbar, collectBoardFilterOptions } from "@/components/board/board-toolbar";
 import { BoardWideZones, type DeskZoneContext } from "@/components/board/board-zones";
+import { DeskCaptureBar, type DeskCaptureBarProps } from "@/components/board/desk-capture";
 import { DeskDragProvider, useDeskDragActive } from "@/components/board/desk-dnd";
 import { DeskProfileDock } from "@/components/board/desk-profile-dock";
 import { BoardDetailSheet } from "@/components/board/detail-sheet";
-import {
-  BoardFocusMenu,
-  BoardViewMenu,
-  BoardViewsPane,
-  type DeskPaneHost,
-} from "@/components/board/views-pane";
+import { BoardFocusMenu, BoardViewsPane, type DeskPaneHost } from "@/components/board/views-pane";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { ALL_HOSTS_OPTION_ID } from "@/components/hosts/host-picker";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   getHostRuntimeStore,
@@ -54,6 +51,13 @@ const GOALS_PANE_WIDTH = 232;
 const CLOCK_INTERVAL_MS = 30_000;
 const EMPTY_COUNTS: ReadonlyMap<string, DeskGroupCounts> = new Map();
 const EMPTY_LANES: DeskLanes = { decide: [], flight: [], ahead: [], landed: [] };
+/** The Desk lays out every zone in one fixed order; modes pick which of them show. */
+const DESK_ZONES: BoardDeskSettings["zones"] = BOARD_DESK_ZONE_IDS.map((id) => ({
+  id,
+  visible: true,
+  name: null,
+}));
+const NO_ZONES: BoardDeskSettings["zones"] = [];
 
 interface HostNotice {
   serverId: string;
@@ -184,22 +188,17 @@ function useDeskView(input: {
   const desk = useMemo(() => {
     if (!settings) return null;
     const base = { filters, showSubagents, now };
-    // Goal counts ignore focus, so the pane keeps every goal's numbers while one is focused.
-    const byGoal = buildDeskModel(visibleHosts, {
-      ...base,
-      settings: { ...settings, grouping: "goal" },
-      focus: null,
-    });
+    // The Desk always groups by goal. Goal counts ignore focus, so the pane keeps every
+    // goal's numbers while one is focused.
+    const deskSettings = { ...settings, grouping: "goal" as const };
+    const byGoal = buildDeskModel(visibleHosts, { ...base, settings: deskSettings, focus: null });
     const model =
-      focus === null && settings.grouping === "goal"
+      focus === null
         ? byGoal
-        : buildDeskModel(visibleHosts, { ...base, settings, focus });
+        : buildDeskModel(visibleHosts, { ...base, settings: deskSettings, focus });
     return { model, counts: countDeskGroups(byGoal) };
   }, [filters, focus, now, settings, showSubagents, visibleHosts]);
-  const zones = useMemo(
-    () => (settings ? settings.zones.filter((zone) => zone.visible) : []),
-    [settings],
-  );
+  const zones = settings ? DESK_ZONES : NO_ZONES;
   const zoneIds = useMemo<DeskZoneId[]>(() => zones.map((zone) => zone.id), [zones]);
   const lanes = useMemo(() => (desk ? buildDeskLanes(desk.model) : null), [desk]);
 
@@ -248,7 +247,8 @@ function BoardScreenContent(): ReactElement {
   const { filters, showSubagents } = route;
   const goalsPaneHidden = useBoardLayoutPrefs((state) => state.goalsPaneHidden);
   const toggleGoalsPane = useBoardLayoutPrefs((state) => state.toggleGoalsPane);
-  const savedViews = useSavedBoardViews().views;
+  const mode = useBoardLayoutPrefs((state) => state.mode);
+  const setMode = useBoardLayoutPrefs((state) => state.setMode);
 
   const {
     effectiveHost,
@@ -257,19 +257,21 @@ function BoardScreenContent(): ReactElement {
     showHost,
     createHost,
     desk,
-    zones,
-    zoneIds,
+    zones: hostZones,
+    zoneIds: hostZoneIds,
     lanes,
     filterOptions,
     goalHosts,
   } = useDeskView({ hosts, readyHosts, route, now });
-
-  const activeViewId = useMemo(
-    () =>
-      [...BOARD_BUILTIN_VIEWS, ...savedViews].some((view) => view.id === route.viewId)
-        ? route.viewId
-        : BOARD_BUILTIN_VIEWS[0].id,
-    [route.viewId, savedViews],
+  const zones = useMemo(() => zonesForMode(mode, hostZones), [hostZones, mode]);
+  const zoneIds = useMemo(
+    () => hostZoneIds.filter((id) => zones.some((zone) => zone.id === id)),
+    [hostZoneIds, zones],
+  );
+  const decideCount = desk ? countDeskZone(desk.model, "decide") : 0;
+  const captureGoals = useMemo(
+    () => [...(readyHosts.find((host) => host.serverId === createHost)?.goals.values() ?? [])],
+    [createHost, readyHosts],
   );
 
   const openCreate = useCallback(() => {
@@ -298,11 +300,6 @@ function BoardScreenContent(): ReactElement {
     (next: DeskGoalFocus | null) => updateRoute({ focus: next }),
     [updateRoute],
   );
-  const selectView = useCallback(
-    (view: BoardView) => updateRoute({ viewId: view.id, filters: view.filters }),
-    [updateRoute],
-  );
-
   const selection = useBoardSelection({
     lanes: lanes ?? EMPTY_LANES,
     zones: zoneIds,
@@ -329,7 +326,7 @@ function BoardScreenContent(): ReactElement {
       desk && settings
         ? {
             model: desk.model,
-            grouping: settings.grouping,
+            grouping: "goal",
             groupCounts: desk.counts,
             showHost,
             selectedKey: selection.selectedKey,
@@ -361,10 +358,9 @@ function BoardScreenContent(): ReactElement {
             focus={focus}
             onFocus={changeFocus}
           />
-          <BoardViewMenu activeViewId={activeViewId} onSelectView={selectView} />
         </View>
       ) : undefined,
-    [activeViewId, changeFocus, focus, goalHosts, isCompact, selectView, showHost],
+    [changeFocus, focus, goalHosts, isCompact, showHost],
   );
   const goalsPaneToggle = useMemo(
     () => (isCompact ? null : { hidden: goalsPaneHidden, onToggle: toggleGoalsPane }),
@@ -416,6 +412,12 @@ function BoardScreenContent(): ReactElement {
         actions={actions}
       />
       <BoardHostNotices notices={notices} />
+      <DeskModeBar mode={mode} onChange={setMode} decideCount={decideCount} />
+      <DeskCapture
+        serverId={isLoading || !modeShowsCapture(mode) ? undefined : createHost}
+        goals={captureGoals}
+        focus={focus}
+      />
       <View style={styles.body}>
         {!isCompact && !goalsPaneHidden ? (
           <ScrollView
@@ -429,9 +431,6 @@ function BoardScreenContent(): ReactElement {
               counts={desk?.counts ?? EMPTY_COUNTS}
               focus={focus}
               onFocus={changeFocus}
-              activeViewId={activeViewId}
-              onSelectView={selectView}
-              filters={filters}
             />
           </ScrollView>
         ) : null}
@@ -447,6 +446,42 @@ function BoardScreenContent(): ReactElement {
         onPrevious={selection.showPrevious}
         onNext={selection.showNext}
         onEditTask={openEdit}
+      />
+    </View>
+  );
+}
+
+/** Handle, Plan and Overview; Handle carries the count of what waits on you. */
+function DeskModeBar({
+  mode,
+  onChange,
+  decideCount,
+}: {
+  mode: DeskMode;
+  onChange: (mode: DeskMode) => void;
+  decideCount: number;
+}): ReactElement {
+  const { t } = useTranslation();
+  const options = useMemo<SegmentedControlOption<DeskMode>[]>(
+    () =>
+      DESK_MODES.map((value) => ({
+        value,
+        label:
+          value === "handle" && decideCount > 0
+            ? t("board.desk.modes.handleCount", { count: decideCount })
+            : t(`board.desk.modes.${value}`),
+        testID: `desk-mode-${value}`,
+      })),
+    [decideCount, t],
+  );
+  return (
+    <View style={styles.modeRow}>
+      <SegmentedControl
+        options={options}
+        value={mode}
+        onValueChange={onChange}
+        size="sm"
+        testID="desk-modes"
       />
     </View>
   );
@@ -477,6 +512,25 @@ function DeskZonesArea({
     );
   }
   return <BoardWideZones zones={zones} context={context} />;
+}
+
+function DeskCapture({
+  serverId,
+  goals,
+  focus,
+}: {
+  serverId: string | undefined;
+  goals: DeskCaptureBarProps["goals"];
+  focus: DeskGoalFocus | null;
+}): ReactElement | null {
+  if (!serverId) return null;
+  return (
+    <DeskCaptureBar
+      serverId={serverId}
+      goals={goals}
+      defaultGoalId={focus?.serverId === serverId ? focus.goalId : null}
+    />
+  );
 }
 
 /** Agent profiles to drop a task on, shown only while a task is being dragged. */
@@ -562,6 +616,11 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
+  },
+  modeRow: {
+    flexDirection: "row",
+    paddingHorizontal: { xs: theme.spacing[3], md: theme.spacing[6] },
+    paddingTop: theme.spacing[3],
   },
   noticeWrap: {
     paddingHorizontal: { xs: theme.spacing[3], md: theme.spacing[6] },

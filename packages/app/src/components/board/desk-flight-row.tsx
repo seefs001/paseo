@@ -5,17 +5,12 @@ import { useTranslation } from "react-i18next";
 import { Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { BoardCard, BoardColumnId } from "@/board/columns";
-import { useDeskPrefs } from "@/board/desk-prefs";
 import type { BoardAgentItem, BoardItem, BoardTaskItem } from "@/board/items";
 import {
   BoardAgentQuickActions,
   useBoardAgentActions,
 } from "@/components/board/agent-card-actions";
-import {
-  BoardAgentContextMeter,
-  BoardModelPills,
-  BoardSubagentPill,
-} from "@/components/board/agent-pills";
+import { BoardModelPills, BoardSubagentPill } from "@/components/board/agent-pills";
 import { BoardAgentStateIndicator } from "@/components/board/agent-state-indicator";
 import { BoardAgentTimer, BoardLiveDuration } from "@/components/board/agent-time";
 import { boardCardStyles } from "@/components/board/card-styles";
@@ -60,19 +55,16 @@ export const DeskFlightRow = memo(function DeskFlightRow({
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const press = useCallback(() => onOpenDetail(item), [item, onOpenDetail]);
-  const { prefs } = useDeskPrefs();
-  const compact = prefs.density === "compact";
   const title = item.kind === "agent" ? itemName(item) : item.card.task.title;
   const rowStyle = useCallback(
     ({ hovered, pressed, open }: HoverState) => [
       boardCardStyles.card,
       styles.row,
-      compact && styles.rowCompact,
       hovered && boardCardStyles.hovered,
       (selected || open) && boardCardStyles.selected,
       pressed && boardCardStyles.pressed,
     ],
-    [compact, selected],
+    [selected],
   );
   const triggerProps = useMemo(
     () => ({
@@ -100,7 +92,7 @@ export const DeskFlightRow = memo(function DeskFlightRow({
       >
         <View style={styles.titleLine}>
           <BoardAgentStateIndicator bucket={rowBucket(item)} />
-          <Text style={styles.title} numberOfLines={compact ? 1 : 2}>
+          <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
         </View>
@@ -110,7 +102,7 @@ export const DeskFlightRow = memo(function DeskFlightRow({
           ) : (
             <TaskContext item={item} showHost={showHost} showGoal={showGoal} />
           )}
-          {prefs.fields.timer ? <RowTimer item={item} /> : null}
+          <RowTimer item={item} />
         </View>
       </DeskItemContextMenu>
       <View style={styles.actionsSlot} pointerEvents="box-none">
@@ -161,15 +153,13 @@ function AgentContext({
   showGoal: boolean;
 }): ReactElement {
   const { serverId, agent, task, children } = item;
-  const { fields } = useDeskPrefs().prefs;
   const goal = useItemGoal(item);
   return (
     <>
       {goal && showGoal ? <GoalChip goal={goal} /> : null}
       {task ? <TaskChip task={task.task} /> : null}
-      {fields.model ? <BoardModelPills serverId={serverId} agent={agent} /> : null}
+      <BoardModelPills serverId={serverId} agent={agent} />
       <BoardSubagentPill agentId={agent.id} childAgents={children} />
-      {fields.context ? <BoardAgentContextMeter serverId={serverId} agent={agent} /> : null}
       {showHost ? <Text style={styles.meta}>{item.serverName}</Text> : null}
     </>
   );

@@ -8,49 +8,20 @@ import { createValidatedPersistStorage } from "@/storage/validated-persist-stora
 
 export type DeskZoneId = (typeof BOARD_DESK_ZONE_IDS)[number];
 
-/** How the Desk looks on this device. How it works is a host setting every device shares. */
+/** How the Desk looks on this device: only the zone widths dragged on wide layouts. */
 export interface DeskPrefs {
-  density: "comfortable" | "compact";
-  /** Which details cards show. */
-  fields: {
-    model: boolean;
-    branch: boolean;
-    labels: boolean;
-    pullRequest: boolean;
-    timer: boolean;
-    context: boolean;
-  };
-  /** Zone widths in px from dragging zone edges; a missing zone uses its default width. */
+  /** Zone widths in px; a missing zone uses its default width. */
   zoneWidths: Partial<Record<DeskZoneId, number>>;
 }
 
-export const DEFAULT_DESK_PREFS: DeskPrefs = {
-  density: "comfortable",
-  fields: {
-    model: true,
-    branch: true,
-    labels: true,
-    pullRequest: true,
-    timer: true,
-    context: false,
-  },
-  zoneWidths: {},
-};
+export const DEFAULT_DESK_PREFS: DeskPrefs = { zoneWidths: {} };
 
 const ZoneWidthSchema = z.number().positive().optional();
 
-const DeskPrefsSchema = z.strictObject({
-  prefs: z.strictObject({
-    density: z.enum(["comfortable", "compact"]),
-    fields: z.strictObject({
-      model: z.boolean(),
-      branch: z.boolean(),
-      labels: z.boolean(),
-      pullRequest: z.boolean(),
-      timer: z.boolean(),
-      context: z.boolean(),
-    }),
-    zoneWidths: z.strictObject({
+// Density and card fields were removed; z.object drops them from older saved prefs.
+const DeskPrefsSchema = z.object({
+  prefs: z.object({
+    zoneWidths: z.object({
       decide: ZoneWidthSchema,
       flight: ZoneWidthSchema,
       ahead: ZoneWidthSchema,
@@ -70,12 +41,12 @@ const useDeskPrefsStore = create<DeskPrefsState>()(
   }),
 );
 
-export function updateDeskPrefs(patch: Partial<DeskPrefs>): void {
-  useDeskPrefsStore.setState((state) => ({ prefs: { ...state.prefs, ...patch } }));
-}
-
 export function useDeskPrefs(): { prefs: DeskPrefs; update: (patch: Partial<DeskPrefs>) => void } {
   const prefs = useDeskPrefsStore((state) => state.prefs);
-  const update = useCallback((patch: Partial<DeskPrefs>) => updateDeskPrefs(patch), []);
+  const update = useCallback(
+    (patch: Partial<DeskPrefs>) =>
+      useDeskPrefsStore.setState((state) => ({ prefs: { ...state.prefs, ...patch } })),
+    [],
+  );
   return { prefs, update };
 }

@@ -2028,10 +2028,10 @@ export class PiRpcAgentSession implements AgentSession {
     return null;
   }
 
-  async setModel(modelId: string | null): Promise<void> {
+  async setModel(modelId: string | null): Promise<{ model: string | null }> {
     const parsedReference = parseModelReference(modelId);
     if (!parsedReference) {
-      return;
+      return { model: modelToId(this.state.model) };
     }
     if (!parsedReference.provider) {
       throw new Error(`Pi model id must include a provider: ${modelId}`);
@@ -2043,6 +2043,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.config.model = `${model.provider}/${model.id}`;
     bindPiFastMode(this.config, this.state.model);
     syncPiFastModeFlag(this.config, this.state.model);
+    return { model: modelToId(this.state.model) };
   }
 
   get features(): AgentFeature[] {

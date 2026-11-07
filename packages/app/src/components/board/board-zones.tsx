@@ -73,10 +73,8 @@ export const DESK_ZONE_META: Record<
   landed: { labelKey: "board.desk.zones.landed", icon: CircleCheck, color: "foregroundMuted" },
 };
 
-/** A host may rename a zone; an empty name falls back to the default label. */
 export function deskZoneLabel(zone: DeskZoneSetting, t: TFunction): string {
-  const custom = zone.name?.trim();
-  return custom ? custom : t(DESK_ZONE_META[zone.id].labelKey);
+  return t(DESK_ZONE_META[zone.id].labelKey);
 }
 
 export function DeskZoneIcon({ zone }: { zone: DeskZoneId }): ReactElement {

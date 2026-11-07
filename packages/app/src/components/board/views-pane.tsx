@@ -1,33 +1,18 @@
 import type { BoardGoal } from "@getpaseo/protocol/messages";
-import { Bookmark, Plus } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { DeskGoalFocus } from "@/board/desk";
 import { openDeskGoalSheet } from "@/board/goal-sheet";
-import { hasBoardFilters, type BoardFilters } from "@/board/items";
-import {
-  BOARD_BUILTIN_VIEWS,
-  boardViewLabel,
-  useSavedBoardViews,
-  type BoardView,
-} from "@/board/views";
 import { groupCounts, type DeskGroupCounts } from "@/components/board/board-desk";
 import { GoalMenuItems, goalNumber } from "@/components/board/board-group-header";
 import { DeskDropTarget } from "@/components/board/desk-dnd";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSubTrigger,
-  type MenuPageDefinition,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
-import { FormTextInput } from "@/components/ui/form-field";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { STATUS_INDICATOR_FILLED_DOT_SIZE } from "@/utils/status-indicator-geometry";
 
@@ -56,13 +41,10 @@ interface BoardViewsPaneProps {
   counts: ReadonlyMap<string, DeskGroupCounts>;
   focus: DeskGoalFocus | null;
   onFocus: (focus: DeskGoalFocus | null) => void;
-  activeViewId: string;
-  onSelectView: (view: BoardView) => void;
-  filters: BoardFilters;
 }
 
 /**
- * The Desk's left pane: saved filter views, then every goal with its counts. Selecting a goal
+ * The Desk's left pane: every goal with its counts. Selecting a goal
  * focuses the Desk on it; dropping a task on a goal assigns it.
  */
 export function BoardViewsPane({
@@ -71,47 +53,16 @@ export function BoardViewsPane({
   counts,
   focus,
   onFocus,
-  activeViewId,
-  onSelectView,
-  filters,
 }: BoardViewsPaneProps): ReactElement {
   const { t } = useTranslation();
-  const [naming, setNaming] = useState(false);
-  const { save } = useSavedBoardViews();
-  const startNaming = useCallback(() => setNaming(true), []);
-  const stopNaming = useCallback(() => setNaming(false), []);
-  const saveView = useCallback(
-    (name: string) => {
-      const view = save(name, filters);
-      setNaming(false);
-      onSelectView(view);
-    },
-    [filters, onSelectView, save],
-  );
   const showAll = useCallback(() => onFocus(null), [onFocus]);
   const createHost = hosts[0]?.serverId;
   const createGoal = useCallback(() => {
     if (createHost) openDeskGoalSheet({ mode: "create", serverId: createHost });
   }, [createHost]);
-  // A view that narrows nothing would duplicate All.
-  const canSave = hasBoardFilters(filters);
 
   return (
     <View style={styles.pane} testID="board-goals-pane">
-      <View style={styles.viewsRow}>
-        <BoardViewMenu activeViewId={activeViewId} onSelectView={onSelectView} />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={Bookmark}
-          onPress={startNaming}
-          disabled={!canSave}
-          accessibilityLabel={t("board.desk.views.save")}
-          accessibilityHint={canSave ? undefined : t("board.desk.views.saveHint")}
-          testID="board-views-save"
-        />
-      </View>
-      {naming ? <SaveViewForm onSave={saveView} onCancel={stopNaming} /> : null}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>{t("board.desk.pane.goals")}</Text>
         <PaneRow
@@ -303,100 +254,6 @@ function PaneRow({
   );
 }
 
-/** Saved filter views: pick one, or remove one from the page below. */
-export function BoardViewMenu({
-  activeViewId,
-  onSelectView,
-}: {
-  activeViewId: string;
-  onSelectView: (view: BoardView) => void;
-}): ReactElement {
-  const { t } = useTranslation();
-  const saved = useSavedBoardViews();
-  const views = useMemo(() => [...BOARD_BUILTIN_VIEWS, ...saved.views], [saved.views]);
-  const active = views.find((view) => view.id === activeViewId) ?? BOARD_BUILTIN_VIEWS[0];
-  const { remove } = saved;
-  const pages = useMemo<MenuPageDefinition[]>(
-    () => [
-      {
-        id: "remove",
-        title: t("board.desk.views.removeTitle"),
-        content: (
-          <>
-            {saved.views.map((view) => (
-              <RemoveViewItem key={view.id} view={view} onRemove={remove} />
-            ))}
-          </>
-        ),
-      },
-    ],
-    [remove, saved.views, t],
-  );
-  return (
-    <DropdownMenu>
-      <DropdownTrigger size="sm" testID="board-view-picker">
-        {active ? boardViewLabel(active, t) : t("board.desk.views.all")}
-      </DropdownTrigger>
-      <DropdownMenuContent
-        align="start"
-        width={240}
-        pages={pages}
-        sheetTitle={t("board.desk.views.title")}
-      >
-        {views.map((view) => (
-          <ViewItem
-            key={view.id}
-            view={view}
-            selected={view.id === active?.id}
-            onSelectView={onSelectView}
-          />
-        ))}
-        {saved.views.length > 0 ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuSubTrigger id="remove" testID="board-views-remove">
-              {t("board.desk.views.removeTitle")}
-            </DropdownMenuSubTrigger>
-          </>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function ViewItem({
-  view,
-  selected,
-  onSelectView,
-}: {
-  view: BoardView;
-  selected: boolean;
-  onSelectView: (view: BoardView) => void;
-}): ReactElement {
-  const { t } = useTranslation();
-  const select = useCallback(() => onSelectView(view), [onSelectView, view]);
-  return (
-    <DropdownMenuItem selected={selected} onSelect={select} testID={`board-view-${view.id}`}>
-      {boardViewLabel(view, t)}
-    </DropdownMenuItem>
-  );
-}
-
-function RemoveViewItem({
-  view,
-  onRemove,
-}: {
-  view: BoardView;
-  onRemove: (id: string) => void;
-}): ReactElement {
-  const remove = useCallback(() => onRemove(view.id), [onRemove, view.id]);
-  return (
-    <DropdownMenuItem destructive onSelect={remove} testID={`board-view-remove-${view.id}`}>
-      {view.name}
-    </DropdownMenuItem>
-  );
-}
-
 /** Compact layouts focus a goal from the header instead of the pane. */
 export function BoardFocusMenu({
   hosts,
@@ -505,61 +362,10 @@ function FocusItem({
   );
 }
 
-function SaveViewForm({
-  onSave,
-  onCancel,
-}: {
-  onSave: (name: string) => void;
-  onCancel: () => void;
-}): ReactElement {
-  const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const canSave = name.trim().length > 0;
-  const submit = useCallback(() => {
-    if (canSave) onSave(name);
-  }, [canSave, name, onSave]);
-
-  return (
-    <View style={styles.saveForm}>
-      <FormTextInput
-        size="sm"
-        initialValue=""
-        onChangeText={setName}
-        onSubmitEditing={submit}
-        placeholder={t("board.desk.views.namePlaceholder")}
-        accessibilityLabel={t("board.desk.views.name")}
-        maxLength={60}
-        autoFocus
-        testID="board-views-name"
-      />
-      <View style={styles.saveActions}>
-        <Button variant="ghost" size="sm" onPress={onCancel}>
-          {t("common.actions.cancel")}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onPress={submit}
-          disabled={!canSave}
-          testID="board-views-save-confirm"
-        >
-          {t("common.actions.save")}
-        </Button>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create((theme) => ({
   pane: {
     gap: theme.spacing[4],
     paddingVertical: theme.spacing[2],
-  },
-  viewsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-    paddingHorizontal: theme.spacing[1],
   },
   section: {
     gap: theme.spacing[0.5],
@@ -644,14 +450,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   newGoal: {
     alignSelf: "flex-start",
-  },
-  saveForm: {
-    gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[2],
-  },
-  saveActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: theme.spacing[2],
   },
 }));

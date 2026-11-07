@@ -59,6 +59,7 @@ interface ProbeHostViaCliAuthStatusOptions {
 export interface ForgeCliRunnerOptions {
   cwd: string;
   envOverlay?: Record<string, string>;
+  timeoutMs?: number;
 }
 
 export interface ForgeCliRunnerResult {
@@ -107,7 +108,7 @@ export function createForgeCliRunner(options: CreateForgeCliRunnerOptions): Forg
       cwd: runOptions.cwd,
       envOverlay: { ...options.envOverlay, ...runOptions.envOverlay },
       maxBuffer: 10 * 1024 * 1024,
-      timeout: options.timeoutMs,
+      timeout: runOptions.timeoutMs ?? options.timeoutMs,
     });
 
   function normalizeError(

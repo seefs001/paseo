@@ -93,24 +93,47 @@ export function BoardDetailSheet({
       desktopMaxWidth={DESKTOP_MAX_WIDTH}
       testID="board-detail-sheet"
     >
-      {isCompact ? (
-        <View style={styles.content}>
-          <BoardDetailSummary item={current} onEditTask={onEditTask} />
-          <BoardDetailBody item={current} onEditTask={onEditTask} />
-        </View>
-      ) : (
-        // Wide layouts read like an issue: what happened on the left, its properties on the right.
-        <View style={styles.columns}>
-          <View style={styles.main}>
-            <BoardDetailSummary item={current} onEditTask={onEditTask} />
-            <BoardDetailBody item={current} onEditTask={onEditTask} showProperties={false} />
-          </View>
-          <View style={styles.side} testID="board-detail-properties">
-            <BoardDetailProperties item={current} onEditTask={onEditTask} />
-          </View>
-        </View>
-      )}
+      <SheetBody current={current} isCompact={isCompact} onEditTask={onEditTask} />
     </AdaptiveModalSheet>
+  );
+}
+
+/** Compact stacks summary over body. Wide agents keep two columns; wide tasks read one. */
+function SheetBody({
+  current,
+  isCompact,
+  onEditTask,
+}: {
+  current: BoardItem;
+  isCompact: boolean;
+  onEditTask: (card: BoardCard) => void;
+}): ReactElement {
+  if (isCompact) {
+    return (
+      <View style={styles.content}>
+        <BoardDetailSummary item={current} onEditTask={onEditTask} />
+        <BoardDetailBody item={current} onEditTask={onEditTask} />
+      </View>
+    );
+  }
+  if (current.kind === "agent") {
+    return (
+      <View style={styles.columns}>
+        <View style={styles.main}>
+          <BoardDetailSummary item={current} onEditTask={onEditTask} />
+          <BoardDetailBody item={current} onEditTask={onEditTask} showProperties={false} />
+        </View>
+        <View style={styles.side} testID="board-detail-properties">
+          <BoardDetailProperties item={current} onEditTask={onEditTask} />
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.content, styles.reading]}>
+      <BoardDetailSummary item={current} onEditTask={onEditTask} />
+      <BoardDetailBody item={current} onEditTask={onEditTask} />
+    </View>
   );
 }
 
@@ -131,6 +154,10 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
     gap: theme.spacing[4],
+  },
+  reading: {
+    width: "100%",
+    maxWidth: 720,
   },
   side: {
     width: SIDE_WIDTH,

@@ -23,12 +23,9 @@ import {
   BoardAgentDetailBody,
   BoardAgentProperties,
 } from "@/components/board/detail-agent";
-import {
-  BoardTaskActions,
-  BoardTaskDetailBody,
-  BoardTaskProperties,
-} from "@/components/board/detail-task";
+import { BoardTaskActions, BoardTaskDetailBody } from "@/components/board/detail-task";
 import { getStatusBucketLabel } from "@/hooks/sidebar-status-view-model";
+import { STATUS_INDICATOR_FILLED_DOT_SIZE } from "@/utils/status-indicator-geometry";
 
 export const COLUMN_LABEL_KEYS: Record<BoardColumnId, string> = {
   fog: "board.desk.stages.fog",
@@ -49,6 +46,25 @@ function boardItemStateLabel(item: BoardItem, t: TFunction): string {
   return t(COLUMN_LABEL_KEYS[item.column]);
 }
 
+/** Grey rests, green goes, blue moves, amber needs you. */
+function taskDotStyle(column: BoardColumnId) {
+  switch (column) {
+    case "ready":
+      return styles.dotReady;
+    case "running":
+      return styles.dotRunning;
+    case "needs_you":
+    case "review":
+      return styles.dotAttention;
+    default:
+      return styles.dotMuted;
+  }
+}
+
+function TaskStateDot({ column }: { column: BoardColumnId }): ReactElement {
+  return <View style={[styles.dot, taskDotStyle(column)]} />;
+}
+
 /** The state dot and label; a task item shows its `T-<number>` and column. */
 export function BoardDetailState({ item }: { item: BoardItem }): ReactElement {
   const { t } = useTranslation();
@@ -63,7 +79,10 @@ export function BoardDetailState({ item }: { item: BoardItem }): ReactElement {
           showInactive
         />
       ) : (
-        <Text style={styles.taskNumber}>{`T-${item.card.task.number}`}</Text>
+        <>
+          <TaskStateDot column={item.column} />
+          <Text style={styles.taskNumber}>{`T-${item.card.task.number}`}</Text>
+        </>
       )}
       <Text style={styles.stateLabel} numberOfLines={1}>
         {boardItemStateLabel(item, t)}
@@ -108,7 +127,7 @@ export function BoardDetailBody({
       {item.kind === "agent" ? (
         <BoardAgentDetailBody item={item} onEditTask={onEditTask} showProperties={showProperties} />
       ) : (
-        <BoardTaskDetailBody item={item} onEditTask={onEditTask} showProperties={showProperties} />
+        <BoardTaskDetailBody item={item} onEditTask={onEditTask} />
       )}
     </View>
   );
@@ -187,16 +206,16 @@ function DetailMenuButton({
   );
 }
 
-/** The item's properties on their own, for the detail's side column. */
+/** The agent's properties rail. A task carries its context in the meta line instead. */
 export function BoardDetailProperties({
   item,
   onEditTask,
 }: {
   item: BoardItem;
   onEditTask: (card: BoardCard) => void;
-}): ReactElement {
-  if (item.kind === "agent") return <BoardAgentProperties item={item} onEditTask={onEditTask} />;
-  return <BoardTaskProperties item={item} />;
+}): ReactElement | null {
+  if (item.kind !== "agent") return null;
+  return <BoardAgentProperties item={item} onEditTask={onEditTask} />;
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -222,5 +241,22 @@ const styles = StyleSheet.create((theme) => ({
   },
   sections: {
     gap: theme.spacing[4],
+  },
+  dot: {
+    width: STATUS_INDICATOR_FILLED_DOT_SIZE,
+    height: STATUS_INDICATOR_FILLED_DOT_SIZE,
+    borderRadius: theme.borderRadius.full,
+  },
+  dotReady: {
+    backgroundColor: theme.colors.statusDotSuccess,
+  },
+  dotRunning: {
+    backgroundColor: theme.colors.statusDotRunning,
+  },
+  dotAttention: {
+    backgroundColor: theme.colors.statusDotWarning,
+  },
+  dotMuted: {
+    backgroundColor: theme.colors.foregroundMuted,
   },
 }));

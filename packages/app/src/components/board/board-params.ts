@@ -9,7 +9,6 @@ import { ALL_HOSTS_OPTION_ID } from "@/components/hosts/host-picker";
  * opens the same view. Defaults stay out of the URL to keep plain `/board` links plain.
  */
 export interface BoardRouteState {
-  viewId: string;
   filters: BoardFilters;
   /** One goal, or Loose work on one host; `null` shows every group. */
   focus: DeskGoalFocus | null;
@@ -19,7 +18,6 @@ export interface BoardRouteState {
 
 export type BoardRoutePatch = Partial<BoardRouteState>;
 
-export const DEFAULT_BOARD_VIEW_ID = "all";
 /** The `goal` param value that focuses work without a goal. */
 const LOOSE_FOCUS = "loose";
 
@@ -27,7 +25,6 @@ type RawParam = string | string[] | undefined;
 
 type BoardSearchParams = Partial<
   Record<
-    | "view"
     | "q"
     | "project"
     | "workspace"
@@ -58,9 +55,6 @@ function writeList(values: readonly string[]): string | undefined {
 
 function serializePatch(patch: BoardRoutePatch): Record<string, string | undefined> {
   const params: Record<string, string | undefined> = {};
-  if (patch.viewId !== undefined) {
-    params.view = patch.viewId === DEFAULT_BOARD_VIEW_ID ? undefined : patch.viewId;
-  }
   if (patch.filters !== undefined) {
     params.q = patch.filters.query.length > 0 ? patch.filters.query : undefined;
     params.project = writeList(patch.filters.projects);
@@ -83,7 +77,6 @@ function serializePatch(patch: BoardRoutePatch): Record<string, string | undefin
 
 export function useBoardRouteState(): [BoardRouteState, (patch: BoardRoutePatch) => void] {
   const params = useLocalSearchParams<BoardSearchParams>();
-  const view = readString(params.view);
   const query = readString(params.q);
   const projects = readString(params.project);
   const workspaces = readString(params.workspace);
@@ -97,7 +90,6 @@ export function useBoardRouteState(): [BoardRouteState, (patch: BoardRoutePatch)
   const state = useMemo<BoardRouteState>(() => {
     const hasFilters = query || projects || workspaces || providers || labels;
     return {
-      viewId: view || DEFAULT_BOARD_VIEW_ID,
       filters: hasFilters
         ? {
             query,
@@ -114,7 +106,7 @@ export function useBoardRouteState(): [BoardRouteState, (patch: BoardRoutePatch)
       showSubagents: subagents !== "0",
       host: host || ALL_HOSTS_OPTION_ID,
     };
-  }, [goal, goalHost, host, labels, projects, providers, query, subagents, view, workspaces]);
+  }, [goal, goalHost, host, labels, projects, providers, query, subagents, workspaces]);
 
   const update = useCallback((patch: BoardRoutePatch) => {
     router.setParams(serializePatch(patch));
