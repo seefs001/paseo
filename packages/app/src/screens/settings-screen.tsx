@@ -86,6 +86,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DesktopPermissionsSection } from "@/desktop/components/desktop-permissions-section";
 import { DesktopNotificationsSection } from "@/desktop/components/desktop-notifications-section";
+import { DesktopPowerSection } from "@/desktop/components/desktop-power-section";
 import { BrowserDataSection } from "@/desktop/browser/settings/browser-data-section";
 import { IntegrationsSection } from "@/desktop/components/integrations-section";
 import { isElectronRuntime } from "@/desktop/host";
@@ -1325,6 +1326,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
             <>
               <GeneralSection settings={settings} handleLanguageChange={handleLanguageChange} />
               <SendingSection />
+              {isDesktopApp ? <DesktopPowerSection /> : null}
               {isDesktopApp ? <OpenLocationSection /> : null}
             </>
           );

@@ -49,6 +49,7 @@ import { setupDarwinCompositorWatchdog } from "./window/compositor-watchdog/inde
 import { showWindowWhenReady } from "./window/show-when-ready.js";
 import { resolveDesktopWindowChromeMode, windowChromeModeArgument } from "./window/chrome.js";
 import { registerDialogHandlers } from "./features/dialogs.js";
+import { initializeKeepAwake } from "./features/keep-awake.js";
 import {
   registerNotificationHandlers,
   ensureNotificationCenterRegistration,
@@ -928,6 +929,8 @@ async function bootstrap(): Promise<void> {
   }
 
   await app.whenReady();
+
+  await initializeKeepAwake();
 
   const appDistDir = getAppDistDir();
   protocol.handle(APP_SCHEME, (request) => {

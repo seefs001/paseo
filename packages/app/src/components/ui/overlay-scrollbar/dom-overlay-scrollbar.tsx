@@ -26,7 +26,8 @@ export function DomOverlayScrollbar({
   useLayoutEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
-    syncMetrics();
+    // ResizeObserver delivers an initial measurement after layout. Reading here forces
+    // pending workspace styles to resolve synchronously during React's commit instead.
     scrollContainer.addEventListener("scroll", syncMetrics, { passive: true });
     const observer = new ResizeObserver(syncMetrics);
     observer.observe(scrollContainer);

@@ -3329,6 +3329,10 @@ export const ptBR: TranslationResources = {
     general: {
       title: "Geral",
       sending: "Envio",
+      power: {
+        title: "Energia",
+        keepAwake: "Impedir a suspensão automática enquanto o Paseo estiver em execução",
+      },
       setup: {
         label: "Configuração inicial",
         description: "Rever aparência, provedores, projetos e pareamento do celular",

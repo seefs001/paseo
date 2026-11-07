@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { StyleSheet as RNStyleSheet, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
+import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
+import { isWeb } from "@/constants/platform";
 import { getStatusDotColor } from "@/utils/status-dot-color";
 import {
   STATUS_RING_FRAME_SIZE,
@@ -31,8 +33,15 @@ export interface StatusRingProps {
  * incidental re-rendered the row.
  */
 export function StatusRingFrame({ backdrop, children }: StatusRingProps & { children: ReactNode }) {
+  const backdropStyle = getBackdropStyle(backdrop);
+  // On web this color is a theme CSS variable. Keep selection/hover changes inline so each
+  // backdrop swap does not add/remove a class and rebuild the entire Unistyles stylesheet.
+  const frameBackdrop =
+    isWeb && backdropStyle
+      ? inlineUnistylesStyle({ backgroundColor: backdropStyle.backgroundColor })
+      : backdropStyle;
   return (
-    <View style={[styles.frame, getBackdropStyle(backdrop)]}>
+    <View style={[styles.frame, frameBackdrop]}>
       <View style={styles.track} />
       {children}
       <View style={styles.centerDot} />

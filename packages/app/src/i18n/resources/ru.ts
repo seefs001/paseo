@@ -3330,6 +3330,10 @@ export const ru: TranslationResources = {
     general: {
       title: "Основные",
       sending: "Отправка",
+      power: {
+        title: "Питание",
+        keepAwake: "Не переходить в спящий режим автоматически, пока работает Paseo",
+      },
       setup: {
         label: "Первоначальная настройка",
         description: "Снова пройти оформление, провайдеры, проекты и привязку телефона",

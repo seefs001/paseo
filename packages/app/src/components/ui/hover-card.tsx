@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,7 +13,6 @@ import {
   type RefObject,
 } from "react";
 import { Dimensions, View, type Role, type StyleProp, type ViewStyle } from "react-native";
-import { FadeIn, FadeOut } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { Portal } from "@gorhom/portal";
 import { OverlayLayerProvider, useOverlayLayer } from "@/lib/overlay-root";
@@ -33,9 +33,14 @@ import {
 } from "./anchor";
 
 const CLOSE_GRACE_MS = 100;
+const FADE_DURATION_MS = 80;
+
+type HoverCardPhase = "closed" | "open" | "closing";
 
 interface HoverCardContextValue {
   open: boolean;
+  mounted: boolean;
+  finishClose: () => void;
   layer: number;
   setTriggerRef: (node: View | null) => void;
   triggerRef: RefObject<View | null>;
@@ -80,7 +85,9 @@ function WebHoverCard({
   const layer = useOverlayLayer("floating");
   const triggerRef = useRef<View>(null);
   const contentRef = useRef<View>(null);
-  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState<HoverCardPhase>("closed");
+  const open = phase === "open";
+  const mounted = phase !== "closed";
   const graceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Read when focus arrives: by focusout the element losing focus no longer matches :focus-visible.
   const keyboardFocusedRef = useRef(false);
@@ -106,20 +113,29 @@ function WebHoverCard({
     return focusInside() && document.activeElement?.matches(":focus-visible") === true;
   }, [focusInside]);
 
+  const closeNow = useCallback(() => {
+    clearGraceTimer();
+    setPhase((current) => (current === "open" ? "closing" : current));
+  }, [clearGraceTimer]);
+
+  const finishClose = useCallback(() => {
+    setPhase((current) => (current === "closing" ? "closed" : current));
+  }, []);
+
   const scheduleClose = useCallback(() => {
     if (keyboardFocusInside()) return;
     if (graceTimerRef.current) return;
     graceTimerRef.current = setTimeout(() => {
       graceTimerRef.current = null;
       if (keyboardFocusInside()) return;
-      setOpen(false);
+      closeNow();
     }, CLOSE_GRACE_MS);
-  }, [keyboardFocusInside]);
+  }, [closeNow, keyboardFocusInside]);
 
   const openNow = useCallback(() => {
     clearGraceTimer();
     if (!disabled) {
-      setOpen(true);
+      setPhase("open");
     }
   }, [clearGraceTimer, disabled]);
 
@@ -131,8 +147,7 @@ function WebHoverCard({
       if (event.key === "Escape" && open) {
         event.preventDefault();
         if (focusInside()) trigger.focus();
-        clearGraceTimer();
-        setOpen(false);
+        closeNow();
         return true;
       } else if (
         focusInside() &&
@@ -152,7 +167,7 @@ function WebHoverCard({
       }
       return false;
     },
-    [clearGraceTimer, focusInside, open, openNow],
+    [closeNow, focusInside, open, openNow],
   );
 
   const setOverlayScope = useOverlayRegistration({
@@ -174,13 +189,11 @@ function WebHoverCard({
     if (!isWeb) return;
     const trigger = triggerRef.current as unknown as HTMLElement | null;
     if (!trigger) return;
-    const close = () => {
-      clearGraceTimer();
-      setOpen(false);
-    };
     const focusEntered = (event: FocusEvent) => {
       const target = event.target as Element;
       keyboardFocusedRef.current = target.matches(":focus-visible");
+      // Restoring pointer focus must not cancel a close already scheduled by pointer leave.
+      if (!keyboardFocusedRef.current) return;
       if (trigger.contains(target)) {
         openNow();
       } else if ((contentRef.current as unknown as HTMLElement | null)?.contains(target)) {
@@ -210,21 +223,21 @@ function WebHoverCard({
     };
     // Only a scroll that moves the trigger detaches the card. A streaming chat beside it does not.
     const scrolled = (event: Event) => {
-      if ((event.target as Node).contains(trigger)) close();
+      if ((event.target as Node).contains(trigger)) closeNow();
     };
     document.addEventListener("focusin", focusEntered);
     document.addEventListener("focusout", focusLeft);
     trigger.addEventListener("keydown", activateClosedTrigger);
     document.addEventListener("scroll", scrolled, true);
-    window.addEventListener("resize", close);
+    window.addEventListener("resize", closeNow);
     return () => {
       document.removeEventListener("focusin", focusEntered);
       document.removeEventListener("focusout", focusLeft);
       trigger.removeEventListener("keydown", activateClosedTrigger);
       document.removeEventListener("scroll", scrolled, true);
-      window.removeEventListener("resize", close);
+      window.removeEventListener("resize", closeNow);
     };
-  }, [clearGraceTimer, keyPressed, open, openNow, scheduleClose]);
+  }, [clearGraceTimer, closeNow, keyPressed, open, openNow, scheduleClose]);
 
   // While open, the safe zone covers trigger + content + the bridge between
   // them. Close only fires when the pointer leaves the safe zone; re-entering
@@ -239,16 +252,25 @@ function WebHoverCard({
 
   useEffect(() => {
     if (disabled) {
-      clearGraceTimer();
-      setOpen(false);
+      closeNow();
     }
-  }, [clearGraceTimer, disabled]);
+  }, [closeNow, disabled]);
 
   useEffect(() => clearGraceTimer, [clearGraceTimer]);
 
   const value = useMemo<HoverCardContextValue>(
-    () => ({ open, layer, setTriggerRef, triggerRef, contentRef, openNow, scheduleClose }),
-    [open, layer, setTriggerRef, openNow, scheduleClose],
+    () => ({
+      open,
+      mounted,
+      finishClose,
+      layer,
+      setTriggerRef,
+      triggerRef,
+      contentRef,
+      openNow,
+      scheduleClose,
+    }),
+    [open, mounted, finishClose, layer, setTriggerRef, openNow, scheduleClose],
   );
 
   return (
@@ -293,16 +315,18 @@ interface HoverCardContentProps {
   role?: Role;
   accessibilityLabel?: string;
   testID?: string;
-  /** Mounted only while the card is open, so whatever it fetches runs only then. */
+  /** Mounted while open and during the closing fade; unmounted once the fade ends. */
   children: ReactNode;
 }
 
 export function HoverCardContent(props: HoverCardContentProps): ReactElement | null {
   const ctx = useContext(HoverCardContext);
-  if (!ctx?.open) return null;
+  if (!ctx?.mounted) return null;
   return (
     <HoverCardSurface
       {...props}
+      open={ctx.open}
+      onExited={ctx.finishClose}
       layer={ctx.layer}
       triggerRef={ctx.triggerRef}
       contentRef={ctx.contentRef}
@@ -311,6 +335,8 @@ export function HoverCardContent(props: HoverCardContentProps): ReactElement | n
 }
 
 function HoverCardSurface({
+  open,
+  onExited,
   layer,
   triggerRef,
   contentRef,
@@ -323,14 +349,15 @@ function HoverCardSurface({
   testID,
   children,
 }: HoverCardContentProps & {
+  open: boolean;
+  onExited: () => void;
   layer: number;
   triggerRef: RefObject<View | null>;
   contentRef: RefObject<View | null>;
-}): ReactElement {
+}): ReactElement | null {
   const portalHostName = useFloatingPanelPortalHostName();
   const [anchor, setAnchor] = useState<{ triggerRect: Rect; hostRect: Rect } | null>(null);
   const [contentSize, setContentSize] = useState<Size | null>(null);
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!triggerRef.current) return;
@@ -347,8 +374,8 @@ function HoverCardSurface({
     };
   }, [portalHostName, triggerRef]);
 
-  useEffect(() => {
-    if (!anchor || !contentSize) return;
+  const position = useMemo(() => {
+    if (!anchor || !contentSize) return null;
     const { width, height } = Dimensions.get("window");
     const { x, y } = computePosition({
       triggerRect: anchor.triggerRect,
@@ -359,8 +386,33 @@ function HoverCardSurface({
       alignment,
       offset,
     });
-    setPosition({ x: x - anchor.hostRect.x, y: y - anchor.hostRect.y });
+    return { x: x - anchor.hostRect.x, y: y - anchor.hostRect.y };
   }, [alignment, anchor, contentSize, offset, placement]);
+  const placed = position !== null;
+
+  useLayoutEffect(() => {
+    if (!isWeb) return;
+    if (!placed) {
+      if (!open) onExited();
+      return;
+    }
+    const element = contentRef.current;
+    if (!(element instanceof HTMLElement)) return;
+    // Opacity needs no geometry snapshot. Reanimated's exiting path reads the card rect on
+    // every update, forcing pending workspace-wide style changes through synchronous layout.
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const animation = element.animate(
+      { opacity: open ? [0, 1] : [1, 0] },
+      { duration: reducedMotion ? 0 : FADE_DURATION_MS, fill: "both" },
+    );
+    animation.onfinish = () => {
+      if (!open) onExited();
+    };
+    return () => {
+      animation.onfinish = null;
+      animation.cancel();
+    };
+  }, [contentRef, onExited, open, placed]);
 
   const handleLayout = useCallback(
     (event: { nativeEvent: { layout: { width: number; height: number } } }) => {
@@ -373,20 +425,23 @@ function HoverCardSurface({
   const frameStyle = useMemo(
     () => ({
       position: "absolute" as const,
-      top: position?.y ?? -9999,
-      left: position?.x ?? -9999,
+      top: position?.y ?? 0,
+      left: position?.x ?? 0,
+      opacity: placed ? 1 : 0,
     }),
-    [position?.x, position?.y],
+    [placed, position?.x, position?.y],
   );
   const surfaceStyle = useMemo(() => [styles.surface, style], [style]);
+
+  if (!anchor) return null;
 
   return (
     <Portal hostName={portalHostName}>
       <View pointerEvents="box-none" style={[styles.portalOverlay, { zIndex: layer }]}>
         <FloatingSurface
           ref={contentRef}
-          entering={FadeIn.duration(80)}
-          exiting={FadeOut.duration(80)}
+          pointerEvents={open ? "auto" : "none"}
+          aria-hidden={!open}
           collapsable={false}
           onLayout={handleLayout}
           role={role}

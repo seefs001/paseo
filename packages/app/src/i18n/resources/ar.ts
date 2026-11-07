@@ -3324,6 +3324,10 @@ export const ar: TranslationResources = {
     general: {
       title: "عام",
       sending: "الإرسال",
+      power: {
+        title: "الطاقة",
+        keepAwake: "منع السكون التلقائي أثناء تشغيل Paseo",
+      },
       setup: {
         label: "الإعداد الأولي",
         description: "أعد المرور على المظهر والمزوّدين والمشاريع وإقران الهاتف",

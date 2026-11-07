@@ -3303,6 +3303,10 @@ export const ko: TranslationResources = {
     general: {
       title: "일반",
       sending: "전송",
+      power: {
+        title: "전원",
+        keepAwake: "Paseo 실행 중 자동 절전 방지",
+      },
       setup: {
         label: "초기 설정",
         description: "모양, 제공자, 프로젝트, 휴대폰 페어링을 다시 진행합니다",

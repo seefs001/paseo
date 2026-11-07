@@ -3257,6 +3257,10 @@ export const zhCN: TranslationResources = {
     general: {
       title: "通用",
       sending: "发送",
+      power: {
+        title: "电源",
+        keepAwake: "Paseo 运行时防止自动休眠",
+      },
       setup: {
         label: "首次设置",
         description: "重新设置外观、提供方、项目和手机配对",

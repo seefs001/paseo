@@ -3353,6 +3353,10 @@ export const fr: TranslationResources = {
     general: {
       title: "Général",
       sending: "Envoi",
+      power: {
+        title: "Alimentation",
+        keepAwake: "Empêcher la mise en veille automatique pendant que Paseo est ouvert",
+      },
       setup: {
         label: "Configuration initiale",
         description:

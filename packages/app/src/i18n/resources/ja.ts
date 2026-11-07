@@ -3318,6 +3318,10 @@ export const ja: TranslationResources = {
     general: {
       title: "一般",
       sending: "送信",
+      power: {
+        title: "電源",
+        keepAwake: "Paseo の実行中は自動スリープを防ぐ",
+      },
       setup: {
         label: "初回セットアップ",
         description:

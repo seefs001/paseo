@@ -3419,6 +3419,10 @@ export const en = {
     general: {
       title: "General",
       sending: "Sending",
+      power: {
+        title: "Power",
+        keepAwake: "Prevent automatic sleep while Paseo is running",
+      },
       setup: {
         label: "First-run setup",
         description: "Walk through appearance, providers, projects and phone pairing again",

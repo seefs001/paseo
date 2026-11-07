@@ -21,6 +21,7 @@ import {
   ArrowRightToLine,
   Copy,
   Pencil,
+  Pin,
   RotateCw,
   Columns2,
   Rows2,
@@ -123,7 +124,6 @@ const TAB_DROP_INDICATOR_WIDTH = 4;
 const TAB_MODIFIED_DOT_SIZE = 8;
 // The tab rail only renders in the wide layout, so the device alone picks its glyph size.
 const TAB_RAIL_GLYPH_SIZE = paneContentToolbarIconSize(false);
-const PINNED_TAB_WIDTH = 32;
 const TAB_MIN_WIDTH = 64;
 const TAB_MAX_WIDTH = 160;
 const TAB_CLOSE_BUTTON_RESERVED_WIDTH = 0;
@@ -139,6 +139,7 @@ const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedPin = withUnistyles(Pin);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
@@ -493,6 +494,7 @@ interface WorkspaceTabLabel {
   key: string;
   label: string;
   modified: boolean;
+  pinned: boolean;
 }
 
 interface WorkspaceTabLabelMeasurement {
@@ -523,7 +525,7 @@ function completeWorkspaceTabLabelWidths(
   measurements: Map<string, WorkspaceTabLabelMeasurement>,
 ): number[] | null {
   const widths: number[] = [];
-  for (const { key, label, modified } of labels) {
+  for (const { key, label, modified, pinned } of labels) {
     const measurement = measurements.get(key);
     if (!measurement || measurement.label !== label || measurement.width <= 0) {
       return null;
@@ -531,7 +533,10 @@ function completeWorkspaceTabLabelWidths(
     // The modified dot sits in the content row, so a modified tab needs that much more width
     // before its label starts truncating.
     const modifiedAllowance = modified ? TAB_CONTENT_GAP + TAB_MODIFIED_DOT_SIZE : 0;
-    widths.push(measurement.width + TAB_LABEL_LAYOUT_ALLOWANCE + modifiedAllowance);
+    const pinnedAllowance = pinned ? TAB_ICON_WIDTH + TAB_CONTENT_GAP : 0;
+    widths.push(
+      measurement.width + TAB_LABEL_LAYOUT_ALLOWANCE + modifiedAllowance + pinnedAllowance,
+    );
   }
   return widths;
 }
@@ -712,6 +717,14 @@ function TabHandleContent({
 
   return (
     <View style={styles.tabHandle} dataSet={tabHandleDataSet}>
+      {pinned ? (
+        <View style={styles.tabIcon}>
+          <ThemedPin
+            size={TAB_ICON_WIDTH}
+            uniProps={isHighlighted ? foregroundColorMapping : mutedColorMapping}
+          />
+        </View>
+      ) : null}
       <View style={styles.tabIcon}>
         <WorkspaceTabIcon presentation={presentation} active={isHighlighted} backdrop={backdrop} />
       </View>
@@ -723,10 +736,9 @@ function TabHandleContent({
           {presentation.label}
         </Text>
       ) : null}
-      {/* Unpinned tabs reserve space for the modified dot so truncated labels end before it. */}
       {presentation.modified ? (
         <View
-          style={[styles.tabModifiedDot, pinned && styles.tabPinnedModifiedDot]}
+          style={styles.tabModifiedDot}
           accessibilityLabel={t("workspace.tabs.modified")}
           testID={modifiedTestId}
         />
@@ -1120,12 +1132,7 @@ function ResolvedWorkspaceDesktopTabsRow({
   const { t } = useTranslation();
   const pinnedTabs = useMemo(() => allTabs.filter(({ tab }) => tab.pinned), [allTabs]);
   const tabs = useMemo(() => allTabs.filter(({ tab }) => !tab.pinned), [allTabs]);
-  const pinnedTabsWidth = useMemo(() => {
-    if (pinnedTabs.length === 0) return 0;
-    return (
-      pinnedTabs.length * (PINNED_TAB_WIDTH + TAB_CHIP_GAP) + TAB_ROW_PADDING_HORIZONTAL * 2 + 1
-    );
-  }, [pinnedTabs.length]);
+  const orderedTabs = useMemo(() => [...pinnedTabs, ...tabs], [pinnedTabs, tabs]);
   const isCompact = useIsCompactFormFactor();
   const newTabKeys = useShortcutKeys("workspace-tab-new");
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
@@ -1149,12 +1156,13 @@ function ResolvedWorkspaceDesktopTabsRow({
     updateMeasuredWidth(setExitFocusModeWidth, event);
   }, []);
 
-  const layoutMetrics = useMemo(
-    () => ({
+  const layoutMetrics = useMemo(() => {
+    const pinnedTabsChromeWidth = pinnedTabs.length > 0 ? TAB_ROW_PADDING_HORIZONTAL * 2 + 1 : 0;
+    return {
       rowHorizontalInset: 0,
       actionsReservedWidth: Math.max(
         0,
-        pinnedTabsWidth +
+        pinnedTabsChromeWidth +
           DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH +
           (focusModeEnabled ? exitFocusModeWidth : 0) +
           PANE_SPLIT_ACTIONS_RESERVED_WIDTH +
@@ -1169,15 +1177,14 @@ function ResolvedWorkspaceDesktopTabsRow({
       tabContentGap: TAB_CONTENT_GAP,
       tabHorizontalPadding: TAB_CHIP_HORIZONTAL_PADDING,
       closeButtonWidth: TAB_CLOSE_BUTTON_RESERVED_WIDTH,
-    }),
-    [
-      exitFocusModeWidth,
-      focusModeEnabled,
-      pinnedTabsWidth,
-      showPaneMaximizeAction,
-      showPaneSplitActions,
-    ],
-  );
+    };
+  }, [
+    exitFocusModeWidth,
+    focusModeEnabled,
+    pinnedTabs.length,
+    showPaneMaximizeAction,
+    showPaneSplitActions,
+  ]);
 
   const panePanelKinds = useMemo(() => allTabs.map(({ tab }) => tab.kind), [allTabs]);
 
@@ -1216,14 +1223,19 @@ function ResolvedWorkspaceDesktopTabsRow({
   );
   const tabLabels = useMemo(
     () =>
-      tabs.map((tab) => {
+      orderedTabs.map((tab) => {
         const label =
           tab.presentation.titleState === "loading"
             ? getFallbackTabLabel(tab.tab, fallbackTabLabels)
             : tab.presentation.label;
-        return { key: tab.tab.key, label, modified: tab.presentation.modified };
+        return {
+          key: tab.tab.key,
+          label,
+          modified: tab.presentation.modified,
+          pinned: tab.tab.pinned === true,
+        };
       }),
-    [fallbackTabLabels, tabs],
+    [fallbackTabLabels, orderedTabs],
   );
   const tabLabelSignature = useMemo(() => workspaceTabLabelSignature(tabLabels), [tabLabels]);
   const currentTabLabelKeys = useMemo(() => new Set(tabLabels.map(({ key }) => key)), [tabLabels]);
@@ -1258,12 +1270,12 @@ function ResolvedWorkspaceDesktopTabsRow({
       }
       return {
         signature: tabLabelSignature,
-        tabs,
+        tabs: orderedTabs,
         labels: tabLabels,
         labelWidths,
       };
     });
-  }, [labelMeasurements, tabLabelSignature, tabLabels, tabs, tabsContainerWidth]);
+  }, [labelMeasurements, orderedTabs, tabLabelSignature, tabLabels, tabsContainerWidth]);
 
   useLayoutEffect(() => {
     publishMeasuredTrack();
@@ -1293,13 +1305,21 @@ function ResolvedWorkspaceDesktopTabsRow({
       return EMPTY_RESOLVED_TAB_ROWS;
     }
     const currentTabs = new Map(
-      tabs.map((tab, index) => [tab.tab.key, { tab, label: tabLabels[index]?.label }]),
+      orderedTabs.map((tab, index) => [tab.tab.key, { tab, label: tabLabels[index]?.label }]),
     );
     return trackSnapshot.tabs.map((snapshotTab, index) => {
       const current = currentTabs.get(snapshotTab.tab.key);
       return current?.label === trackSnapshot.labels[index]?.label ? current.tab : snapshotTab;
     });
-  }, [tabLabels, tabs, trackSnapshot]);
+  }, [orderedTabs, tabLabels, trackSnapshot]);
+  const displayedPinnedTabs = useMemo(
+    () => displayedTabs.filter(({ tab }) => tab.pinned),
+    [displayedTabs],
+  );
+  const displayedUnpinnedTabs = useMemo(
+    () => displayedTabs.filter(({ tab }) => !tab.pinned),
+    [displayedTabs],
+  );
 
   const { layout } = useWorkspaceTabLayout({
     tabLabelWidths: trackSnapshot?.labelWidths ?? [],
@@ -1360,12 +1380,11 @@ function ResolvedWorkspaceDesktopTabsRow({
       const pinned = item.tab.pinned === true;
       const shouldShowCloseButton =
         !pinned && layout.closeButtonPolicy === "all" && item.presentation.showCloseButton;
-      const layoutItem = layout.items[index] ?? null;
-      const regularTabWidth = layoutItem?.width ?? 150;
-      const resolvedTabWidth = pinned ? PINNED_TAB_WIDTH : regularTabWidth;
-      const showLabel = !pinned && (layoutItem?.showLabel ?? true);
-      const tabIndex = pinned ? index : index + pinnedTabs.length;
-      const tabCount = pinnedTabs.length + displayedTabs.length;
+      const tabIndex = pinned ? index : index + displayedPinnedTabs.length;
+      const layoutItem = layout.items[tabIndex] ?? null;
+      const resolvedTabWidth = layoutItem?.width ?? 150;
+      const showLabel = layoutItem?.showLabel ?? true;
+      const tabCount = displayedTabs.length;
       const showDropIndicatorBefore = activeDragTabId !== null && tabDropPreviewIndex === tabIndex;
       const showDropIndicatorAfter =
         activeDragTabId !== null && tabDropPreviewIndex === tabCount && tabIndex === tabCount - 1;
@@ -1426,7 +1445,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       tabMenuLabels,
       tabDropPreviewIndex,
       displayedTabs.length,
-      pinnedTabs.length,
+      displayedPinnedTabs.length,
     ],
   );
 
@@ -1466,13 +1485,13 @@ function ResolvedWorkspaceDesktopTabsRow({
         onPress={onExitFocusMode}
         onLayout={handleExitFocusModeLayout}
       />
-      {pinnedTabs.length > 0 ? (
+      {displayedPinnedTabs.length > 0 ? (
         <View style={styles.pinnedTabs} testID="workspace-pinned-tabs">
           <SortableInlineList
-            data={pinnedTabs}
+            data={displayedPinnedTabs}
             keyExtractor={tabKeyExtractor}
             useDragHandle
-            disabled={!externalDndContext && pinnedTabs.length < 2}
+            disabled={!externalDndContext && displayedPinnedTabs.length < 2}
             onDragEnd={handlePinnedDragEnd}
             externalDndContext={externalDndContext}
             activeId={activeDragTabId}
@@ -1496,10 +1515,10 @@ function ResolvedWorkspaceDesktopTabsRow({
           scrollEventThrottle={16}
         >
           <SortableInlineList
-            data={displayedTabs}
+            data={displayedUnpinnedTabs}
             keyExtractor={tabKeyExtractor}
             useDragHandle
-            disabled={!externalDndContext && displayedTabs.length < 2}
+            disabled={!externalDndContext && displayedUnpinnedTabs.length < 2}
             onDragEnd={handleDragEnd}
             externalDndContext={externalDndContext}
             activeId={activeDragTabId}
@@ -1883,11 +1902,6 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.foregroundMuted,
-  },
-  tabPinnedModifiedDot: {
-    position: "absolute",
-    top: -TAB_CONTENT_GAP,
-    right: -TAB_CONTENT_GAP,
   },
   newTabTooltipText: {
     color: theme.colors.foreground,

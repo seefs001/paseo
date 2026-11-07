@@ -3349,6 +3349,10 @@ export const es: TranslationResources = {
     general: {
       title: "General",
       sending: "Envío",
+      power: {
+        title: "Energía",
+        keepAwake: "Evitar la suspensión automática mientras Paseo está en ejecución",
+      },
       setup: {
         label: "Configuración inicial",
         description:
