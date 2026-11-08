@@ -25,7 +25,7 @@ export type WorkspaceIndicator = "needs_input" | "failed" | "running" | "attenti
 export interface PluginWorkspaceSnapshot {
   readonly ref: WorkspaceRef;
   readonly hostId: string;
-  readonly project: ProjectRef;
+  readonly project: ProjectRef | null;
   readonly pinnedAt: string | null;
   readonly labels: readonly string[];
   readonly background: boolean;
@@ -37,7 +37,7 @@ export interface PluginWorkspaceSnapshot {
   readonly indicator: WorkspaceIndicator;
   readonly indicatorLabel: string | null;
   readonly id: string;
-  readonly projectId: string;
+  readonly projectId: string | null;
   readonly projectDisplayName: string;
   readonly projectRootPath: string;
   readonly directory: string;

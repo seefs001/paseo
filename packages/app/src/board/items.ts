@@ -230,7 +230,10 @@ function addAgentItems(input: {
       agent,
       bucket,
       workspace,
-      project: host.directory.projects.get(workspace.projectId) ?? null,
+      project:
+        workspace.projectId === null
+          ? null
+          : (host.directory.projects.get(workspace.projectId) ?? null),
       task,
       parent: parentEntry?.agent ?? null,
       children,

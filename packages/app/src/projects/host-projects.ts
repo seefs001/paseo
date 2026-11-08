@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useWorkspaceStructure } from "@/stores/session-store-hooks";
 import { type HostProjectListItem } from "@/projects/host-project-model";
 
@@ -22,5 +23,8 @@ export {
 
 export function useHostProjects(serverIds: string[]): HostProjectListItem[] {
   const workspaceStructure = useWorkspaceStructure(serverIds);
-  return workspaceStructure.projects;
+  return useMemo(
+    () => workspaceStructure.projects.filter((group) => group.projectAssigned !== false),
+    [workspaceStructure.projects],
+  );
 }

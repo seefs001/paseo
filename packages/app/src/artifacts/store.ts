@@ -112,12 +112,8 @@ export async function removeArtifact(serverId: string, artifactId: string): Prom
   editArtifacts(serverId, (map) => map.delete(artifactId));
 }
 
-/** Summaries first, then the most recently updated. */
 export function sortArtifacts(list: readonly Artifact[]): Artifact[] {
-  return [...list].sort((a, b) => {
-    if ((a.kind === "summary") !== (b.kind === "summary")) return a.kind === "summary" ? -1 : 1;
-    return b.updatedAt.localeCompare(a.updatedAt);
-  });
+  return [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 const EMPTY: readonly Artifact[] = [];

@@ -1,30 +1,48 @@
-import type { ArtifactReadPayload } from "@getpaseo/client/internal/daemon-client";
 import type { Artifact, BoardTask } from "@getpaseo/protocol/messages";
-import { useCallback, useMemo, type ReactElement } from "react";
+import { Buffer } from "buffer";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { Image, ScrollView, Text, View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
-import { readArtifact, removeArtifact, useArtifact } from "@/artifacts/store";
+import { Text, View } from "react-native";
+import { Ellipsis, MessageSquareQuote } from "lucide-react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { readArtifact, removeArtifact, useArtifact, useArtifacts } from "@/artifacts/store";
 import {
   closeArtifactViewer,
   dismissArtifactViewer,
   useArtifactViewer,
 } from "@/artifacts/viewer-state";
+import { ArtifactHostState } from "./collection";
+import { ArtifactContent, artifactMimeType } from "./content";
+import type { ArtifactQuoteInput } from "./quote";
 import { openDeskGoalSheet } from "@/board/goal-sheet";
 import { openBoardTaskSheet } from "@/board/sheet";
 import { useBoardTasks } from "@/board/tasks";
 import { useFetchQuery } from "@/data/query";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { Button } from "@/components/ui/button";
-import { FileHtmlPreview } from "@/file-panels/html-preview";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { PaneContentToolbar, ToolbarButton } from "@/components/ui/pane-content-toolbar";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { useToast } from "@/contexts/toast-context";
+import { saveAndShareBytes } from "@/stores/download-store";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { formatTimeAgo } from "@/utils/time";
 
-/** Mounted once in the app shell. */
+const ThemedEllipsis = withUnistyles(Ellipsis, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedQuote = withUnistyles(MessageSquareQuote, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+
 export function ArtifactViewerHost(): ReactElement | null {
   const viewer = useArtifactViewer();
   if (viewer.status !== "open") return null;
@@ -38,15 +56,6 @@ export function ArtifactViewerHost(): ReactElement | null {
   );
 }
 
-const IMAGE_MIME: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-};
-
 function ArtifactViewer({
   serverId,
   artifactId,
@@ -59,10 +68,7 @@ function ArtifactViewer({
   const { t } = useTranslation();
   const artifact = useArtifact(serverId, artifactId);
   const header = useMemo<SheetHeader>(
-    () => ({
-      title: artifact?.title ?? t("artifacts.viewer.missing"),
-      subtitle: artifact ? <ArtifactMeta artifact={artifact} /> : undefined,
-    }),
+    () => ({ title: artifact?.title ?? t("artifacts.title") }),
     [artifact, t],
   );
   return (
@@ -72,6 +78,9 @@ function ArtifactViewer({
       onClose={closeArtifactViewer}
       onDismiss={dismissArtifactViewer}
       desktopMaxWidth={960}
+      desktopHeight="85%"
+      scrollable={false}
+      contentStyle={styles.container}
       testID="artifact-viewer"
     >
       <ArtifactView serverId={serverId} artifactId={artifactId} onLeave={closeArtifactViewer} />
@@ -92,30 +101,87 @@ export function ArtifactMeta({ artifact }: { artifact: Artifact }): ReactElement
   );
 }
 
-/**
- * One artifact: where it came from and what it serves, then its content. The workspace side pane
- * and the goal's viewer both render this. `onLeave` runs before a link navigates away.
- */
+interface ArtifactViewProps {
+  serverId: string;
+  artifactId: string;
+  onLeave: () => void;
+  onOpenFile?: (path: string) => void;
+  onQuote?: (quote: ArtifactQuoteInput) => void;
+}
+
 export function ArtifactView({
   serverId,
   artifactId,
   onLeave,
-}: {
-  serverId: string;
-  artifactId: string;
-  onLeave: () => void;
-}): ReactElement {
+  onOpenFile,
+  onQuote,
+}: ArtifactViewProps): ReactElement {
   const { t } = useTranslation();
+  const toast = useToast();
   const artifact = useArtifact(serverId, artifactId);
-  const revision = artifact?.revision ?? 0;
-  // The key carries the revision, so an update reads the new copy and an old one never changes.
+  const host = useArtifacts((state) => state.hosts[serverId]);
+  const [view, setView] = useState<"preview" | "source">("preview");
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [pending, setPending] = useState(false);
   const content = useFetchQuery({
-    queryKey: ["artifact", serverId, artifactId, revision],
+    queryKey: ["artifact", serverId, artifactId, artifact?.revision ?? 0],
     queryFn: () => readArtifact(serverId, artifactId),
     enabled: artifact !== null,
     dataShape: "value",
     immutableWhen: () => true,
   });
+  const detailsHeader = useMemo(() => ({ title: t("artifacts.interaction.details") }), [t]);
+  const views = useMemo(
+    () => [
+      {
+        value: "preview" as const,
+        label: t("panels.file.editor.preview"),
+        testID: "artifact-mode-preview",
+      },
+      {
+        value: "source" as const,
+        label: t("panels.file.editor.source"),
+        testID: "artifact-mode-source",
+      },
+    ],
+    [t],
+  );
+  const showDetails = useCallback(() => setDetailsOpen(true), []);
+  const closeDetails = useCallback(() => setDetailsOpen(false), []);
+  const leaveDetails = useCallback(() => {
+    setDetailsOpen(false);
+    onLeave();
+  }, [onLeave]);
+  const { refetch } = content;
+  const retry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+  const openFile = useCallback(() => {
+    if (artifact?.sourcePath) onOpenFile?.(artifact.sourcePath);
+  }, [artifact?.sourcePath, onOpenFile]);
+  const quote = useCallback(() => {
+    if (content.data) onQuote?.({ artifact: content.data.artifact, text: content.data.content });
+  }, [content.data, onQuote]);
+  const download = useCallback(async () => {
+    if (!content.data) return;
+    setPending(true);
+    try {
+      const payload = content.data;
+      await saveAndShareBytes({
+        bytes: Buffer.from(payload.content, payload.encoding),
+        fileName: payload.artifact.fileName,
+        mimeType: artifactMimeType(payload),
+      });
+      toast.show(t("common.states.downloadComplete"));
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setPending(false);
+    }
+  }, [content.data, t, toast]);
+  const downloadPress = useCallback(() => {
+    void download();
+  }, [download]);
   const remove = useCallback(async () => {
     const confirmed = await confirmDialog({
       title: t("artifacts.viewer.removeTitle"),
@@ -124,99 +190,104 @@ export function ArtifactView({
       destructive: true,
     });
     if (!confirmed) return;
-    await removeArtifact(serverId, artifactId);
-    onLeave();
-  }, [artifactId, onLeave, serverId, t]);
+    setPending(true);
+    try {
+      await removeArtifact(serverId, artifactId);
+      onLeave();
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setPending(false);
+    }
+  }, [artifactId, onLeave, serverId, t, toast]);
   const removePress = useCallback(() => {
-    void remove().catch(() => undefined);
+    void remove();
   }, [remove]);
-
-  return (
-    <View style={styles.body}>
-      {artifact ? (
-        <ArtifactLinks serverId={serverId} artifact={artifact} onLeave={onLeave} />
-      ) : null}
-      <ArtifactBody exists={artifact !== null} query={content} />
-      {artifact ? (
-        <View style={styles.footer}>
-          <Button variant="ghost" size="sm" onPress={removePress} testID="artifact-remove">
-            {t("artifacts.viewer.remove")}
-          </Button>
-        </View>
-      ) : null}
+  if (host?.status !== "ready") return <ArtifactHostState host={host} />;
+  if (!artifact)
+    return (
+      <View style={styles.center}>
+        <Text style={styles.muted}>{t("artifacts.viewer.missing")}</Text>
+      </View>
+    );
+  const supportsPreview = artifact.media === "markdown" || artifact.media === "html";
+  const canQuote = onQuote !== undefined && artifact.media !== "image";
+  let body = (
+    <View style={styles.center}>
+      <Text style={styles.muted}>{t("artifacts.viewer.loading")}</Text>
     </View>
   );
-}
-
-function ArtifactBody({
-  exists,
-  query,
-}: {
-  exists: boolean;
-  query: ReturnType<typeof useFetchQuery<ArtifactReadPayload>>;
-}): ReactElement {
-  const { t } = useTranslation();
-  if (!exists) return <Text style={styles.muted}>{t("artifacts.viewer.missing")}</Text>;
-  if (query.isError) return <Text style={styles.error}>{toErrorMessage(query.error)}</Text>;
-  if (!query.data) return <Text style={styles.muted}>{t("artifacts.viewer.loading")}</Text>;
-  return (
-    <ArtifactContent
-      artifact={query.data.artifact}
-      content={query.data.content}
-      encoding={query.data.encoding}
-    />
-  );
-}
-
-function ArtifactContent({
-  artifact,
-  content,
-  encoding,
-}: {
-  artifact: Artifact;
-  content: string;
-  encoding: "utf8" | "base64";
-}): ReactElement {
-  switch (artifact.media) {
-    case "markdown":
-      return <MarkdownRenderer text={content} selectable />;
-    case "html":
-      return (
-        <View style={styles.frame}>
-          <FileHtmlPreview html={content} testID="artifact-html" />
-        </View>
-      );
-    case "image": {
-      const extension = artifact.fileName.split(".").pop()?.toLowerCase() ?? "";
-      const mime = IMAGE_MIME[extension] ?? "image/png";
-      return (
-        <ArtifactImage
-          uri={`data:${mime};base64,${encoding === "base64" ? content : ""}`}
-          title={artifact.title}
-        />
-      );
-    }
-    case "text":
-      return (
-        <ScrollView horizontal style={styles.textScroll}>
-          <Text selectable style={styles.code} testID="artifact-text">
-            {content}
-          </Text>
-        </ScrollView>
-      );
+  if (content.isError) {
+    body = (
+      <View style={styles.center}>
+        <Text style={styles.error}>{toErrorMessage(content.error)}</Text>
+        <Button variant="outline" onPress={retry}>
+          {t("common.actions.retry")}
+        </Button>
+      </View>
+    );
+  } else if (content.data) {
+    body = <ArtifactContent payload={content.data} view={view} onQuote={onQuote} />;
   }
-}
-
-function ArtifactImage({ uri, title }: { uri: string; title: string }): ReactElement {
-  const source = useMemo(() => ({ uri }), [uri]);
   return (
-    <Image
-      source={source}
-      style={styles.image}
-      resizeMode="contain"
-      accessibilityLabel={title}
-      testID="artifact-image"
-    />
+    <View style={styles.container} testID="artifact-document">
+      <PaneContentToolbar style={styles.toolbar}>
+        <Text style={styles.saved} numberOfLines={1}>
+          {t("artifacts.interaction.savedCopy")} · {artifact.revision}
+        </Text>
+        {supportsPreview ? (
+          <SegmentedControl size="sm" value={view} onValueChange={setView} options={views} />
+        ) : null}
+        {canQuote ? (
+          <ToolbarButton
+            label={t("artifacts.interaction.quote")}
+            onPress={quote}
+            disabled={!content.data}
+            testID="artifact-quote"
+          >
+            <ThemedQuote size={16} />
+          </ToolbarButton>
+        ) : null}
+        <DropdownMenu>
+          <ToolbarButton
+            kind="menu"
+            label={t("artifacts.interaction.details")}
+            disabled={pending}
+            testID="artifact-actions"
+          >
+            <ThemedEllipsis size={16} />
+          </ToolbarButton>
+          <DropdownMenuContent align="end">
+            {onOpenFile && artifact.sourcePath ? (
+              <DropdownMenuItem onSelect={openFile} testID="artifact-open-file">
+                {t("artifacts.interaction.openFile")}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              onSelect={downloadPress}
+              disabled={!content.data}
+              testID="artifact-download"
+            >
+              {t("artifacts.interaction.download")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={showDetails}>
+              {t("artifacts.interaction.details")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={removePress} testID="artifact-remove">
+              {t("artifacts.viewer.remove")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </PaneContentToolbar>
+      {body}
+      <AdaptiveModalSheet visible={detailsOpen} onClose={closeDetails} header={detailsHeader}>
+        <View style={styles.details}>
+          <ArtifactMeta artifact={artifact} />
+          <ArtifactLinks serverId={serverId} artifact={artifact} onLeave={leaveDetails} />
+        </View>
+      </AdaptiveModalSheet>
+    </View>
   );
 }
 
@@ -333,44 +404,23 @@ function TaskLink({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  body: {
-    gap: theme.spacing[4],
-  },
-  links: {
+  container: { flex: 1, minHeight: 0 },
+  toolbar: {
     flexDirection: "row",
-    flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
   },
-  muted: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+  saved: { flex: 1, minWidth: 0, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: theme.spacing[4],
+    gap: theme.spacing[3],
   },
-  error: {
-    color: theme.colors.palette.red[300],
-    fontSize: theme.fontSize.sm,
-  },
-  frame: {
-    height: 520,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    overflow: "hidden",
-  },
-  image: {
-    width: "100%",
-    height: 480,
-  },
-  textScroll: {
-    maxHeight: 560,
-  },
-  code: {
-    color: theme.colors.foreground,
-    fontFamily: theme.fontFamily.mono,
-    fontSize: theme.fontSize.sm,
-  },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-  },
+  details: { padding: theme.spacing[4], gap: theme.spacing[3] },
+  links: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.spacing[2] },
+  muted: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  error: { color: theme.colors.destructive, fontSize: theme.fontSize.sm },
 }));

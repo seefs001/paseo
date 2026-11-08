@@ -51,7 +51,7 @@ const PersistedProjectRecordSchema = z.object({
 const PersistedWorkspaceRecordSchema = z.object({
   parentWorkspaceId: z.string().optional(),
   workspaceId: z.string(),
-  projectId: z.string(),
+  projectId: z.string().nullable(),
   cwd: z.string(),
   kind: z.enum(["local_checkout", "worktree", "directory"]),
   displayName: z.string(),
@@ -117,6 +117,7 @@ export type PersistedWorkspaceRecord = z.infer<typeof PersistedWorkspaceRecordSc
 
 export interface WorkspaceMutation {
   kind: "upsert" | "archive" | "remove";
+  previousProjectId?: string | null;
   workspaceId: string;
   workspace: PersistedWorkspaceRecord | null;
   expectsInitialAgent?: boolean;
@@ -140,7 +141,7 @@ export interface ProjectRegistry {
   initialize(): Promise<void>;
   existsOnDisk(): Promise<boolean>;
   list(): Promise<PersistedProjectRecord[]>;
-  get(projectId: string): Promise<PersistedProjectRecord | null>;
+  get(projectId: string | null): Promise<PersistedProjectRecord | null>;
   getOrCreateActiveByRoot(input: {
     rootPath: string;
     kind: PersistedProjectKind;
@@ -383,6 +384,10 @@ export class FileBackedProjectRegistry
     return this.listAll();
   }
 
+  override async get(projectId: string | null): Promise<PersistedProjectRecord | null> {
+    return projectId === null ? null : super.get(projectId);
+  }
+
   private allocationQueue: Promise<void> = Promise.resolve();
   private readonly projectIdFactory: () => string;
   private readonly mutationListeners = new Set<
@@ -555,9 +560,19 @@ export class FileBackedWorkspaceRegistry
     workspaceId: string,
     updater: (record: PersistedWorkspaceRecord) => PersistedWorkspaceRecord,
   ): Promise<PersistedWorkspaceRecord | null> {
-    const workspace = await super.update(workspaceId, updater);
+    let previousProjectId: string | null | undefined;
+    const workspace = await super.update(workspaceId, (record) => {
+      const updated = updater(record);
+      if (updated.projectId !== record.projectId) previousProjectId = record.projectId;
+      return updated;
+    });
     if (workspace) {
-      await this.notifyMutation({ kind: "upsert", workspaceId, workspace });
+      await this.notifyMutation({
+        kind: "upsert",
+        workspaceId,
+        workspace,
+        ...(previousProjectId !== undefined ? { previousProjectId } : {}),
+      });
     }
     return workspace;
   }
@@ -687,7 +702,7 @@ export function resolveProjectDisplayName(record: PersistedProjectRecord): strin
 export function createPersistedWorkspaceRecord(input: {
   parentWorkspaceId?: string;
   workspaceId: string;
-  projectId: string;
+  projectId: string | null;
   cwd: string;
   kind: PersistedWorkspaceKind;
   displayName: string;

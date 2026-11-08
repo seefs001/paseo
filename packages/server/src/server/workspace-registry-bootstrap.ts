@@ -88,11 +88,11 @@ export async function bootstrapWorkspaceRegistries(options: {
     return;
   }
 
-  const existingWorkspaceIdsByCwd = new Map(
+  const existingWorkspacesByCwd = new Map(
     // Startup backfill resolves workspace ownership across archived records too.
     (await options.workspaceRegistry.listAll()).map((workspace) => [
       path.resolve(workspace.cwd),
-      workspace.workspaceId,
+      workspace,
     ]),
   );
   // Startup backfill repairs agents without workspace membership, including archived history.
@@ -145,6 +145,10 @@ export async function bootstrapWorkspaceRegistries(options: {
   for (const entry of recordsByDirectoryKey.values()) {
     const { membership, records: workspaceRecords } = entry;
     const workspaceCwd = membership.checkout.cwd;
+    const existing = existingWorkspacesByCwd.get(workspaceCwd);
+    // Preserve explicit membership, including null, when one registry file is missing.
+    // Legacy project recovery is valid only when the inferred ID matches the recorded owner.
+    if (existing && existing.projectId !== membership.projectId) continue;
     let workspaceCreatedAt: string | null = null;
     let workspaceUpdatedAt: string | null = null;
     for (const record of workspaceRecords) {
@@ -164,7 +168,7 @@ export async function bootstrapWorkspaceRegistries(options: {
     projectRanges.set(membership.projectKey, existingProjectRange);
 
     workspaceUpsertInputs.push({
-      workspaceId: existingWorkspaceIdsByCwd.get(workspaceCwd) ?? generateWorkspaceId(),
+      workspaceId: existingWorkspacesByCwd.get(workspaceCwd)?.workspaceId ?? generateWorkspaceId(),
       membership,
       workspaceCwd,
       createdAt,
@@ -180,17 +184,19 @@ export async function bootstrapWorkspaceRegistries(options: {
           updatedAt: null,
         };
         return [
-          options.workspaceRegistry.upsert(
-            createPersistedWorkspaceRecord({
-              workspaceId,
-              projectId: membership.projectId,
-              cwd: workspaceCwd,
-              kind: membership.workspaceKind,
-              displayName: membership.workspaceDisplayName,
-              createdAt,
-              updatedAt,
-            }),
-          ),
+          existingWorkspacesByCwd.has(workspaceCwd)
+            ? undefined
+            : options.workspaceRegistry.upsert(
+                createPersistedWorkspaceRecord({
+                  workspaceId,
+                  projectId: membership.projectId,
+                  cwd: workspaceCwd,
+                  kind: membership.workspaceKind,
+                  displayName: membership.workspaceDisplayName,
+                  createdAt,
+                  updatedAt,
+                }),
+              ),
           options.projectRegistry.upsert(
             createPersistedProjectRecord({
               projectId: membership.projectId,

@@ -192,6 +192,7 @@ export interface PaseoWorkspaceHandle {
   refresh(options?: { requestId?: string }): Promise<PaseoWorkspace | null>;
   setTitle(title: string | null, requestId?: string): Promise<{ title: string | null }>;
   setPinned(pinned: boolean): Promise<{ pinnedAt: string | null }>;
+  setProject(projectId: string | null, requestId?: string): Promise<{ projectId: string | null }>;
   setLabel(name: string, options: { assigned: boolean }): Promise<{ labels: string[] }>;
   setBaseBranch(options: {
     baseRef: string;
@@ -873,7 +874,7 @@ function createWorkspaceHandleFactory(
     return {
       id,
       get projectId() {
-        return current?.projectId ?? null;
+        return current?.projectAssigned === false ? null : (current?.projectId ?? null);
       },
       get directory() {
         return current?.workspaceDirectory ?? null;
@@ -903,6 +904,8 @@ function createWorkspaceHandleFactory(
       current: () => current,
       refresh,
       setTitle: (title, requestId) => daemonClient.setWorkspaceTitle(id, title, requestId),
+      setProject: (projectId, requestId) =>
+        daemonClient.setWorkspaceProject({ workspaceId: id, projectId, requestId }),
       setPinned: (pinned) => daemonClient.setWorkspacePinned(id, pinned),
       setLabel: (name, options) =>
         assignWorkspaceLabel({

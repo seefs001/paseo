@@ -121,6 +121,18 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
         messageId: z.string(),
       }),
     }),
+    z.strictObject({
+      kind: z.literal("artifact_quote"),
+      id: z.string(),
+      title: z.string(),
+      selectedText: z.string(),
+      source: z.strictObject({
+        serverId: z.string(),
+        workspaceId: z.string(),
+        artifactId: z.string(),
+        revision: z.number().int().positive(),
+      }),
+    }),
     z.strictObject({ kind: z.literal("image"), metadata: AttachmentMetadataSchema }),
     z.strictObject({ kind: z.literal("file"), attachment: UploadedFileSchema }),
     z.strictObject({

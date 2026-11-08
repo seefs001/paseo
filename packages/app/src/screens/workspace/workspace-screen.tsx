@@ -482,6 +482,8 @@ function useCloseTabs(): UseCloseTabsResult {
 }
 
 interface WorkspaceHeaderTitleBarProps {
+  projectAssigned: boolean;
+  normalizedWorkspaceId: string;
   isLoading: boolean;
   title: string;
   subtitle: string;
@@ -498,6 +500,8 @@ interface WorkspaceHeaderTitleBarProps {
 }
 
 function WorkspaceHeaderTitleBar({
+  projectAssigned,
+  normalizedWorkspaceId,
   isLoading,
   title,
   subtitle,
@@ -523,6 +527,7 @@ function WorkspaceHeaderTitleBar({
         <View style={styles.headerTitleTextGroup}>
           <ScreenTitle testID="workspace-header-title">{title}</ScreenTitle>
           <WorkspaceHeaderProjectRow
+            projectAssigned={projectAssigned}
             subtitle={subtitle}
             isSubtitleDistinct={isSubtitleDistinct}
             serverId={normalizedServerId}
@@ -532,6 +537,8 @@ function WorkspaceHeaderTitleBar({
       {actionsInBar ? null : (
         <View style={styles.compactHeaderMenuCluster}>
           <WorkspaceHeaderMenuDesktop
+            normalizedServerId={normalizedServerId}
+            normalizedWorkspaceId={normalizedWorkspaceId}
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
             importAgentDisabled={importAgentDisabled}
@@ -635,6 +642,7 @@ function renderWorkspaceContent(input: RenderWorkspaceContentInput): React.React
 }
 
 interface WorkspaceHeaderFields {
+  isWorkspaceProjectAssigned: boolean;
   isWorkspaceHeaderLoading: boolean;
   workspaceHeaderTitle: string;
   workspaceHeaderSubtitle: string;
@@ -670,6 +678,7 @@ function deriveWorkspaceHeaderFields(input: {
   const renderState = resolveWorkspaceHeaderRenderState(input);
   if (renderState.kind !== "ready") {
     return {
+      isWorkspaceProjectAssigned: input.workspace?.projectId !== null,
       isWorkspaceHeaderLoading: true,
       workspaceHeaderTitle: "",
       workspaceHeaderSubtitle: "",
@@ -679,6 +688,7 @@ function deriveWorkspaceHeaderFields(input: {
     };
   }
   return {
+    isWorkspaceProjectAssigned: input.workspace?.projectId !== null,
     isWorkspaceHeaderLoading: false,
     workspaceHeaderTitle: renderState.title,
     workspaceHeaderSubtitle: renderState.subtitle,
@@ -1262,6 +1272,7 @@ function WorkspaceScreenContent({
     data: checkoutQuery.data,
   });
   const {
+    isWorkspaceProjectAssigned,
     isWorkspaceHeaderLoading,
     workspaceHeaderTitle,
     workspaceHeaderSubtitle,
@@ -3338,6 +3349,8 @@ function WorkspaceScreenContent({
             <>
               <SidebarMenuToggle />
               <WorkspaceHeaderTitleBar
+                projectAssigned={isWorkspaceProjectAssigned}
+                normalizedWorkspaceId={normalizedWorkspaceId}
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}
                 subtitle={workspaceHeaderSubtitle}
@@ -3365,7 +3378,9 @@ function WorkspaceScreenContent({
       handleOpenSetupTab,
       headerRight,
       isWorkspaceHeaderLoading,
+      isWorkspaceProjectAssigned,
       normalizedServerId,
+      normalizedWorkspaceId,
       openImportSheet,
       showScreenHeader,
       showWorkspaceSetup,
@@ -3447,6 +3462,7 @@ function WorkspaceScreenContent({
       const tabSwitcher = renderWorkspaceTabSwitcher(headerTabs, headerActiveTabKey, actions);
       return (
         <CompactWorkspaceHeader
+          projectAssigned={isWorkspaceProjectAssigned}
           headerVariant={actionsOnly ? "full" : "compact"}
           actionsActive={isRouteFocused && (!isMobile || workspacePanelActive)}
           tabSwitcher={tabSwitcher}
@@ -3505,6 +3521,7 @@ function WorkspaceScreenContent({
       isMobile,
       isRouteFocused,
       isWorkspaceHeaderLoading,
+      isWorkspaceProjectAssigned,
       isWorkspaceHeaderSubtitleDistinct,
       normalizedServerId,
       normalizedWorkspaceId,

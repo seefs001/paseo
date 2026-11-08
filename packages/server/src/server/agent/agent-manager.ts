@@ -57,6 +57,7 @@ import {
   type SteerResult,
   type AgentStreamEvent,
   type AgentTimelineItem,
+  type UserMessageDisplayContext,
   type AgentUsage,
   type AgentRuntimeInfo,
   type ImportedTimelineEntry,
@@ -89,7 +90,7 @@ import {
   type PendingForegroundRun,
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
-import { userVisiblePromptText } from "./prompt-attachments.js";
+import { userMessageContextAttachments, userVisiblePromptText } from "./prompt-attachments.js";
 import { parseAgentMessage, projectAgentMessages } from "./agent-messages/index.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import {
@@ -478,6 +479,11 @@ interface ManagedAgentBase {
   persistence: AgentPersistenceHandle | null;
   historyPrimed: boolean;
   lastUserMessageAt: Date | null;
+  /**
+   * Context shown with a user message (quoted messages), by daemon and provider message id.
+   * Provider history does not carry it, so replays and restarts restore it from here.
+   */
+  userMessageContexts?: Record<string, UserMessageDisplayContext>;
   activeTurnId: string | null;
   activeTurnStartedAt: Date | null;
   activeTurnInfo?: Extract<AgentTimelineItem, { type: "assistant_message" }>["turnInfo"];
@@ -1546,6 +1552,7 @@ export class AgentManager {
       createdAt?: Date;
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
+      userMessageContexts?: Record<string, UserMessageDisplayContext>;
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
@@ -1579,6 +1586,7 @@ export class AgentManager {
       createdAt?: Date;
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
+      userMessageContexts?: Record<string, UserMessageDisplayContext>;
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
@@ -1857,6 +1865,7 @@ export class AgentManager {
         createdAt: existing.createdAt,
         updatedAt: existing.updatedAt,
         lastUserMessageAt: existing.lastUserMessageAt,
+        userMessageContexts: existing.userMessageContexts,
         historyPrimed: rehydrateFromDisk ? false : preservedHistoryPrimed,
         lastUsage: preservedLastUsage,
         lastError: preservedLastError,
@@ -2309,6 +2318,7 @@ export class AgentManager {
         persistence: record.persistence ?? null,
         historyPrimed: true,
         lastUserMessageAt: record.lastUserMessageAt ? new Date(record.lastUserMessageAt) : null,
+        userMessageContexts: record.userMessageContexts,
         lastUsage: undefined,
         lastError: record.lastError ?? undefined,
         attention,
@@ -4065,6 +4075,7 @@ export class AgentManager {
       createdAt?: Date;
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
+      userMessageContexts?: Record<string, UserMessageDisplayContext>;
       labels?: Record<string, string>;
       timeline?: AgentTimelineItem[];
       timelineRows?: AgentTimelineRow[];
@@ -4117,6 +4128,7 @@ export class AgentManager {
         background: options?.background === true,
         options,
       });
+      managed.userMessageContexts = options?.userMessageContexts;
 
       // Read history before publishing the agent: a provider failure must leave the
       // session unregistered so the registration catch closes it.
@@ -4679,6 +4691,7 @@ export class AgentManager {
 
     this.agentStreamCoalescer.flushAndDiscard(agent.id);
     this.preserveRecordedTurnInfo(agent, historyEvents);
+    this.restoreRecordedUserMessageContexts(agent, historyEvents);
     await this.deleteCommittedTimeline(agent.id);
     this.timelineStore.delete(agent.id);
     this.timelineStore.initialize(agent.id, { timestamp: new Date().toISOString() });
@@ -4711,6 +4724,37 @@ export class AgentManager {
     }
     this.touchUpdatedAt(agent);
     this.emitState(agent);
+  }
+
+  private rememberUserMessageContext(
+    agent: ActiveManagedAgent,
+    ids: ReadonlyArray<string | undefined>,
+    context: UserMessageDisplayContext,
+  ): void {
+    const next = { ...agent.userMessageContexts };
+    for (const id of ids) if (id) next[id] = context;
+    agent.userMessageContexts = next;
+  }
+
+  /**
+   * Provider history folds a quote into the prompt text it replays. For a message this daemon
+   * recorded, matched by message id, put back the text and quote it showed. Messages it never
+   * saw stay as replayed.
+   */
+  private restoreRecordedUserMessageContexts(
+    agent: ActiveManagedAgent,
+    history: Extract<AgentStreamEvent, { type: "timeline" }>[],
+  ): void {
+    const recorded = agent.userMessageContexts;
+    if (!recorded) return;
+    for (const event of history) {
+      const item = event.item;
+      if (item.type !== "user_message" || item.attachments) continue;
+      const context =
+        (item.messageId ? recorded[item.messageId] : undefined) ??
+        (item.clientMessageId ? recorded[item.clientMessageId] : undefined);
+      if (context) event.item = { ...item, text: context.text, attachments: context.attachments };
+    }
   }
 
   private preserveRecordedTurnInfo(
@@ -4767,6 +4811,7 @@ export class AgentManager {
     }
 
     this.preserveRecordedTurnInfo(agent, historyEvents);
+    this.restoreRecordedUserMessageContexts(agent, historyEvents);
     // The replay is the timeline, so drop the rows a previous hydration committed.
     // Keeping them would leave getTimelineRows reading one copy per hydration.
     await this.deleteCommittedTimeline(agent.id);
@@ -5374,11 +5419,21 @@ export class AgentManager {
     outcome: "accepted" | "rejected",
     options?: { messageId?: string; providerMessageId?: string; turnId?: string },
   ): void {
+    const attachments = userMessageContextAttachments(prompt);
+    const text = userVisiblePromptText(prompt);
+    if (attachments.length > 0) {
+      this.rememberUserMessageContext(
+        agent,
+        [clientMessageId, options?.messageId, options?.providerMessageId],
+        { text, attachments },
+      );
+    }
     const items = projectAgentMessages({
       type: "user_message",
-      text: userVisiblePromptText(prompt),
+      text,
       clientMessageId,
       ...(options?.messageId ? { messageId: options.messageId } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
     for (const item of items) {
       // Human attempts stay in history on rejection; delivery notifications require acceptance.
@@ -5423,6 +5478,12 @@ export class AgentManager {
       existing = this.timelineStore.getSubmittedUserMessage(agent.id, clientMessageId);
     }
     if (!existing || existing.item.type !== "user_message") return null;
+    if (messageId && existing.item.attachments?.length) {
+      this.rememberUserMessageContext(agent, [messageId], {
+        text: existing.item.text,
+        attachments: existing.item.attachments,
+      });
+    }
     if (messageId) {
       const enriched = this.timelineStore.enrichSubmittedUserMessage(
         agent.id,

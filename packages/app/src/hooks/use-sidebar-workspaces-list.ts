@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useHostFeatureMap } from "@/runtime/host-features";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useCallback, useEffect, useMemo } from "react";
@@ -152,7 +153,17 @@ export function useSidebarWorkspacesList(options?: {
     groupMode === "project" && (workspaceSort === "manual" || workspaceSortSupported)
       ? workspaceSort
       : undefined;
-  const { projects: hostProjects } = useWorkspaceStructure(directoryServerIds, sort);
+  const { projects: groups } = useWorkspaceStructure(directoryServerIds, sort);
+  const { t } = useTranslation();
+  const hostProjects = useMemo(
+    () =>
+      groups.map((group) =>
+        group.projectAssigned === false
+          ? { ...group, projectName: t("workspaceProject.none") }
+          : group,
+      ),
+    [groups, t],
+  );
 
   const selectPlacements = useMemo(createSidebarWorkspacePlacementSelector, []);
   const sidebarModel = useMemo(

@@ -109,6 +109,19 @@ export interface ChatQuoteContextAttachment {
   };
 }
 
+export interface ArtifactQuoteContextAttachment {
+  kind: "artifact_quote";
+  id: string;
+  title: string;
+  selectedText: string;
+  source: {
+    serverId: string;
+    workspaceId: string;
+    artifactId: string;
+    revision: number;
+  };
+}
+
 export interface AgentSessionContextAttachment {
   kind: "agent_session";
   id: string;
@@ -146,6 +159,7 @@ export type UserComposerAttachment =
   | SessionReference
   | RoleReference
   | ChatQuoteContextAttachment
+  | ArtifactQuoteContextAttachment
   | { kind: "image"; metadata: AttachmentMetadata }
   | { kind: "file"; attachment: UploadedFileAttachment }
   | WorkspaceFileComposerAttachment

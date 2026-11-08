@@ -12,6 +12,7 @@ import {
 import { workspaceFileAttachmentToAgentAttachment } from "@/attachments/workspace-file";
 import { pluginResourceAttachmentToAgentAttachment } from "@/plugins/attachments";
 import { i18n } from "@/i18n/i18next";
+import { formatChatQuoteForAgent } from "@/attachments/chat-quote-format";
 import {
   getSessionResourceClient,
   ResourceReferenceError,
@@ -71,6 +72,26 @@ export function splitComposerAttachmentsForSubmit(
       continue;
     }
 
+    if (attachment.kind === "artifact_quote") {
+      const { source } = attachment;
+      agentAttachments.push({
+        type: "text",
+        mimeType: "text/plain",
+        title: attachment.title,
+        contextKind: "artifact_quote",
+        text: [
+          `Artifact: ${attachment.title}`,
+          `Host: ${source.serverId}`,
+          `Workspace: ${source.workspaceId}`,
+          `Artifact ID: ${source.artifactId}`,
+          `Observed revision: ${source.revision}`,
+          "Quoted content (captured when selected, not a historical-version link):",
+          attachment.selectedText,
+        ].join("\n"),
+      });
+      continue;
+    }
+
     if (attachment.kind === "chat_quote") {
       agentAttachments.push(chatQuoteToAgentAttachment(attachment));
       continue;
@@ -117,22 +138,13 @@ export function splitComposerAttachmentsForSubmit(
 function chatQuoteToAgentAttachment(
   attachment: ChatQuoteContextAttachment,
 ): Extract<AgentAttachment, { type: "text" }> {
-  const quotedLines = attachment.selectedText.split("\n").map((line) => `> ${line}`);
   const comment = attachment.comment?.trim();
   return {
     type: "text",
     mimeType: "text/plain",
     contextKind: "chat_quote",
     title: `“${attachment.selectedText.replace(/\s+/g, " ").trim()}”`,
-    text: [
-      "Quoted conversation excerpt:",
-      `Source host: ${attachment.source.serverId}`,
-      `Source agent: ${attachment.source.agentId}`,
-      `Source message: ${attachment.source.messageId}`,
-      "",
-      ...quotedLines,
-      ...(comment ? ["", "User comment on this excerpt:", comment] : []),
-    ].join("\n"),
+    text: formatChatQuoteForAgent({ ...attachment, ...(comment ? { comment } : {}) }),
   };
 }
 

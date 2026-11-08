@@ -44,6 +44,8 @@ export interface CachedDirectory {
   workspaces: Map<string, WorkspaceDescriptor>;
   projects: Map<string, ProjectDescriptor>;
   checkpoint?: DirectoryCheckpoint;
+  /** Runtime-only: this source omitted agent fields required for incremental reconciliation. */
+  requiresAgentSnapshot?: true;
 }
 
 export interface CachedWorkspace {
@@ -215,6 +217,7 @@ const StoredProjectCheckoutSchema = z.union([
 ]);
 
 const StoredProjectPlacementSchema = z.strictObject({
+  projectAssigned: z.boolean().optional(),
   projectKey: z.string(),
   projectName: z.string(),
   workspaceName: z.string().nullable().optional(),
@@ -305,7 +308,7 @@ const StoredWorkspaceSchema = z.strictObject({
   createdAt: IsoDateSchema.nullable(),
   lastUserMessageAt: IsoDateSchema.nullable(),
   id: z.string(),
-  projectId: z.string(),
+  projectId: z.string().nullable(),
   projectDisplayName: z.string(),
   projectCustomName: z.string().nullable(),
   projectCustomIconRevision: z.string().nullable(),
@@ -985,7 +988,10 @@ export class ReplicaCache {
     }
 
     let project: ProjectDescriptor | undefined;
-    const projectRow = (await this.readRows(serverId, ["project"], [workspace.projectId]))[0];
+    const projectRow =
+      workspace.projectId === null
+        ? undefined
+        : (await this.readRows(serverId, ["project"], [workspace.projectId]))[0];
     if (projectRow) {
       try {
         const stored = parseStoredPayload(StoredProjectSchema, projectRow.payload);
@@ -1024,7 +1030,7 @@ export class ReplicaCache {
     if (invalidRows.length > 0) {
       await this.repairInvalidDirectoryRows(serverId, invalidRows, result.checkpoint);
     }
-    return result;
+    return { ...result, requiresAgentSnapshot: true };
   }
 
   async readTimeline(serverId: string, agentId: string): Promise<CachedTimeline | undefined> {

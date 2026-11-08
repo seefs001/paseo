@@ -5,6 +5,7 @@ import type {
   AgentTurnInfo,
   JsonValue,
   ToolCallDetail,
+  UserMessageContextAttachment,
 } from "@getpaseo/protocol/agent-types";
 import { timelineItemIdentity } from "@getpaseo/protocol/timeline-identity";
 import type { AgentAttachment, AgentStreamEventPayload } from "@getpaseo/protocol/messages";
@@ -264,6 +265,8 @@ function produceUserMessage(
     clientMessageId: incoming.clientMessageId ?? existing.clientMessageId,
     messageId: incoming.messageId ?? existing.messageId,
     timelineCursor: incoming.timelineCursor ?? existing.timelineCursor,
+    // The local copy holds every attachment the user sent; history keeps only quotes.
+    attachments: existing.attachments ?? incoming.attachments,
   });
   if (
     existing.id === merged.id &&
@@ -897,6 +900,34 @@ export function handoffCreatedAgentUserMessageToStream(params: {
   });
 }
 
+/**
+ * The display context a timeline user message carries. Only quoted messages are shown from
+ * history; other kinds are ignored rather than guessed at.
+ */
+function userMessageHistoryAttachments(
+  attachments: readonly UserMessageContextAttachment[] | undefined,
+): AgentAttachment[] | undefined {
+  const quotes = (attachments ?? []).flatMap((attachment): AgentAttachment[] =>
+    attachment.contextKind === "chat_quote"
+      ? [
+          {
+            type: "text",
+            mimeType: "text/plain",
+            contextKind: "chat_quote",
+            ...(attachment.title !== undefined ? { title: attachment.title } : {}),
+            text: attachment.text,
+          },
+        ]
+      : [],
+  );
+  return quotes.length > 0 ? quotes : undefined;
+}
+
+/** A message sent as a quote alone still has something to show. */
+function hasUserMessageDisplayContent(hasText: boolean, message: UserMessageItem): boolean {
+  return hasText || message.attachments !== undefined;
+}
+
 function appendUserMessage(
   state: StreamItem[],
   text: string,
@@ -906,9 +937,12 @@ function appendUserMessage(
   clientMessageId?: string,
   timelineCursor?: TimelinePosition,
   turnId?: string,
+  attachments?: readonly UserMessageContextAttachment[],
 ): StreamItem[] {
   const { chunk, hasContent } = normalizeChunk(text);
-  if (!hasContent) {
+  const historyAttachments = userMessageHistoryAttachments(attachments);
+  // A quote is the message when the user sent it without typing anything else.
+  if (!hasContent && !historyAttachments) {
     return state;
   }
 
@@ -921,6 +955,7 @@ function appendUserMessage(
     turnId,
     text: chunk,
     timestamp,
+    attachments: historyAttachments,
   });
   return upsertUserMessage(state, nextItem);
 }
@@ -1550,6 +1585,7 @@ function reduceTimelineEvent(
         item.clientMessageId,
         timelineCursor,
         event.turnId,
+        item.attachments,
       );
     case "assistant_message":
       return finalizeActiveThoughts(
@@ -1918,13 +1954,15 @@ function applyCanonicalUserMessageEvent(params: {
     timelineCursor,
     text: normalized.chunk,
     timestamp,
+    attachments: userMessageHistoryAttachments(event.item.attachments),
   });
+  const hasDisplayContent = hasUserMessageDisplayContent(normalized.hasContent, canonical);
   if (unmatchedInsert === "head") {
     const reconciled = upsertUserMessageAcrossStream({
       tail,
       head,
       message: canonical,
-      insert: normalized.hasContent ? "head" : "none",
+      insert: hasDisplayContent ? "head" : "none",
       presentation: "existing",
     });
     const reconciledTail = canonical.clientMessageId
@@ -1952,7 +1990,7 @@ function applyCanonicalUserMessageEvent(params: {
           : [],
     };
   }
-  const reconciled = placeCanonicalUserMessageAtTail(flushedTail, canonical, normalized.hasContent);
+  const reconciled = placeCanonicalUserMessageAtTail(flushedTail, canonical, hasDisplayContent);
   const reconciledTail = canonical.clientMessageId
     ? reconcileCanonicalUserTurnMembership(
         reconciled.items,

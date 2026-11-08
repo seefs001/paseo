@@ -226,7 +226,7 @@ Starting requires a project, an incomplete task, unfinished blockers done, and n
 
 Agents cannot change a goal's [Autopilot](/docs/cli#autopilot); people set it on the Desk or with `paseo goal autopilot`.
 
-Register artifacts a person would open again, not logs or edited source files. Registering records nothing on the Desk and never completes a task. The user opens them from the Artifacts pill above the composer or from the goal.
+Register artifacts a person would open again, not logs or edited source files. Registering records nothing on the Desk and never completes a task. The user opens the Artifacts tab from the workspace's + menu, or opens a product from its goal.
 
 ### Workspace scripts
 

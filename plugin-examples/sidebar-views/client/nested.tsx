@@ -85,7 +85,7 @@ function Workspace({ reference, view }: { reference: WorkspaceRef; view: PluginS
 }
 function Project({ reference, view }: { reference: ProjectRef; view: PluginSidebarViewProps }) {
   const workspaces = useWorkspaces({
-    where: (item) => item.project.key === reference.key,
+    where: (item) => item.project?.key === reference.key,
     orderBy: "name",
   });
   return (

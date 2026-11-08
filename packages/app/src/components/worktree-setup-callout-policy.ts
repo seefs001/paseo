@@ -3,7 +3,7 @@ import { i18n } from "@/i18n/i18next";
 import { buildProjectSettingsRoute } from "@/utils/host-routes";
 
 export interface WorktreeSetupWorkspaceInput {
-  projectId: string;
+  projectId: string | null;
   projectKind: string;
   projectRootPath: string;
 }
@@ -40,7 +40,7 @@ export function selectActiveGitWorkspaceProject(
 
   const projectId = workspace.projectId;
   const repoRoot = workspace.projectRootPath.trim();
-  if (!projectId.trim() || !repoRoot) {
+  if (!projectId?.trim() || !repoRoot) {
     return null;
   }
 

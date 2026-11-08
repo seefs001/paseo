@@ -70,7 +70,7 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
   }
-  if (tab.target.kind === "artifact") {
+  if (tab.target.kind === "artifact" || tab.target.kind === "artifacts") {
     return labels.artifact;
   }
   return labels.agent;
@@ -115,7 +115,7 @@ function getFallbackTabOptionDescription(
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
   }
-  if (tab.target.kind === "artifact") {
+  if (tab.target.kind === "artifact" || tab.target.kind === "artifacts") {
     return labels.artifact;
   }
   if (tab.target.kind === "working_diff" || tab.target.kind === "changes_tree") {

@@ -8,7 +8,7 @@ import {
 import { Heading, ProjectHeading, WorkspaceRow } from "./rows";
 function Project({ reference, view }: { reference: ProjectRef; view: PluginSidebarViewProps }) {
   const workspaces = useWorkspaces({
-    where: (item) => item.project.key === reference.key && !item.pinnedAt,
+    where: (item) => item.project?.key === reference.key && !item.pinnedAt,
     orderBy: "name",
   });
   return (

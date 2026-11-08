@@ -556,7 +556,7 @@ export class BoardTaskService {
     return project.projectId;
   }
 
-  private async resolveLinkableWorkspaceProjectId(workspaceId: string): Promise<string> {
+  private async resolveLinkableWorkspaceProjectId(workspaceId: string): Promise<string | null> {
     const workspace = await this.deps.workspaceRegistry.get(workspaceId);
     if (!workspace || workspace.archivedAt) {
       throw new BoardTaskError("workspace_not_found", "Workspace not found");

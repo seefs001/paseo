@@ -10,6 +10,7 @@ import {
   type WorkspaceBaseBranchService,
 } from "./session/workspace-base-branch/service.js";
 import type { WorkspaceBaseBranchSetRequest } from "@getpaseo/protocol/messages";
+import { setWorkspaceProject } from "./workspace-project-service.js";
 
 import { searchTimeline } from "./agent/chat-search/index.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
@@ -1821,7 +1822,7 @@ export class Session {
       this.unsubscribeAgentEvents?.();
       this.unsubscribeAgentEvents = null;
     }
-    this.refreshWorkspaceProducers(workspaces);
+    this.refreshWorkspaceProducers(workspaces || this.delivery.hasDemand("agents"));
     this.refreshCatalogProducers(legacy);
   }
 
@@ -1901,6 +1902,16 @@ export class Session {
         [mutation.workspaceId],
         mutation.expectsInitialAgent ? { optimisticStatus: "running" } : undefined,
       );
+      if (mutation.previousProjectId !== undefined && this.agentUpdates.hasSubscription()) {
+        // Placement is projected from workspace membership, not stored on the agent.
+        // Refresh even idle/stored conversations and project-filtered observers.
+        const records = await this.agentStorage.listByWorkspace(mutation.workspaceId);
+        for (const record of records) {
+          const live = this.agentManager.getAgent(record.id);
+          if (live) await this.agentUpdates.forwardLiveAgent(live);
+          else await this.agentUpdates.emitStoredRecord(record);
+        }
+      }
     } catch (error) {
       this.sessionLogger.warn(
         { err: error, workspaceId: mutation.workspaceId, mutationKind: mutation.kind },
@@ -2321,7 +2332,7 @@ export class Session {
     if (!workspace) return null;
 
     const project = await this.projectRegistry.get(workspace.projectId);
-    if (!project) return null;
+    if (workspace.projectId !== null && !project) return null;
     return this.buildProjectPlacementForWorkspace(workspace, project);
   }
 
@@ -3411,6 +3422,8 @@ export class Session {
 
   private dispatchWorkspaceStateMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
+      case "workspace.project.set.request":
+        return this.handleWorkspaceProjectSetRequest(msg);
       case "workspace.recovery.inspect.request":
         return this.handleWorkspaceRecoveryInspectRequest(msg);
       case "workspace.recovery.restore.request":
@@ -4234,6 +4247,30 @@ export class Session {
           title: null,
           error: getErrorMessageOr(error, "Failed to set workspace title"),
         },
+      });
+    }
+  }
+
+  private async handleWorkspaceProjectSetRequest({
+    workspaceId,
+    projectId,
+    requestId,
+  }: Extract<SessionInboundMessage, { type: "workspace.project.set.request" }>): Promise<void> {
+    const request = { workspaceId, projectId, requestId };
+    try {
+      await setWorkspaceProject({
+        ...request,
+        workspaceRegistry: this.workspaceRegistry,
+        projectRegistry: this.projectRegistry,
+      });
+      this.emit({
+        type: "workspace.project.set.response",
+        payload: { ...request, accepted: true, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "workspace.project.set.response",
+        payload: { ...request, accepted: false, error: getErrorMessage(error) },
       });
     }
   }
@@ -5857,8 +5894,8 @@ export class Session {
 
     const pairs = persistedWorkspaces.flatMap((workspace) => {
       if (workspace.archivedAt) return [];
-      const project = activeProjects.get(workspace.projectId);
-      if (!project) return [];
+      const project = workspace.projectId === null ? null : activeProjects.get(workspace.projectId);
+      if (workspace.projectId !== null && !project) return [];
       return [{ workspace, project }];
     });
     const placements = await Promise.all(
@@ -7235,7 +7272,7 @@ export class Session {
           projectId: workspace.projectId,
           projectKind: project?.kind ?? null,
           projectTransition: describeRegistryTransition(
-            projectsBefore.get(workspace.projectId) ?? null,
+            workspace.projectId === null ? null : (projectsBefore.get(workspace.projectId) ?? null),
           ),
         },
         "Project opened",

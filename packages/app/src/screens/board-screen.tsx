@@ -1,6 +1,6 @@
 import { BOARD_DESK_ZONE_IDS, type BoardDeskSettings } from "@getpaseo/protocol/messages";
-import { useIsFocused } from "expo-router/react-navigation";
-import { Plus, SquareKanban, Target } from "lucide-react-native";
+import { useIsFocused } from "expo-router";
+import { ArrowLeft, Plus, SquareKanban, Target } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { ScrollView, Text, View } from "react-native";
@@ -226,19 +226,24 @@ function useDeskView(input: {
   };
 }
 
-export function BoardScreen(): ReactElement {
+interface BoardScreenProps {
+  onOpenDesk: () => void;
+}
+
+/** The existing task and goal workflow remains available outside the default Desk. */
+export function BoardScreen({ onOpenDesk }: BoardScreenProps): ReactElement {
   const isFocused = useIsFocused();
   if (!isFocused) {
     return <View style={styles.container} />;
   }
   return (
     <DeskDragProvider>
-      <BoardScreenContent />
+      <BoardScreenContent onOpenDesk={onOpenDesk} />
     </DeskDragProvider>
   );
 }
 
-function BoardScreenContent(): ReactElement {
+function BoardScreenContent({ onOpenDesk }: BoardScreenProps): ReactElement {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const now = useClock(CLOCK_INTERVAL_MS);
@@ -349,18 +354,27 @@ function BoardScreenContent(): ReactElement {
   );
 
   const headerActions = useMemo(
-    () =>
-      isCompact ? (
-        <View style={styles.headerActions}>
+    () => (
+      <View style={styles.headerActions}>
+        <Button
+          variant="ghost"
+          leftIcon={ArrowLeft}
+          onPress={onOpenDesk}
+          testID="tasks-back-to-desk"
+        >
+          {t("board.title")}
+        </Button>
+        {isCompact ? (
           <BoardFocusMenu
             hosts={goalHosts}
             showHost={showHost}
             focus={focus}
             onFocus={changeFocus}
           />
-        </View>
-      ) : undefined,
-    [changeFocus, focus, goalHosts, isCompact, showHost],
+        ) : null}
+      </View>
+    ),
+    [changeFocus, focus, goalHosts, isCompact, onOpenDesk, showHost, t],
   );
   const goalsPaneToggle = useMemo(
     () => (isCompact ? null : { hidden: goalsPaneHidden, onToggle: toggleGoalsPane }),
@@ -398,7 +412,7 @@ function BoardScreenContent(): ReactElement {
 
   return (
     <View style={styles.container}>
-      <MenuHeader title={t("board.title")} rightContent={headerActions} />
+      <MenuHeader title={t("desk.tasksAndGoals")} rightContent={headerActions} />
       <BoardToolbar
         filters={filters}
         onFiltersChange={changeFilters}

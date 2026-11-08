@@ -158,6 +158,14 @@ const manifests = {
     compactSheet: null,
     resourceKey: (target) => target.sha,
   },
+  artifacts: {
+    kind: "artifacts",
+    supportedHosts: ["main", "explorer"],
+    showCloseButton: true,
+    singleton: true,
+    compactSheet: null,
+    resourceKey: () => "artifacts",
+  },
   artifact: {
     kind: "artifact",
     supportedHosts: ["main", "explorer"],

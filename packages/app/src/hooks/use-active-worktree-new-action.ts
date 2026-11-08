@@ -16,7 +16,7 @@ export function useActiveWorktreeNewAction() {
   const activeGitWorkspace = activeWorkspace?.projectKind === "git" ? activeWorkspace : null;
 
   const handle = useCallback(() => {
-    if (!serverId || !activeGitWorkspace) {
+    if (!serverId || !activeGitWorkspace || activeGitWorkspace.projectId === null) {
       return false;
     }
     router.navigate(
@@ -32,7 +32,8 @@ export function useActiveWorktreeNewAction() {
   useKeyboardActionHandler({
     handlerId: "worktree-new-active",
     actions: WORKTREE_NEW_ACTIONS,
-    enabled: serverId !== null && activeGitWorkspace !== null,
+    enabled:
+      serverId !== null && activeGitWorkspace !== null && activeGitWorkspace.projectId !== null,
     priority: 0,
     handle,
   });

@@ -2,9 +2,9 @@ import { router, usePathname } from "expo-router";
 import { Cable, CalendarClock, History, Plus, Search, SquareKanban } from "lucide-react-native";
 import { memo, useCallback, useMemo, useRef, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { useBoardAttentionCounts } from "@/components/board/use-attention-counts";
+import { useDeskAttentionCounts } from "@/desk/use-desk";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { PluginSidebarItem } from "@/plugins/sidebar-items";
@@ -105,7 +105,7 @@ const SidebarNewWorkspaceRow = memo(function SidebarNewWorkspaceRow({
     router.push(
       activeWorkspaceServerId
         ? buildNewWorkspaceRoute(
-            activeWorkspace && canUseActiveWorkspaceContext
+            activeWorkspace && activeWorkspace.projectId !== null && canUseActiveWorkspaceContext
               ? {
                   serverId: activeWorkspaceServerId,
                   sourceDirectory: activeWorkspace.projectRootPath,
@@ -212,28 +212,26 @@ function SidebarMcpCallsRow({ onBeforeNavigate }: SidebarNavRowProps) {
 function SidebarBoardRow({ onBeforeNavigate }: SidebarNavRowProps) {
   const { t } = useTranslation();
   const pathname = usePathname();
-  const { decide, flight } = useBoardAttentionCounts();
+  const { needsYou, isComplete } = useDeskAttentionCounts();
+  const countKey = isComplete ? "desk.attentionCount" : "desk.attentionCountPartial";
+  const countLabel = t(countKey, { count: needsYou });
   const trailing = useMemo(
     () =>
-      decide + flight > 0 ? (
-        <View style={styles.counts}>
-          <BoardCount
-            count={decide}
-            label={t("board.desk.sidebar.decide", { count: decide })}
-            dotStyle={styles.dotDecide}
-            textStyle={styles.countDecide}
-            testID="sidebar-board-decide"
-          />
-          <BoardCount
-            count={flight}
-            label={t("board.desk.sidebar.flight", { count: flight })}
-            dotStyle={styles.dotFlight}
-            textStyle={styles.count}
-            testID="sidebar-board-flight"
-          />
+      needsYou > 0 ? (
+        <View
+          style={styles.countItem}
+          accessible
+          accessibilityLabel={countLabel}
+          testID="sidebar-desk-needs-you"
+        >
+          <View style={styles.attentionDot} />
+          <Text style={styles.countAttention}>
+            {needsYou}
+            {isComplete ? null : "+"}
+          </Text>
         </View>
       ) : undefined,
-    [decide, flight, t],
+    [countLabel, isComplete, needsYou],
   );
   const handlePress = useCallback(() => {
     onBeforeNavigate?.();
@@ -250,29 +248,6 @@ function SidebarBoardRow({ onBeforeNavigate }: SidebarNavRowProps) {
       variant="compact"
       trailing={trailing}
     />
-  );
-}
-
-/** One zone count on the Desk row: a state dot and the number, gone when there is nothing. */
-function BoardCount({
-  count,
-  label,
-  dotStyle,
-  textStyle,
-  testID,
-}: {
-  count: number;
-  label: string;
-  dotStyle: StyleProp<ViewStyle>;
-  textStyle: StyleProp<TextStyle>;
-  testID: string;
-}) {
-  if (count === 0) return null;
-  return (
-    <View style={styles.countItem} accessible accessibilityLabel={label} testID={testID}>
-      <View style={[styles.dot, dotStyle]} />
-      <Text style={textStyle}>{count}</Text>
-    </View>
   );
 }
 
@@ -294,32 +269,18 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
   },
-  counts: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-  },
   countItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
   },
-  dot: {
+  attentionDot: {
     width: STATUS_INDICATOR_FILLED_DOT_SIZE,
     height: STATUS_INDICATOR_FILLED_DOT_SIZE,
     borderRadius: theme.borderRadius.full,
-  },
-  dotDecide: {
     backgroundColor: theme.colors.statusDotWarning,
   },
-  dotFlight: {
-    backgroundColor: theme.colors.statusDotRunning,
-  },
-  count: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  countDecide: {
+  countAttention: {
     color: theme.colors.statusWarning,
     fontSize: theme.fontSize.sm,
   },

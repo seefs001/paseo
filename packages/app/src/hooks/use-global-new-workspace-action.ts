@@ -30,7 +30,7 @@ export function useGlobalNewWorkspaceAction() {
     router.navigate(
       (serverId
         ? buildNewWorkspaceRoute(
-            activeWorkspace && canUseActiveWorkspaceContext
+            activeWorkspace && activeWorkspace.projectId !== null && canUseActiveWorkspaceContext
               ? {
                   serverId,
                   sourceDirectory: activeWorkspace.projectRootPath,

@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -33,6 +34,10 @@ import {
   type UseWorkspaceScriptsMenuPagesInput,
 } from "@/screens/workspace/scripts";
 import { usePluginWorkspaceMenu } from "@/plugins";
+import {
+  useWorkspaceProjectMenuPages,
+  WORKSPACE_PROJECT_PAGE_ID,
+} from "@/projects/workspace-project-menu";
 
 const ThemedEllipsis = withUnistyles(Ellipsis);
 const ThemedCopy = withUnistyles(Copy);
@@ -100,6 +105,12 @@ function WorkspaceHeaderWorkspaceActionItems({
   const { t } = useTranslation();
   return (
     <>
+      <DropdownMenuSubTrigger
+        id={WORKSPACE_PROJECT_PAGE_ID}
+        testID="workspace-header-change-project"
+      >
+        {t("workspaceProject.title")}
+      </DropdownMenuSubTrigger>
       <DropdownMenuItem
         testID="workspace-header-copy-path"
         leading={MENU_COPY_ICON}
@@ -156,10 +167,16 @@ function workspaceHeaderMenuButtonStyle({
 /**
  * Wide layouts make tabs from the tab strip's `+` menu, so this one carries workspace actions only.
  */
-export function WorkspaceHeaderMenuDesktop(props: WorkspaceHeaderWorkspaceActions) {
+export function WorkspaceHeaderMenuDesktop(
+  props: WorkspaceHeaderWorkspaceActions & {
+    normalizedServerId: string;
+    normalizedWorkspaceId: string;
+  },
+) {
   const { t } = useTranslation();
+  const pages = useWorkspaceProjectMenuPages(props.normalizedServerId, props.normalizedWorkspaceId);
   return (
-    <DropdownMenu>
+    <DropdownMenu compactMode="sheet">
       <DropdownMenuTrigger
         testID="workspace-header-menu-trigger"
         style={workspaceHeaderMenuButtonStyle}
@@ -168,7 +185,7 @@ export function WorkspaceHeaderMenuDesktop(props: WorkspaceHeaderWorkspaceAction
       >
         <WorkspaceHeaderMenuTriggerIcon />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" width={220} testID="workspace-header-menu">
+      <DropdownMenuContent align="start" width={260} pages={pages} testID="workspace-header-menu">
         <WorkspaceHeaderWorkspaceActionItems {...props} />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -261,9 +278,10 @@ export function WorkspaceHeaderMenuMobile({
   }, [normalizedServerId, router]);
   const scriptsMenu = useWorkspaceScriptsMenuPages(scripts);
   const pluginMenu = usePluginWorkspaceMenu(normalizedServerId, normalizedWorkspaceId);
+  const projectPages = useWorkspaceProjectMenuPages(normalizedServerId, normalizedWorkspaceId);
   const pages = useMemo(
-    () => [...scriptsMenu.pages, ...pluginMenu.pages],
-    [scriptsMenu.pages, pluginMenu.pages],
+    () => [...scriptsMenu.pages, ...pluginMenu.pages, ...projectPages],
+    [scriptsMenu.pages, pluginMenu.pages, projectPages],
   );
 
   return (

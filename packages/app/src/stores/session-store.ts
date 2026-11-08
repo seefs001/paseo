@@ -113,7 +113,7 @@ export interface WorkspaceDescriptor {
   createdAt: Date | null;
   lastUserMessageAt: Date | null;
   id: string;
-  projectId: string;
+  projectId: string | null;
   projectDisplayName: string;
   projectCustomName?: string | null;
   projectCustomIconRevision?: string | null;
@@ -141,7 +141,7 @@ export interface WorkspaceDescriptor {
 }
 
 export function normalizeWorkspaceDescriptor(
-  payload: WorkspaceDescriptorPayload,
+  payload: Omit<WorkspaceDescriptorPayload, "projectId"> & { projectId: string | null },
 ): WorkspaceDescriptor {
   const statusEnteredAtRaw = payload.statusEnteredAt;
   const statusEnteredAt: Date | null =
@@ -153,7 +153,7 @@ export function normalizeWorkspaceDescriptor(
     createdAt: payload.createdAt ? new Date(payload.createdAt) : null,
     lastUserMessageAt: payload.lastUserMessageAt ? new Date(payload.lastUserMessageAt) : null,
     id: normalizeWorkspaceOpaqueId(payload.id) ?? payload.id,
-    projectId: payload.projectId,
+    projectId: payload.projectAssigned === false ? null : payload.projectId,
     projectDisplayName: payload.projectDisplayName,
     projectCustomName: payload.projectCustomName ?? null,
     projectCustomIconRevision: payload.projectCustomIconRevision ?? null,

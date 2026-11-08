@@ -42,7 +42,3 @@ export function withChatQuoteComment(
   const trimmed = comment.trim();
   return trimmed ? { ...rest, comment: trimmed } : rest;
 }
-
-export function getChatQuoteSourceLabel(source: ChatQuoteContextAttachment["source"]): string {
-  return `${source.serverId} / ${source.agentId} / ${source.messageId}`;
-}

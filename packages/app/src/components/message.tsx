@@ -2,6 +2,8 @@ import { useDisclosureHold } from "@/agent-stream/disclosure";
 import { MessagePreview, MessageSender } from "@/components/user-message";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
+import { parseSentChatQuote } from "@/attachments/chat-quote-format";
+import { SentChatQuote } from "@/attachments/chat-quote-pill";
 import { AssistantTurnInfo } from "@/components/assistant-turn-info";
 import type { AgentTurnInfo } from "@getpaseo/protocol/agent-types";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
@@ -359,6 +361,9 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   imagePreviewSpacing: {
     marginBottom: theme.spacing[2],
   },
+  quotesContainer: {
+    gap: theme.spacing[2],
+  },
   copyButton: {
     alignSelf: "center",
     padding: theme.spacing[1],
@@ -508,8 +513,27 @@ export const UserMessage = memo(function UserMessage({
     [referencePreview, references, sentCards],
   );
   const hasText = displayText.trim().length > 0;
+  const sentQuotes = useMemo(
+    () =>
+      visibleAttachments.flatMap((attachment) =>
+        attachment.type === "text" && attachment.contextKind === "chat_quote"
+          ? [{ key: attachment.text, ...parseSentChatQuote(attachment.text) }]
+          : [],
+      ),
+    [visibleAttachments],
+  );
+  const chipAttachments = useMemo(
+    () =>
+      sentQuotes.length === 0
+        ? visibleAttachments
+        : visibleAttachments.filter(
+            (attachment) => attachment.type !== "text" || attachment.contextKind !== "chat_quote",
+          ),
+    [sentQuotes.length, visibleAttachments],
+  );
+  const hasQuotes = sentQuotes.length > 0;
   const hasImages = images.length > 0;
-  const hasAttachments = visibleAttachments.length > 0;
+  const hasAttachments = chipAttachments.length > 0;
   const showTrailingRow = !isPending && hasText && (isCompact || isNative || isHovered);
   const formattedTimestamp = useMemo(
     () => formatMessageTimestamp(new Date(timestamp)),
@@ -542,13 +566,22 @@ export const UserMessage = memo(function UserMessage({
   const imagePreviewContainerStyle = useMemo(
     () => [
       userMessageStylesheet.imagePreviewContainer,
-      hasText || hasAttachments ? userMessageStylesheet.imagePreviewSpacing : undefined,
+      hasText || hasAttachments || hasQuotes
+        ? userMessageStylesheet.imagePreviewSpacing
+        : undefined,
     ],
-    [hasAttachments, hasText],
+    [hasAttachments, hasQuotes, hasText],
   );
   const attachmentPreviewContainerStyle = useMemo(
     () => [
       userMessageStylesheet.attachmentPreviewContainer,
+      hasText || hasQuotes ? userMessageStylesheet.imagePreviewSpacing : undefined,
+    ],
+    [hasQuotes, hasText],
+  );
+  const quotesContainerStyle = useMemo(
+    () => [
+      userMessageStylesheet.quotesContainer,
       hasText ? userMessageStylesheet.imagePreviewSpacing : undefined,
     ],
     [hasText],
@@ -587,11 +620,23 @@ export const UserMessage = memo(function UserMessage({
             ) : null}
             {hasAttachments ? (
               <View style={attachmentPreviewContainerStyle}>
-                {visibleAttachments.map((attachment, index) => (
+                {chipAttachments.map((attachment, index) => (
                   <UserMessageAttachmentChip
                     key={`${attachment.type}:${"number" in attachment ? attachment.number : index}`}
                     attachment={attachment}
                     onOpenMention={handleOpenMention}
+                  />
+                ))}
+              </View>
+            ) : null}
+            {hasQuotes ? (
+              <View style={quotesContainerStyle}>
+                {sentQuotes.map((quote) => (
+                  <SentChatQuote
+                    key={quote.key}
+                    text={quote.selectedText}
+                    comment={quote.comment}
+                    source={quote.source}
                   />
                 ))}
               </View>

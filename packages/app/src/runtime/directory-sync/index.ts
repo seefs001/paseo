@@ -81,11 +81,12 @@ function applyWorkspaceSnapshotPage(
 ): void {
   if (firstPage && payload.sync?.mode !== "changes") snapshot.workspaces.clear();
   if (firstPage) (snapshot.syncModes ??= {}).workspaces = payload.sync?.mode ?? "snapshot";
+  const touchedProjectIds = (snapshot.touchedProjectIds ??= new Set());
   for (const entry of payload.entries) {
     const workspace = normalizeWorkspaceDescriptor(entry);
     snapshot.workspaces.set(workspace.id, workspace);
     (snapshot.touchedWorkspaceIds ??= new Set()).add(workspace.id);
-    (snapshot.touchedProjectIds ??= new Set()).add(workspace.projectId);
+    if (workspace.projectId !== null) touchedProjectIds.add(workspace.projectId);
   }
   for (const removal of payload.sync?.removals ?? []) {
     snapshot.workspaces.delete(removal.id);
@@ -100,7 +101,7 @@ function applyWorkspaceSnapshotPage(
   for (const entry of payload.emptyProjects ?? []) {
     const project = normalizeProjectDescriptor(entry);
     snapshot.projects.set(project.projectId, project);
-    (snapshot.touchedProjectIds ??= new Set()).add(project.projectId);
+    touchedProjectIds.add(project.projectId);
   }
 }
 
@@ -455,7 +456,11 @@ export class DirectorySync {
       if (!useSessionStore.getState().sessions[this.serverId]) return;
       this.agents.commitCached(cached.agents);
       this.workspaces.commitCached(cached);
-      if (this.revision === revision) this.cursors = cached.checkpoint ?? {};
+      if (this.revision === revision) {
+        this.cursors = { ...cached.checkpoint };
+        // A source that omits pending permissions needs a full live baseline before changes.
+        if (cached.requiresAgentSnapshot) delete this.cursors.agents;
+      }
       this.cacheAccepted = true;
     })();
     return this.cacheLoad;
@@ -649,8 +654,8 @@ export class DirectorySync {
 
   private buildLegacyProjectSnapshot(snapshot: WorkspaceDirectorySnapshot): void {
     for (const workspace of snapshot.workspaces.values()) {
-      if (!snapshot.projects.has(workspace.projectId)) {
-        const project = legacyProjectDescriptorFromWorkspace(workspace);
+      if (workspace.projectId !== null && !snapshot.projects.has(workspace.projectId)) {
+        const project = legacyProjectDescriptorFromWorkspace(workspace, workspace.projectId);
         snapshot.projects.set(project.projectId, project);
       }
     }
@@ -1055,9 +1060,12 @@ export class DirectorySync {
   }
 }
 
-function legacyProjectDescriptorFromWorkspace(workspace: WorkspaceDescriptor): ProjectDescriptor {
+function legacyProjectDescriptorFromWorkspace(
+  workspace: WorkspaceDescriptor,
+  projectId: string,
+): ProjectDescriptor {
   return {
-    projectId: workspace.projectId,
+    projectId,
     projectKey: null,
     projectDisplayName: workspace.projectDisplayName,
     projectCustomName: workspace.projectCustomName ?? null,

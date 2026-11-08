@@ -8,6 +8,7 @@ import type {
   JsonValue,
   ProviderOptions,
   ToolPolicy,
+  UserMessageContextAttachment,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type {
@@ -412,8 +413,24 @@ export interface PluginTimelineItem {
   data: JsonValue;
 }
 
+/**
+ * What a user message showed when this daemon recorded it: the typed text and its quoted
+ * context. Provider history folds attachments into the prompt text, so a replay of a known
+ * message restores this instead.
+ */
+export interface UserMessageDisplayContext {
+  text: string;
+  attachments: UserMessageContextAttachment[];
+}
+
 export type AgentTimelineItem =
-  | { type: "user_message"; text: string; messageId?: string; clientMessageId?: string }
+  | {
+      type: "user_message";
+      text: string;
+      messageId?: string;
+      clientMessageId?: string;
+      attachments?: UserMessageContextAttachment[];
+    }
   | { type: "assistant_message"; text: string; messageId?: string; turnInfo?: AgentTurnInfo }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem

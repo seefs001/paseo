@@ -1,7 +1,8 @@
 import { ActivityIndicator, View, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react-native";
+import { ChevronDown, ChevronRight, CircleAlert, MessageSquare } from "lucide-react-native";
+import { DensityIcon } from "@/components/ui/density-icon";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { getStatusBucketLabel } from "@/hooks/sidebar-status-view-model";
 import { densityIconBox, densityIconProps } from "@/styles/density";
@@ -58,6 +59,7 @@ const needsInputColorMapping = (theme: Theme) => ({
  * otherwise the project icon carrying the project's aggregate workspace status.
  */
 export function ProjectLeadingVisual({
+  projectAssigned = true,
   displayName,
   iconDataUri,
   statusBucket,
@@ -67,6 +69,7 @@ export function ProjectLeadingVisual({
   showChevron = false,
   isArchiving = false,
 }: {
+  projectAssigned?: boolean;
   displayName: string;
   iconDataUri: string | null;
   /** Aggregate status of the project's workspaces; null when it shouldn't be surfaced. */
@@ -96,6 +99,7 @@ export function ProjectLeadingVisual({
 
   return (
     <ProjectStatusIndicator
+      projectAssigned={projectAssigned}
       iconDataUri={iconDataUri}
       displayName={displayName}
       projectViewKey={projectViewKey}
@@ -111,6 +115,7 @@ export function ProjectLeadingVisual({
 // a colored disc for the rest, nothing for done — so the badge reads as one fixed shell and
 // only its contents change.
 export function ProjectStatusIndicator({
+  projectAssigned = true,
   iconDataUri,
   displayName,
   projectViewKey,
@@ -119,6 +124,7 @@ export function ProjectStatusIndicator({
   loading = false,
   testID,
 }: {
+  projectAssigned?: boolean;
   iconDataUri: string | null;
   displayName: string;
   projectViewKey: string;
@@ -148,11 +154,17 @@ export function ProjectStatusIndicator({
       }
     >
       <View style={styles.projectIconBox}>
-        <ProjectIcon
-          iconDataUri={iconDataUri}
-          placeholderInitial={placeholderInitial}
-          projectViewKey={projectViewKey}
-        />
+        {projectAssigned ? (
+          <ProjectIcon
+            iconDataUri={iconDataUri}
+            placeholderInitial={placeholderInitial}
+            projectViewKey={projectViewKey}
+          />
+        ) : (
+          <View testID="unassigned-workspace-chat-icon">
+            <DensityIcon icon={MessageSquare} size="md" color="foregroundMuted" />
+          </View>
+        )}
         {badgeContent === null || badgeBucket === null ? null : (
           <ProjectStatusBadge
             content={badgeContent}

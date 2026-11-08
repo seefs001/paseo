@@ -30,7 +30,7 @@ export async function buildProjectPlacement(
   projectRecord?: PersistedProjectRecord | null,
 ): Promise<ProjectPlacementPayload> {
   const project = projectRecord ?? (await sources.projectRegistry.get(workspace.projectId));
-  if (!project) {
+  if (workspace.projectId !== null && !project) {
     throw new Error(`Project not found for workspace ${workspace.workspaceId}`);
   }
   const snapshot = sources.workspaceRuntimeStore.get(workspace.cwd);
@@ -43,10 +43,28 @@ export async function buildProjectPlacement(
     fallbackWorktreeRoot: snapshot?.git.repoRoot,
   });
   return {
-    projectKey: project.projectId,
-    projectName: resolveProjectDisplayName(project),
+    // COMPAT(unassignedProjectWire): added after v0.15.3; remove empty-string projections
+    // when the protocol floor permits nullable project keys, not merely a newer app version.
+    ...(workspace.projectId === null ? { projectAssigned: false } : {}),
+    projectKey: project?.projectId ?? "",
+    projectName: project ? resolveProjectDisplayName(project) : "",
     workspaceName: resolveWorkspaceDisplayName(workspace),
     checkout,
+  };
+}
+
+function projectIdentityForWire(
+  workspace: PersistedWorkspaceRecord,
+  project: PersistedProjectRecord | null,
+) {
+  return {
+    // COMPAT(unassignedProjectWire): added after v0.15.3; remove when the protocol floor
+    // permits nullable project IDs. No corresponding Project record is manufactured.
+    ...(workspace.projectId === null ? { projectAssigned: false } : {}),
+    projectId: workspace.projectId ?? "",
+    projectDisplayName: project ? resolveProjectDisplayName(project) : (workspace.projectId ?? ""),
+    projectCustomName: project?.customName ?? null,
+    projectCustomIconRevision: project?.customIconRevision ?? null,
   };
 }
 
@@ -71,12 +89,7 @@ export async function describeWorkspaceRecord(
 
   return {
     id: workspace.workspaceId,
-    projectId: workspace.projectId,
-    projectDisplayName: resolvedProjectRecord
-      ? resolveProjectDisplayName(resolvedProjectRecord)
-      : workspace.projectId,
-    projectCustomName: resolvedProjectRecord?.customName ?? null,
-    projectCustomIconRevision: resolvedProjectRecord?.customIconRevision ?? null,
+    ...projectIdentityForWire(workspace, resolvedProjectRecord),
     projectRootPath: resolvedProjectRecord?.rootPath ?? workspace.cwd,
     workspaceDirectory: workspace.cwd,
     setupStatus: sources.workspaceSetupObservation.status(workspace),
@@ -97,7 +110,7 @@ export async function describeWorkspaceRecord(
     createdAt: workspace.createdAt,
     diffStat,
     scripts: await sources.buildScripts(workspace, resolvedProjectRecord),
-    ...(resolvedProjectRecord
+    ...(resolvedProjectRecord || workspace.projectId === null
       ? { project: await buildProjectPlacement(sources, workspace, resolvedProjectRecord) }
       : {}),
   };
@@ -110,12 +123,7 @@ export async function describeCreatedWorktreeWorkspace(
   const projectRecord = await sources.projectRegistry.get(result.workspace.projectId);
   return {
     id: result.workspace.workspaceId,
-    projectId: result.workspace.projectId,
-    projectDisplayName: projectRecord
-      ? resolveProjectDisplayName(projectRecord)
-      : result.workspace.projectId,
-    projectCustomName: projectRecord?.customName ?? null,
-    projectCustomIconRevision: projectRecord?.customIconRevision ?? null,
+    ...projectIdentityForWire(result.workspace, projectRecord),
     projectRootPath: projectRecord?.rootPath ?? result.repoRoot,
     workspaceDirectory: result.workspace.cwd,
     setupStatus: sources.workspaceSetupObservation.status(result.workspace),

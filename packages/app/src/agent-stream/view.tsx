@@ -42,6 +42,7 @@ import {
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
 import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
+import { clearChatQuoteJump, useChatQuoteJumpTarget } from "@/attachments/chat-quote-jump";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
 import type { PendingPermission } from "@/types/shared";
@@ -700,6 +701,61 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       }
       return revealLoadedHistory(messageId);
     });
+    // A quote's source link opens this conversation, then scrolls to the quoted message here.
+    // A message older than the loaded window is reached through the same older-history paging
+    // the top of the list uses, one page per pass, until it loads or history runs out.
+    const quoteJump = useChatQuoteJumpTarget(resolvedServerId, agentId);
+    // State, not a ref: the page lands before the request settles, so the jump must rerun
+    // once paging clears.
+    const [isQuoteJumpPaging, setQuoteJumpPaging] = useState(false);
+    useEffect(() => {
+      if (!quoteJump || !isActive || !isAuthoritativeHistoryReady) return;
+      const { messageId, requestId } = quoteJump;
+      const isLoaded = [...effectiveStreamItems, ...(effectiveStreamHead ?? [])].some(
+        (item) => getStreamItemMessageId(item) === messageId,
+      );
+      if (!isLoaded) {
+        if (isQuoteJumpPaging || isLoadingOlder) return;
+        if (!hasOlder) {
+          clearChatQuoteJump(requestId);
+          toast?.error(t("composer.attachments.chatQuoteSourceUnavailable"));
+          return;
+        }
+        setQuoteJumpPaging(true);
+        void Promise.resolve(loadOlder())
+          .then((loaded) => {
+            // The pager already reported a failed page; stop instead of retrying it.
+            if (!loaded) clearChatQuoteJump(requestId);
+            return undefined;
+          })
+          .catch(() => {
+            clearChatQuoteJump(requestId);
+            toast?.error(t("agentStream.historyLoadFailed"));
+          })
+          .finally(() => {
+            setQuoteJumpPaging(false);
+          });
+        return;
+      }
+      // Opening a folded turn or an earlier window rerenders first; this effect reruns then.
+      if (!mountedMessageIds.has(messageId) && revealLoadedMessage(messageId)) return;
+      clearChatQuoteJump(requestId);
+      viewportRef.current?.scrollToMessage?.(messageId);
+    }, [
+      effectiveStreamHead,
+      effectiveStreamItems,
+      hasOlder,
+      isActive,
+      isAuthoritativeHistoryReady,
+      isLoadingOlder,
+      isQuoteJumpPaging,
+      loadOlder,
+      mountedMessageIds,
+      quoteJump,
+      revealLoadedMessage,
+      t,
+      toast,
+    ]);
     // Read through stable events so a collapse rerun does not change the renderer identity;
     // rows whose turn state changed are revised through `historyRowRevision`.
     const getCollapsedTurn = useStableEvent((hostId: string) =>

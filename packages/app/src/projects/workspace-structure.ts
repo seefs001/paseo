@@ -10,7 +10,9 @@ export interface WorkspaceStructureHostPlacement {
   iconRevision?: string;
 }
 
+/** A sidebar group; projectAssigned:false is UI-only and never a Project registry record. */
 export interface WorkspaceStructureProject {
+  projectAssigned?: boolean;
   viewKey: string;
   projectKey: string | null;
   projectName: string;
@@ -23,6 +25,8 @@ export interface WorkspaceStructureProject {
 export interface WorkspaceStructure {
   projects: WorkspaceStructureProject[];
 }
+
+export const UNASSIGNED_WORKSPACES_VIEW_KEY = JSON.stringify(["unassigned-workspaces"]);
 
 interface WorkspaceStructureSession {
   serverId: string;
@@ -88,8 +92,17 @@ export function buildWorkspaceStructureProjects(input: {
     );
   }
 
+  const unassigned: WorkspaceSortItem[] = [];
   for (const session of input.sessions) {
     for (const workspace of session.workspaces) {
+      if (workspace.projectId === null) {
+        unassigned.push({
+          sortTime: workspaceSortTime(workspace, input.workspaceSort),
+          workspaceName: workspace.name,
+          workspaceKey: `${session.serverId}:${workspace.id}`,
+        });
+        continue;
+      }
       const viewKey = viewKeyByServerProjectId.get(session.serverId)?.get(workspace.projectId);
       if (!viewKey) continue;
       byProject.get(viewKey)?.workspaces.push({
@@ -100,7 +113,7 @@ export function buildWorkspaceStructureProjects(input: {
     }
   }
 
-  return Array.from(byProject.values())
+  const projects: WorkspaceStructureProject[] = Array.from(byProject.values())
     .map((draft) => ({
       viewKey: draft.viewKey,
       projectKey: draft.projectKey,
@@ -119,6 +132,21 @@ export function buildWorkspaceStructureProjects(input: {
           sensitivity: "base",
         }) || left.viewKey.localeCompare(right.viewKey),
     );
+  if (unassigned.length > 0) {
+    projects.push({
+      projectAssigned: false,
+      viewKey: UNASSIGNED_WORKSPACES_VIEW_KEY,
+      projectKey: null,
+      projectName: "",
+      projectKind: "unknown",
+      iconWorkingDir: "",
+      hosts: [],
+      workspaceKeys: unassigned
+        .sort(input.workspaceSort ? compareWorkspaceTimes : compareWorkspaceStructureItems)
+        .map((workspace) => workspace.workspaceKey),
+    });
+  }
+  return projects;
 }
 
 export function createProjectViewKey(

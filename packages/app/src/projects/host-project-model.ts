@@ -53,7 +53,7 @@ export function hostProjectFromWorkspace(input: {
   serverId: string;
   workspace: WorkspaceDescriptor | null;
 }): HostProjectListItem | null {
-  if (!input.workspace) {
+  if (!input.workspace || input.workspace.projectId === null) {
     return null;
   }
   const projectId = input.workspace.projectId.trim() || undefined;

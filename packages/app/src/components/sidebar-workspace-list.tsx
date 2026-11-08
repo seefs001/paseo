@@ -956,6 +956,7 @@ function ProjectHeaderRow({
     <>
       <View style={styles.projectRowLeft}>
         <ProjectLeadingVisual
+          projectAssigned={project.projectAssigned}
           displayName={displayName}
           iconDataUri={iconDataUri}
           statusBucket={statusBucket}
@@ -1861,7 +1862,7 @@ function ProjectBlock({
         isDragging={isDragging}
         isArchiving={isRemovingProject}
         menuController={null}
-        onRemoveProject={handleRemoveProject}
+        onRemoveProject={project.projectAssigned === false ? undefined : handleRemoveProject}
         removeProjectStatus={isRemovingProject ? "pending" : "idle"}
         dragHandleProps={dragHandleProps}
       />

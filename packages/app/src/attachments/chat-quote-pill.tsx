@@ -1,65 +1,102 @@
 import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { MessageSquare } from "lucide-react-native";
+import { CornerDownRight, Pencil, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { ChatQuoteContextAttachment } from "@/attachments/types";
-import { getChatQuoteSourceLabel } from "@/attachments/chat-quote";
-import { AttachmentLabel, AttachmentPill } from "@/components/attachment-pill";
+import { openChatQuoteSource } from "@/attachments/chat-quote-jump";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { Button } from "@/components/ui/button";
+import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import { navigateToAgent } from "@/utils/navigate-to-agent";
+
+type ChatQuoteSource = ChatQuoteContextAttachment["source"];
+
+interface ChatQuoteLineProps {
+  text: string;
+  comment?: string;
+  /** Clip the comment too; the composer does, a sent message shows the whole comment. */
+  clampComment?: boolean;
+  /** Pressing the excerpt runs this; without it the quote is static. */
+  onPress?: () => void;
+  accessibilityLabel?: string;
+  testID?: string;
+}
+
+/**
+ * The one look for a quote: a muted reply arrow and the excerpt clipped to two lines, with the
+ * user's comment under it. Only the excerpt is pressable, so the comment stays selectable text.
+ */
+export function ChatQuoteLine({
+  text,
+  comment,
+  clampComment = false,
+  onPress,
+  accessibilityLabel,
+  testID,
+}: ChatQuoteLineProps) {
+  const excerpt = text.replace(/\s+/g, " ").trim();
+  return (
+    <View style={styles.line}>
+      <PressHighlight
+        testID={testID}
+        onPress={onPress}
+        disabled={!onPress}
+        accessibilityRole={onPress ? "link" : undefined}
+        accessibilityLabel={accessibilityLabel}
+        style={styles.excerptRow}
+      >
+        <View style={styles.icon}>{quoteIcon}</View>
+        <Text style={styles.excerpt} numberOfLines={2}>
+          {excerpt}
+        </Text>
+      </PressHighlight>
+      {comment ? (
+        <Text
+          style={styles.comment}
+          selectable={!clampComment}
+          numberOfLines={clampComment ? 2 : undefined}
+          testID={testID ? `${testID}-comment` : undefined}
+        >
+          {comment}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+interface SentChatQuoteProps {
+  text: string;
+  comment?: string;
+  source: ChatQuoteSource | null;
+}
+
+/** A quote inside a sent message. Pressing it opens the quoted message in its conversation. */
+export function SentChatQuote({ text, comment, source }: SentChatQuoteProps) {
+  const { t } = useTranslation();
+  const open = useCallback(() => {
+    if (source) openChatQuoteSource(source);
+  }, [source]);
+  return (
+    <ChatQuoteLine
+      testID="user-message-chat-quote"
+      text={text}
+      comment={comment}
+      onPress={source ? open : undefined}
+      accessibilityLabel={source ? t("composer.attachments.openChatQuoteSource") : undefined}
+    />
+  );
+}
 
 interface ChatQuotePreviewProps {
   text: string;
-  source: ChatQuoteContextAttachment["source"];
-  onOpenSource?: () => void;
-  /** Shown as an editable field when set; otherwise the quote is read-only. */
-  comment?: {
-    value: string;
-    onChange: (value: string) => void;
-    editable: boolean;
-  };
+  source: ChatQuoteSource;
 }
 
-export function ChatQuotePreview({ text, source, onOpenSource, comment }: ChatQuotePreviewProps) {
-  const { t } = useTranslation();
-  const openSource = useCallback(() => {
-    onOpenSource?.();
-    navigateToAgent({ serverId: source.serverId, agentId: source.agentId });
-  }, [onOpenSource, source.agentId, source.serverId]);
-  return (
-    <View style={styles.preview} testID="chat-quote-preview">
-      <Text style={styles.label}>{t("composer.attachments.chatQuote")}</Text>
-      <Text style={styles.quote} selectable>
-        {text}
-      </Text>
-      {comment ? (
-        <Field label={t("composer.attachments.chatQuoteComment")}>
-          <FormTextInput
-            testID="chat-quote-comment-input"
-            initialValue={comment.value}
-            onChangeText={comment.onChange}
-            editable={comment.editable}
-            multiline
-            placeholder={t("composer.attachments.chatQuoteCommentPlaceholder")}
-            style={styles.commentInput}
-          />
-        </Field>
-      ) : null}
-      <Text style={styles.label}>{t("composer.attachments.chatQuoteSource")}</Text>
-      <Text style={styles.source} selectable>
-        {getChatQuoteSourceLabel(source)}
-      </Text>
-      <View style={styles.sourceAction}>
-        <Button variant="outline" size="sm" onPress={openSource}>
-          {t("composer.attachments.openChatQuoteSource")}
-        </Button>
-      </View>
-    </View>
-  );
+/** The quote a side conversation was started from. */
+export function ChatQuotePreview({ text, source }: ChatQuotePreviewProps) {
+  return <SentChatQuote text={text} source={source} />;
 }
 
 interface ChatQuoteAttachmentPillProps {
@@ -70,6 +107,10 @@ interface ChatQuoteAttachmentPillProps {
   onChangeComment: (index: number, comment: string) => void;
 }
 
+/**
+ * The quote in the composer, above the input. Pressing it opens a sheet to edit the comment
+ * or go to the quoted message; the trailing button removes it.
+ */
 export function ChatQuoteAttachmentPill({
   attachment,
   index,
@@ -78,81 +119,126 @@ export function ChatQuoteAttachmentPill({
   onChangeComment,
 }: ChatQuoteAttachmentPillProps) {
   const { t } = useTranslation();
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [commentDraft, setCommentDraft] = useState(attachment.comment ?? "");
-  const openPreview = useCallback(() => {
+  const openSheet = useCallback(() => {
     setCommentDraft(attachment.comment ?? "");
-    setPreviewOpen(true);
+    setSheetOpen(true);
   }, [attachment.comment]);
   // The draft commits on close so typing does not rewrite the composer draft per keystroke.
-  const closePreview = useCallback(() => {
-    setPreviewOpen(false);
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
     if (commentDraft.trim() !== (attachment.comment ?? "")) onChangeComment(index, commentDraft);
   }, [attachment.comment, commentDraft, index, onChangeComment]);
-  const commentField = useMemo(
-    () => ({ value: commentDraft, onChange: setCommentDraft, editable: !disabled }),
-    [commentDraft, disabled],
-  );
+  const goToSource = useCallback(() => {
+    openChatQuoteSource(attachment.source);
+  }, [attachment.source]);
   const remove = useCallback(() => onRemove(index), [index, onRemove]);
   const header = useMemo<SheetHeader>(() => ({ title: t("composer.attachments.chatQuote") }), [t]);
-  const title = `“${attachment.selectedText.replace(/\s+/g, " ").trim()}”`;
-  const sourceLabel = attachment.comment ?? getChatQuoteSourceLabel(attachment.source);
   return (
-    <>
-      <AttachmentPill
+    <View style={styles.composerRow} testID="composer-chat-quote">
+      <ChatQuoteLine
         testID="composer-chat-quote-attachment-pill"
+        text={attachment.selectedText}
+        comment={attachment.comment}
+        clampComment
+        onPress={goToSource}
+        accessibilityLabel={t("composer.attachments.openChatQuoteSource")}
+      />
+      <ToolbarButton
+        compact
+        onPress={openSheet}
         disabled={disabled}
-        onOpen={openPreview}
-        onRemove={remove}
-        openAccessibilityLabel={t("composer.attachments.openChatQuote", {
-          ...attachment.source,
-          text: attachment.selectedText,
-        })}
-        removeAccessibilityLabel={t("composer.attachments.removeChatQuote")}
+        label={t("composer.attachments.openChatQuote", { text: attachment.selectedText })}
+        testID="composer-chat-quote-edit"
       >
-        <AttachmentLabel icon={quoteIcon} title={title} subtitle={sourceLabel} />
-      </AttachmentPill>
-      <AdaptiveModalSheet header={header} visible={previewOpen} onClose={closePreview}>
-        <ChatQuotePreview
-          text={attachment.selectedText}
-          source={attachment.source}
-          onOpenSource={closePreview}
-          comment={commentField}
-        />
+        {editIcon}
+      </ToolbarButton>
+      <ToolbarButton
+        compact
+        onPress={remove}
+        disabled={disabled}
+        label={t("composer.attachments.removeChatQuote")}
+        testID="composer-chat-quote-remove"
+      >
+        {removeIcon}
+      </ToolbarButton>
+      <AdaptiveModalSheet header={header} visible={sheetOpen} onClose={closeSheet}>
+        <View style={styles.sheet}>
+          <Text style={styles.sheetQuote} selectable>
+            {attachment.selectedText}
+          </Text>
+          <Field label={t("composer.attachments.chatQuoteComment")}>
+            <FormTextInput
+              testID="chat-quote-comment-input"
+              initialValue={commentDraft}
+              onChangeText={setCommentDraft}
+              editable={!disabled}
+              multiline
+              placeholder={t("composer.attachments.chatQuoteCommentPlaceholder")}
+              style={styles.commentInput}
+            />
+          </Field>
+        </View>
       </AdaptiveModalSheet>
-    </>
+    </View>
   );
 }
 
-const ThemedQuote = withUnistyles(MessageSquare);
+const ThemedQuoteIcon = withUnistyles(CornerDownRight);
+const ThemedX = withUnistyles(X);
+const ThemedPencil = withUnistyles(Pencil);
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const quoteIcon = <ThemedQuote size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
+const quoteIcon = <ThemedQuoteIcon size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
+const editIcon = <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
+const removeIcon = <ThemedX size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
 
 const styles = StyleSheet.create((theme) => ({
-  preview: {
+  line: {
+    flexShrink: 1,
+    flexGrow: 1,
+    minWidth: 0,
+    gap: theme.spacing[1],
+  },
+  excerptRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: theme.spacing[2],
   },
-  label: {
+  icon: {
+    paddingTop: 2,
+  },
+  excerpt: {
+    flex: 1,
+    minWidth: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
-  quote: {
+  comment: {
     color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    paddingLeft: ICON_SIZE.sm + theme.spacing[2],
+  },
+  composerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[2],
+    width: "100%",
+    paddingBottom: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  sheet: {
+    gap: theme.spacing[3],
+  },
+  sheetQuote: {
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.content,
     paddingLeft: theme.spacing[3],
     borderLeftWidth: 2,
     borderLeftColor: theme.colors.border,
-    marginBottom: theme.spacing[2],
   },
   commentInput: {
     minHeight: 72,
-  },
-  source: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  sourceAction: {
-    alignItems: "flex-start",
-    marginTop: theme.spacing[1],
   },
 }));

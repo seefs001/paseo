@@ -58,6 +58,25 @@ const STORED_AGENT_SCHEMA = z.object({
   updatedAt: z.string(),
   lastActivityAt: z.string().optional(),
   lastUserMessageAt: z.string().nullable().optional(),
+  // What each user message showed (typed text and quoted context), by message id. Provider
+  // history folds the quote into the prompt text, so replays restore it from here.
+  userMessageContexts: z
+    .record(
+      z.string(),
+      z.object({
+        text: z.string(),
+        attachments: z.array(
+          z.object({
+            type: z.literal("text"),
+            mimeType: z.literal("text/plain"),
+            contextKind: z.string().optional(),
+            title: z.string().nullable().optional(),
+            text: z.string(),
+          }),
+        ),
+      }),
+    )
+    .optional(),
   title: z.string().nullable().optional(),
   labels: z.record(z.string(), z.string()).default({}),
   lastStatus: AgentStatusSchema.default("closed"),
@@ -103,6 +122,13 @@ export type SerializableAgentConfig = Pick<
 export type StoredAgentRecord = z.infer<typeof STORED_AGENT_SCHEMA>;
 export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
   return STORED_AGENT_SCHEMA.parse(value);
+}
+
+/** A runtime that never loaded the record's message context must not erase it. */
+function preservedUserMessageContexts(
+  existing: StoredAgentRecord | null | undefined,
+): StoredAgentRecord["userMessageContexts"] {
+  return existing?.userMessageContexts;
 }
 
 export class AgentStorage {
@@ -392,6 +418,7 @@ export class AgentStorage {
       }
       // Background is fixed at creation; a runtime opened without it cannot clear it.
       if (existing?.background) record.background = true;
+      record.userMessageContexts ??= preservedUserMessageContexts(existing);
       record.resumeOnStartup =
         existing?.resumeOnStartup && agent.lifecycle !== "idle" && agent.lifecycle !== "error";
       return record;

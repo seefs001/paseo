@@ -385,8 +385,26 @@ export interface AgentTurnInfo {
   fastModeRequested?: boolean;
 }
 
+/**
+ * Context the user attached to a prompt that the timeline keeps for display, such as a quoted
+ * message. The prompt the model received already contains it; this is a copy for the App.
+ */
+export interface UserMessageContextAttachment {
+  type: "text";
+  mimeType: "text/plain";
+  contextKind?: string;
+  title?: string | null;
+  text: string;
+}
+
 export type AgentTimelineItem =
-  | { type: "user_message"; text: string; messageId?: string; clientMessageId?: string }
+  | {
+      type: "user_message";
+      text: string;
+      messageId?: string;
+      clientMessageId?: string;
+      attachments?: UserMessageContextAttachment[];
+    }
   | { type: "assistant_message"; text: string; messageId?: string; turnInfo?: AgentTurnInfo }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem

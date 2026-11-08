@@ -25,7 +25,7 @@ import {
 } from "@legendapp/list/react-native";
 import { withUnistyles } from "react-native-unistyles";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import type { StreamItem } from "@/types/stream";
+import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
 import type { Theme } from "@/styles/theme";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { shouldAnimateNativeScrollToBottom } from "./native-scroll-animation";
@@ -184,6 +184,8 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
     newRowEstimates.noteRows(nextRows);
     return nextRows;
   }, [newRowEstimates, historyRows, liveRows]);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   const getEstimatedItemSize = useStableEvent((item: StreamItem) => newRowEstimates.estimate(item));
   const getHistoryStartPaginationInput = useStableEvent((): HistoryStartPaginationInput => {
     const metrics = streamViewportMetricsRef.current;
@@ -407,6 +409,16 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
         bottomAnchorController.prepareForStickyViewportChange();
       },
       holdRow,
+      scrollToMessage: (messageId) => {
+        const index = rowsRef.current.findIndex(
+          (item) => getStreamItemMessageId(item) === messageId,
+        );
+        if (index < 0) return;
+        // Leave following the end first, or the end pin pulls the list back down.
+        bottomAnchorController.detachByUser();
+        onNearBottomChange(false);
+        void listRef.current?.scrollToIndex({ index, viewPosition: 0, animated: true });
+      },
     };
     viewportRef.current = handle;
     return () => {
@@ -414,7 +426,7 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
         viewportRef.current = null;
       }
     };
-  }, [agentId, bottomAnchorController, holdRow, viewportRef]);
+  }, [agentId, bottomAnchorController, holdRow, onNearBottomChange, viewportRef]);
 
   // The scroll-to-bottom button shows whenever following would not resume on its own. A detached
   // list resumes only from the end, so the button shows anywhere short of it. While following, the

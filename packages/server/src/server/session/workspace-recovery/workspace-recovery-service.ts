@@ -90,8 +90,9 @@ export function createWorkspaceRecoveryService(deps: {
       };
     }
 
-    const project = await deps.getProject(workspace.projectId);
-    if (!project) {
+    const project =
+      workspace.projectId === null ? null : await deps.getProject(workspace.projectId);
+    if (workspace.projectId !== null && !project) {
       return {
         kind: "unavailable",
         workspaceId,
@@ -114,8 +115,8 @@ export function createWorkspaceRecoveryService(deps: {
     }
     // COMPAT(worktreeRestoreMissingMainRepoRoot): records created before v0.1.110
     // lack placement ownership; remove the project-root fallback after 2027-01-17.
-    const sourceRepoRoot = workspace.mainRepoRoot ?? project.rootPath;
-    if (!(await deps.isDirectory(sourceRepoRoot))) {
+    const sourceRepoRoot = workspace.mainRepoRoot ?? project?.rootPath;
+    if (!sourceRepoRoot || !(await deps.isDirectory(sourceRepoRoot))) {
       return {
         kind: "unavailable",
         workspaceId,

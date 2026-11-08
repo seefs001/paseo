@@ -1,4 +1,7 @@
 import { Text, View } from "react-native";
+import { useTranslation } from "react-i18next";
+import { MessageSquare } from "lucide-react-native";
+import { DensityIcon } from "@/components/ui/density-icon";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { HostBadge } from "@/hosts/host-badge";
@@ -14,25 +17,31 @@ import { useHostBadges } from "@/hosts/use-host-badges";
  * side by side, and kept on compact, where the line exists for the host anyway.
  */
 export function WorkspaceHeaderProjectRow({
+  projectAssigned = true,
   subtitle,
   isSubtitleDistinct,
   serverId,
 }: {
+  projectAssigned?: boolean;
   subtitle: string;
   isSubtitleDistinct: boolean;
   serverId: string;
 }) {
+  const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const hostBadge = useHostBadges({ enabled: isCompact }).get(serverId) ?? null;
-  const showProject = isSubtitleDistinct || isCompact;
+  const showProject = !projectAssigned || isSubtitleDistinct || isCompact;
   if (!showProject && !hostBadge) {
     return null;
   }
   return (
     <View style={styles.row}>
+      {!projectAssigned ? (
+        <DensityIcon icon={MessageSquare} size="sm" color="foregroundMuted" />
+      ) : null}
       {showProject ? (
         <Text testID="workspace-header-subtitle" style={styles.project} numberOfLines={1}>
-          {subtitle}
+          {projectAssigned ? subtitle : t("workspaceProject.none")}
         </Text>
       ) : null}
       {showProject && hostBadge ? <Text style={styles.separator}>·</Text> : null}

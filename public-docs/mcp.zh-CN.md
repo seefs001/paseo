@@ -207,7 +207,7 @@ Paseo 发送 `POST`，请求头为 `Content-Type: application/json`：
 
 Agent 不能修改目标的 [Autopilot](/docs/cli#autopilot)；由人在工作台上或用 `paseo goal autopilot` 设置。
 
-只登记人会再打开的成果，不登记日志或改过的源码。登记不会写入工作台，也不会完成任务。用户从输入框上方的成果胶囊或目标里打开。
+只登记人会再打开的成果，不登记日志或改过的源码。登记不会写入工作台，也不会完成任务。用户从工作区的 + 菜单打开成果标签，也可以从目标里打开成果。
 
 ### 工作区脚本 {#workspace-scripts}
 

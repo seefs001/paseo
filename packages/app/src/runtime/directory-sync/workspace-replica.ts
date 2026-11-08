@@ -37,7 +37,7 @@ export interface WorkspaceDirectorySnapshot {
 export class WorkspaceDirectoryReplica {
   private workspaces = new Map<string, WorkspaceDescriptor>();
   private projects = new Map<string, ProjectDescriptor>();
-  private workspaceIdsByProject = new Map<string, Set<string>>();
+  private workspaceIdsByProject = new Map<string | null, Set<string>>();
 
   constructor(private readonly serverId: string) {}
 
@@ -231,8 +231,8 @@ export class WorkspaceDirectoryReplica {
   private setWorkspace(workspace: WorkspaceDescriptor): void {
     this.applySetupStatus(workspace);
     const previous = this.workspaces.get(workspace.id);
-    if (previous?.projectId !== workspace.projectId) {
-      this.workspaceIdsByProject.get(previous?.projectId ?? "")?.delete(workspace.id);
+    if (previous && previous.projectId !== workspace.projectId) {
+      this.workspaceIdsByProject.get(previous.projectId)?.delete(workspace.id);
     }
     this.workspaces.set(workspace.id, workspace);
     const projectWorkspaces = this.workspaceIdsByProject.get(workspace.projectId) ?? new Set();

@@ -16,6 +16,7 @@ import { pullRequestPanelRegistration } from "@/panels/pull-request-panel";
 import { pluginPanelRegistration } from "@/plugins/workspace-panels/panel";
 import { newTabPanelRegistration } from "@/panels/new-tab-panel";
 import { artifactPanelRegistration } from "@/artifacts/panel";
+import { artifactsPanelRegistration } from "@/artifacts/collection";
 
 let panelsRegistered = false;
 
@@ -35,6 +36,7 @@ export function ensurePanelsRegistered(): void {
   registerPanel(pullRequestPanelRegistration);
   registerPanel(commitDiffPanelRegistration);
   registerPanel(artifactPanelRegistration);
+  registerPanel(artifactsPanelRegistration);
   registerPanel(workingDiffPanelRegistration);
   registerPanel(changesTreePanelRegistration);
   registerPanel(pluginPanelRegistration);

@@ -1,5 +1,6 @@
 import { getForgeDefinitionOrNeutral } from "@getpaseo/protocol/forge-manifest";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type { UserMessageContextAttachment } from "@getpaseo/protocol/agent-types";
 import type { AgentPromptContentBlock, AgentPromptInput } from "./agent-sdk-types.js";
 
 const REVIEW_LINE_MARKERS = { add: "+", remove: "-", context: " " } as const;
@@ -56,6 +57,29 @@ export function userVisiblePromptText(prompt: AgentPromptInput): string {
     .flatMap((block) => (isUserTypedPromptText(block) ? [block.text] : []))
     .join("\n")
     .trim();
+}
+
+/**
+ * Prompt context the timeline keeps beside the user's text so the App can show it in history.
+ * Only quoted messages: other attachments are not displayed from history.
+ */
+export function userMessageContextAttachments(
+  prompt: AgentPromptInput,
+): UserMessageContextAttachment[] {
+  if (typeof prompt === "string") return [];
+  return prompt.flatMap((block) =>
+    block.type === "text" && "mimeType" in block && block.contextKind === "chat_quote"
+      ? [
+          {
+            type: "text" as const,
+            mimeType: "text/plain" as const,
+            contextKind: block.contextKind,
+            ...(block.title !== undefined ? { title: block.title } : {}),
+            text: block.text,
+          },
+        ]
+      : [],
+  );
 }
 
 export function renderPromptAttachmentAsText(attachment: AgentAttachment): string {

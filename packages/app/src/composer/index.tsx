@@ -69,6 +69,7 @@ import { ChatQuoteAttachmentPill } from "@/attachments/chat-quote-pill";
 import { withChatQuoteComment } from "@/attachments/chat-quote";
 import { ContextWindowMeter } from "@/components/context-window-meter";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
+import { ArtifactQuotePill } from "@/artifacts/quote";
 import {
   selectAgentSentMessages,
   selectAgentTurnPresentation,
@@ -428,9 +429,17 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
   } = args;
   // Profile references live inline in the text; the tray only shows standalone attachments.
   if (!selectedAttachments.some(isTrayAttachment) && pendingFiles.length === 0) return null;
+  // Quotes lead the tray on their own rows, so they read as context for what is typed below.
+  const ordered = selectedAttachments
+    .map((attachment, index) => ({ attachment, index }))
+    .sort(
+      (left, right) =>
+        Number(right.attachment.kind === "chat_quote") -
+        Number(left.attachment.kind === "chat_quote"),
+    );
   return (
     <View style={styles.attachmentTray} testID="composer-attachment-tray">
-      {selectedAttachments.map((attachment, index) =>
+      {ordered.map(({ attachment, index }) =>
         isTrayAttachment(attachment)
           ? renderComposerAttachmentPill({
               serverId,
@@ -512,6 +521,17 @@ function renderComposerAttachmentPill(args: RenderComposerAttachmentPillArgs): R
         onRemove={onRemove}
         openLabel={labels.openImage}
         removeLabel={labels.removeImage}
+      />
+    );
+  }
+  if (attachment.kind === "artifact_quote") {
+    return (
+      <ArtifactQuotePill
+        key={attachment.id}
+        attachment={attachment}
+        index={index}
+        disabled={disabled}
+        onRemove={onRemove}
       />
     );
   }

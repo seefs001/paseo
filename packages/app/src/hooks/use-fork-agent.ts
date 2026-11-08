@@ -186,8 +186,12 @@ export function useForkAgent(
         buildNewWorkspaceRoute({
           serverId,
           sourceDirectory,
-          displayName: agent.projectPlacement?.projectName,
-          projectId: agent.projectPlacement?.projectKey,
+          ...(agent.projectPlacement?.projectAssigned !== false
+            ? {
+                displayName: agent.projectPlacement?.projectName,
+                projectId: agent.projectPlacement?.projectKey,
+              }
+            : {}),
           draftId,
         }),
       );

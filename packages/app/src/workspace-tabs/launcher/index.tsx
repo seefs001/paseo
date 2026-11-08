@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Globe, SquarePen, SquareTerminal } from "lucide-react-native";
 import invariant from "tiny-invariant";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useHostFeature } from "@/runtime/host-features";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { pluginIconComponent } from "@/plugins/icons";
 import { useInstalledPlugins } from "@/plugins/registry";
@@ -83,6 +84,7 @@ const BUILT_IN_SELECTIONS = {
   changes: { kind: "target", target: { kind: "changes_tree" } },
   diff: { kind: "target", target: { kind: "working_diff" } },
   files: { kind: "target", target: { kind: "files" } },
+  artifacts: { kind: "target", target: { kind: "artifacts" } },
   browser: { kind: "browser" },
   pullRequest: { kind: "target", target: { kind: "pull_request" } },
 } satisfies Record<BuiltInLaunchItemId, NewTabSelection>;
@@ -108,6 +110,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
   const { config } = useDaemonConfig(serverId);
   const plugins = useInstalledPlugins();
   const isCompact = useIsCompactFormFactor();
+  const supportsArtifacts = useHostFeature(serverId, "artifacts");
 
   const launchSelection = useCallback(
     (selection: NewTabSelection) => (destination: WorkspaceTabLaunchDestination) => {
@@ -123,6 +126,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
     const changesPresentation = getLaunchPresentation("changes_tree");
     const diffPresentation = getLaunchPresentation("working_diff");
     const filesPresentation = getLaunchPresentation("files");
+    const artifactsPresentation = getLaunchPresentation("artifacts");
     const pullRequestPresentation = getLaunchPresentation("pull_request");
     const builtIns: Record<BuiltInLaunchItemId, WorkspaceTabLaunchItem & { hidden?: boolean }> = {
       agent: {
@@ -172,6 +176,14 @@ export function useWorkspaceTabLaunchCatalog(input: {
         panelKind: "files",
         launch: launchSelection(BUILT_IN_SELECTIONS.files),
       },
+      artifacts: {
+        id: "artifacts",
+        label: artifactsPresentation.label(t),
+        Icon: artifactsPresentation.icon,
+        disabled: false,
+        panelKind: "artifacts",
+        launch: launchSelection(BUILT_IN_SELECTIONS.artifacts),
+      },
       browser: {
         id: "browser",
         label: t("workspace.tabs.fallback.browser"),
@@ -192,10 +204,12 @@ export function useWorkspaceTabLaunchCatalog(input: {
         launch: launchSelection(BUILT_IN_SELECTIONS.pullRequest),
       },
     };
-    const tabItems = getBuiltInLaunchOrder(purpose).flatMap((id) => {
-      const item = builtIns[id];
-      return item.hidden || !panelSupportsHost(item.panelKind, host) ? [] : [item];
-    });
+    const tabItems = getBuiltInLaunchOrder(purpose, { artifacts: supportsArtifacts }).flatMap(
+      (id) => {
+        const item = builtIns[id];
+        return item.hidden || !panelSupportsHost(item.panelKind, host) ? [] : [item];
+      },
+    );
 
     const pluginItems: WorkspaceTabLaunchItem[] = [];
     for (const plugin of plugins) {
@@ -262,6 +276,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
     surface,
     panePanelKinds,
     serverId,
+    supportsArtifacts,
     t,
   ]);
 }

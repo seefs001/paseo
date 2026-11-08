@@ -296,7 +296,7 @@ interface ProviderSummary {
 const WorkspaceAutomationSummarySchema = z.object({
   parentWorkspaceId: z.string().optional(),
   workspaceId: z.string(),
-  projectId: z.string(),
+  projectId: z.string().nullable(),
   cwd: z.string(),
   isolation: z.enum(["local", "worktree"]),
   kind: z.enum(["directory", "local_checkout", "worktree"]),
@@ -1565,7 +1565,7 @@ function createToolCatalog(
     return options.boardDecisionService;
   }
 
-  async function callerProjectId(): Promise<string | undefined> {
+  async function callerProjectId(): Promise<string | null | undefined> {
     const caller = resolveCallerAgent();
     if (!caller?.workspaceId) return undefined;
     if (!options.workspaceRegistry) throw new Error("Workspace registry is not configured");
@@ -1674,7 +1674,7 @@ function createToolCatalog(
     },
     async ({ state, stage, goalId, projectId, frontier }: ListBoardTasksInput) => {
       let goals: Set<string> | undefined;
-      let project = projectId;
+      let project: string | null | undefined = projectId;
       if (goalId !== undefined) goals = new Set([goalIdFor(goalId)]);
       else if (projectId === undefined) {
         const owned = ownedGoals();

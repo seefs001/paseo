@@ -152,7 +152,8 @@ export function workspaceIdsForProjects(
 ): string[] {
   const workspaceIds = new Set<string>();
   for (const workspace of workspaces) {
-    if (projectIds.has(workspace.projectId)) workspaceIds.add(workspace.workspaceId);
+    if (workspace.projectId !== null && projectIds.has(workspace.projectId))
+      workspaceIds.add(workspace.workspaceId);
   }
   return Array.from(workspaceIds);
 }
@@ -165,7 +166,9 @@ function activeWorkspaceRecords(
     projects.filter((project) => project.archivedAt).map((project) => project.projectId),
   );
   return workspaces.filter(
-    (workspace) => !workspace.archivedAt && !archivedProjects.has(workspace.projectId),
+    (workspace) =>
+      !workspace.archivedAt &&
+      (workspace.projectId === null || !archivedProjects.has(workspace.projectId)),
   );
 }
 
@@ -261,7 +264,8 @@ export class WorkspaceDirectory {
       includedWorkspaces.map((workspace) =>
         this.deps.buildWorkspaceDescriptor({
           workspace,
-          projectRecord: activeProjects.get(workspace.projectId) ?? null,
+          projectRecord:
+            workspace.projectId === null ? null : (activeProjects.get(workspace.projectId) ?? null),
           includeGitData: options.includeGitData,
         }),
       ),

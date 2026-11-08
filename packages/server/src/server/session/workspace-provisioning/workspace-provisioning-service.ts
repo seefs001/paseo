@@ -137,7 +137,7 @@ export function createWorkspaceProvisioningService(deps: {
         throw new Error(`Workspace not found: ${input.requestedWorkspaceId}`);
       }
       const project = await projectRegistry.get(workspace.projectId);
-      if (!project || project.archivedAt) {
+      if (workspace.projectId !== null && (!project || project.archivedAt)) {
         throw new Error(`Project not found: ${workspace.projectId}`);
       }
       if (!createRealpathAwarePathMatcher(workspace.cwd)(input.cwd)) {
@@ -191,7 +191,7 @@ export function createWorkspaceProvisioningService(deps: {
       if (previousProject?.archivedAt) {
         await projectRegistry.upsert(previousProject);
       } else if (!previousProject) {
-        await projectRegistry.remove(workspace.projectId);
+        if (workspace.projectId !== null) await projectRegistry.remove(workspace.projectId);
       }
     } catch (error) {
       logger.error(
@@ -349,6 +349,9 @@ export function createWorkspaceProvisioningService(deps: {
         (workspace) => !workspace.archivedAt && areEquivalentPaths(workspace.cwd, input.repoRoot),
       );
     if (sourceWorkspace) {
+      if (sourceWorkspace.projectId === null) {
+        throw new Error("Select a project before creating a new worktree from this workspace.");
+      }
       const project = await projectRegistry.get(sourceWorkspace.projectId);
       if (project) return refreshProjectKind(project);
       // COMPAT(worktreeMissingSourceProject): added in v0.1.107, remove after 2027-01-15.
@@ -390,7 +393,8 @@ export function createWorkspaceProvisioningService(deps: {
     const archived = workspaces.find((workspace) => workspace.archivedAt);
     if (archived) {
       const project = await projectRegistry.get(archived.projectId);
-      if (project && !project.archivedAt) return ensureWorkspaceRecordUnarchived(archived);
+      if (archived.projectId === null || (project && !project.archivedAt))
+        return ensureWorkspaceRecordUnarchived(archived);
     }
     return createWorkspaceForDirectory(normalizedCwd);
   }
@@ -429,10 +433,11 @@ export function createWorkspaceProvisioningService(deps: {
     workspace: PersistedWorkspaceRecord,
   ): Promise<PersistedWorkspaceRecord> {
     const project = await projectRegistry.get(workspace.projectId);
-    if (!project) throw new Error(`Unknown project: ${workspace.projectId}`);
+    if (workspace.projectId !== null && !project)
+      throw new Error(`Unknown project: ${workspace.projectId}`);
     const timestamp = new Date().toISOString();
     const checkout =
-      workspace.archivedAt || project.archivedAt
+      workspace.archivedAt || project?.archivedAt
         ? await observeWorkspaceCheckout(workspace.cwd)
         : null;
     const autoArchivedChangeRequestUrl =
@@ -451,7 +456,7 @@ export function createWorkspaceProvisioningService(deps: {
         updatedAt: timestamp,
       };
     }
-    if (project.archivedAt || workspace.archivedAt) {
+    if (project && (project.archivedAt || workspace.archivedAt)) {
       const projectCheckout =
         checkout && areEquivalentPaths(project.rootPath, workspace.cwd)
           ? checkout

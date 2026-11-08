@@ -30,6 +30,28 @@ An explicit base selection is stored in the checkout's Git-directory Paseo metad
 mirrored to `baseBranch` in every workspace record sharing that checkout. The record keeps
 recovery possible after the checkout metadata is deleted. A newly opened workspace inherits
 the checkout's selected base; separate worktrees keep separate bases.
+An explicit **Change project** operation may replace one active workspace's `projectId` with
+another active project on the same host, or with `null` for **No project**. Explicit `null`
+is durable membership, not missing data to infer from the directory. A missing referenced project
+remains an error; it is not treated as user-requested unassignment. This changes grouping, not the filesystem: execution
+directory, checkout ownership, workspace identity, conversations, terminals, tabs, pins and
+resident status stay unchanged. Same-directory siblings keep their membership. Schedules retain
+their workspace and conversation references; independent Board task and Goal project links do
+not move. Reconciliation and restart preserve the selected membership.
+
+Project settings refer to the newly selected project's root. Workspace scripts and process
+environment still come from the workspace's original directory. Running services keep their
+registered addresses; services started afterward use the selected project's address prefix,
+or the directory-based fallback when unassigned. Project settings and project-scoped creation
+actions require selecting a project. The operation requires `workspace.manage`, like other
+workspace metadata changes.
+
+Unassigned workspaces remain visible in the **No project** group with a chat icon. This group
+is a client view, not a Project record. Changing membership requires the
+`workspaceProjectChange` host capability. Both app and host need updating for unassigned-workspace
+support; older clients can parse messages but need not display unassigned workspaces correctly.
+See [protocol compatibility](protocol-compatibility.md) for the wire contract.
+
 Workspace archive runs lifecycle teardown from the exact `cwd` but removes only the backing
 `worktreeRoot` after its last active reference disappears. Worktree recovery recreates that backing
 checkout from `mainRepoRoot`, then restores the relative path from `worktreeRoot` to `cwd`.
@@ -564,10 +586,15 @@ These small files are not validated as full Zod schemas but are persisted under 
 
 ## 8. Board tasks
 
-The Desk stores four host-local files under `$PASEO_HOME/board/`. Each is written atomically
-with a `version: 1` envelope. Every service keeps its data in memory, serializes mutations, and
-pushes a `board.task.update` change to subscribers after each write. Nothing syncs between hosts.
-`createBoardServices` (`server/board/services.ts`) builds the four together.
+Tasks, Goals, Decisions and task-view settings use four host-local files under
+`$PASEO_HOME/board/`. Each is written atomically with a `version: 1` envelope. Every service keeps
+its data in memory, serializes mutations, and pushes a `board.task.update` change to subscribers
+after each write. Nothing syncs between hosts. `createBoardServices` (`server/board/services.ts`)
+builds the four together.
+
+The default [Desk](glossary.md) projects existing sessions, requests, Decisions and Artifacts.
+It has no separate persisted lifecycle. Tasks & Goals retains these files and their completion
+semantics; opening Desk does not migrate them or change conversation state.
 
 ### Tasks
 
@@ -601,8 +628,9 @@ numbered in creation order after the highest existing number.
 | `updatedAt`          | `string` (ISO 8601)   |                                                                                  |
 | `completedAt`        | `string \| null`      | Set by **Mark done**, or when the linked workspace is archived                   |
 
-The zone is never stored. See **Desk** and **Zone** in [glossary.md](glossary.md). Agent items are
-not stored here either: the app builds them from each host's live agents and workspaces.
+The zone is never stored. See **Tasks & Goals** and **Zone** in [glossary.md](glossary.md).
+Agent items are not stored here either: the app builds them from each host's live agents and
+workspaces.
 
 `BoardTaskService.find` resolves an id or a `T-<number>` reference, and `BoardGoalService.find`
 an id or a `G-<number>`. MCP tools resolve every reference through them; `paseo task` and
@@ -682,7 +710,7 @@ the workspace removes a Paseo-owned worktree with the file it came from, and the
 opens from its goal. An artifact never stores task state; `goalId` and `taskIds` are references,
 and a deleted goal or task shows as gone rather than being cleaned up.
 
-Entries are workspace-owned: `workspaceId` is the caller's workspace, and the composer pill shows
+Entries are workspace-owned: `workspaceId` is the caller's workspace, and the Artifacts tab shows
 only that workspace's entries, so two workspaces on one folder never see each other's
 ([architecture.md](architecture.md#right-sidebar-boundary-directory-backed-vs-workspace-owned)).
 Re-registering keeps the id and raises `revision` when the caller passes `artifactId` or the same
@@ -704,7 +732,8 @@ defaults.
 | `snoozes[].key`                | —                                              | Opaque to the daemon; the app derives it per checkpoint      |
 | `snoozes[].until`              | —                                              | ISO 8601. Woken snoozes are dropped on the next write        |
 
-Settings are how the Desk works on this host and apply to every device. Zone widths and the last
+These settings and snoozes govern Tasks & Goals on every device, not the default Desk view.
+`notifyKinds` also controls daemon notifications. Zone widths and the last
 [Desk mode](glossary.md) are device-local in the app.
 
 ---

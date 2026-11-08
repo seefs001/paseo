@@ -36,6 +36,10 @@ import {
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { WorkspaceResidentMenuItem } from "@/components/sidebar/workspace-resident-menu-item";
+import {
+  useWorkspaceProjectMenuPages,
+  WORKSPACE_PROJECT_PAGE_ID,
+} from "@/projects/workspace-project-menu";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import { bySizing } from "@/components/ui/control-geometry";
@@ -220,6 +224,14 @@ function SidebarWorkspaceMenuItems({
           {t("sidebar.workspace.actions.rename")}
         </WorkspaceMenuItem>
       ) : null}
+      {serverId && workspaceId ? (
+        <DropdownMenuSubTrigger
+          id={WORKSPACE_PROJECT_PAGE_ID}
+          testID={`sidebar-workspace-menu-project-${workspaceKey}`}
+        >
+          {t("workspaceProject.title")}
+        </DropdownMenuSubTrigger>
+      ) : null}
       {onMarkAsRead ? (
         <WorkspaceMenuItem
           surface={surface}
@@ -316,7 +328,9 @@ export function SidebarWorkspaceMenu({
       serverId && workspaceId ? { serverId, workspaceId, labels: workspaceLabels ?? [] } : null,
     [serverId, workspaceId, workspaceLabels],
   );
-  const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const labelPages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const projectPages = useWorkspaceProjectMenuPages(serverId, workspaceId);
+  const pages = useMemo(() => [...labelPages, ...projectPages], [labelPages, projectPages]);
   return (
     <DropdownMenu compactMode="sheet" open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
@@ -430,7 +444,9 @@ export function SidebarWorkspaceContextMenu({
     }),
     [workspace],
   );
-  const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const labelPages = useWorkspaceLabelMenuPages(workspaceTarget);
+  const projectPages = useWorkspaceProjectMenuPages(workspace.serverId, workspace.workspaceId);
+  const pages = useMemo(() => [...labelPages, ...projectPages], [labelPages, projectPages]);
 
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>

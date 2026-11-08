@@ -9,6 +9,7 @@ import type {
   WorkspaceStructureHostPlacement,
   WorkspaceStructureProject,
 } from "@/projects/workspace-structure";
+import { UNASSIGNED_WORKSPACES_VIEW_KEY } from "@/projects/workspace-structure";
 import { projectDisplayNameFromProjectId } from "@/utils/project-display-name";
 import { aggregateSidebarStateBuckets } from "@/utils/sidebar-agent-state";
 import { shortenPath } from "@/utils/shorten-path";
@@ -20,6 +21,7 @@ const EMPTY_PROJECTS: SidebarProjectEntry[] = [];
 export type SidebarStateBucket = WorkspaceDescriptor["status"];
 
 export interface SidebarWorkspacePlacement {
+  projectAssigned?: boolean;
   workspaceKey: string;
   serverId: string;
   workspaceId: string;
@@ -59,6 +61,7 @@ export interface SidebarWorkspaceEntry extends SidebarStatusWorkspacePlacement {
 }
 
 export interface SidebarProjectEntry {
+  projectAssigned?: boolean;
   viewKey: string;
   projectName: string;
   projectKind: WorkspaceStructureProject["projectKind"];
@@ -127,6 +130,7 @@ export function areSidebarWorkspaceSessionsEqual(
 }
 
 function projectNameForWorkspace(workspace: WorkspaceDescriptor): string {
+  if (workspace.projectId === null) return "";
   return (
     workspace.projectCustomName ??
     workspace.projectDisplayName ??
@@ -149,9 +153,11 @@ export function createSidebarWorkspaceEntry(input: {
   pendingCreateAttempts?: Record<string, PendingCreateAttempt>;
   workspaceAgentActivity?: ReadonlyMap<string, WorkspaceAgentActivity>;
 }): SidebarWorkspaceEntry {
-  const projectViewKey = input.projectViewKey ?? input.workspace.projectId;
+  const projectViewKey =
+    input.projectViewKey ?? input.workspace.projectId ?? UNASSIGNED_WORKSPACES_VIEW_KEY;
   const effectiveStatus = deriveEffectiveWorkspaceStatus(input);
   return {
+    ...(input.workspace.projectId === null ? { projectAssigned: false } : {}),
     workspaceKey: `${input.serverId}:${input.workspace.id}`,
     serverId: input.serverId,
     workspaceId: input.workspace.id,
@@ -333,6 +339,7 @@ function createStructuralWorkspaceEntry(input: {
   });
 
   return {
+    ...(input.project.projectAssigned === false ? { projectAssigned: false } : {}),
     workspaceKey: identity.workspaceKey,
     serverId: identity.serverId,
     workspaceId: identity.workspaceId,
@@ -467,6 +474,7 @@ export function buildSidebarProjectsFromStructure(input: {
 }): SidebarProjectEntry[] {
   return buildSidebarProjectsFromHostProjects({
     projects: input.projects.map((project) => ({
+      ...(project.projectAssigned === false ? { projectAssigned: false } : {}),
       viewKey: project.viewKey,
       projectKey: project.projectKey,
       projectName: project.projectName,
@@ -486,6 +494,7 @@ export function buildSidebarProjectsFromHostProjects(input: {
   }
 
   return input.projects.map((project) => ({
+    ...(project.projectAssigned === false ? { projectAssigned: false } : {}),
     viewKey: project.viewKey,
     projectName: project.projectName,
     projectKind: project.projectKind,
@@ -507,9 +516,8 @@ export function buildSidebarProjectsFromHostProjects(input: {
 export function shouldShowSidebarHostLabels(projects: SidebarProjectEntry[]): boolean {
   const serverIds = new Set<string>();
   for (const project of projects) {
-    for (const host of project.hosts) {
-      serverIds.add(host.serverId);
-    }
+    for (const host of project.hosts) serverIds.add(host.serverId);
+    for (const workspace of project.workspaces) serverIds.add(workspace.serverId);
   }
   return serverIds.size >= 2;
 }

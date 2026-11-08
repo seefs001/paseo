@@ -270,6 +270,7 @@ function attachHostWorkspaces(
   );
 
   for (const workspace of host.workspaces) {
+    if (workspace.projectId === null) continue;
     const key = projectViewKeyByProjectId.get(workspace.projectId);
     if (key) groups.get(key)?.hostsByServerId.get(host.serverId)?.workspaces.push(workspace);
   }

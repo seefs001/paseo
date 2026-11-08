@@ -782,6 +782,17 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     text: z.string(),
     messageId: z.string().optional(),
     clientMessageId: z.string().optional(),
+    attachments: z
+      .array(
+        z.object({
+          type: z.literal("text"),
+          mimeType: z.literal("text/plain"),
+          contextKind: z.string().optional(),
+          title: z.string().nullable().optional(),
+          text: z.string(),
+        }),
+      )
+      .optional(),
   }),
   z.object({
     type: z.literal("assistant_message"),
@@ -1120,6 +1131,13 @@ export const WorkspaceResidentSetRequestSchema = z.object({
   type: z.literal("workspace.resident.set.request"),
   workspaceId: z.string(),
   resident: z.boolean(),
+  requestId: z.string(),
+});
+
+export const WorkspaceProjectSetRequestSchema = z.object({
+  type: z.literal("workspace.project.set.request"),
+  workspaceId: z.string(),
+  projectId: z.string().nullable(),
   requestId: z.string(),
 });
 
@@ -2715,6 +2733,17 @@ export const WorkspaceResidentSetResponseSchema = z.object({
   payload: WorkspaceResidentSetResponsePayloadSchema,
 });
 
+export const WorkspaceProjectSetResponseSchema = z.object({
+  type: z.literal("workspace.project.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    projectId: z.string().nullable(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const WorkspaceBaseBranchSetResponseSchema = z.object({
   type: z.literal("workspace.base_branch.set.response"),
   payload: z.object({
@@ -3885,6 +3914,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceTitleSetRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceResidentSetRequestSchema,
+  WorkspaceProjectSetRequestSchema,
   WorkspaceBaseBranchSetRequestSchema,
   WorkspaceLabelListRequestSchema,
   WorkspaceLabelAssignmentSetRequestSchema,
@@ -4430,6 +4460,7 @@ export const ServerInfoStatusPayloadSchema = z
         workspacePinning: z.boolean().optional(),
         // COMPAT(workspaceResident): added in v0.8, remove gate after 2027-05-04.
         workspaceResident: z.boolean().optional(),
+        workspaceProjectChange: z.boolean().optional(),
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: z.boolean().optional(),
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
@@ -4693,6 +4724,7 @@ export const ProjectCheckoutLitePayloadSchema = z.union([
 ]);
 
 export const ProjectPlacementPayloadSchema = z.object({
+  projectAssigned: z.boolean().optional(),
   projectKey: z.string(),
   projectName: z.string(),
   workspaceName: z.string().nullable().optional(),
@@ -4786,6 +4818,7 @@ export const WorkspaceDescriptorPayloadSchema = z
     // Informational creation ancestry; independent of placement and lifecycle.
     parentWorkspaceId: z.string().optional(),
     id: z.string(),
+    projectAssigned: z.boolean().optional(),
     projectId: z.string(),
     projectDisplayName: z.string(),
     // COMPAT(projectCustomName): added in v0.1.76, drop the optional gate when floor >= v0.1.76.
@@ -8081,6 +8114,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceTitleSetResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceResidentSetResponseSchema,
+  WorkspaceProjectSetResponseSchema,
   WorkspaceBaseBranchSetResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
   WorkspaceRecoveryRestoreResponseSchema,

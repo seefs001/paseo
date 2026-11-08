@@ -217,7 +217,7 @@ export class WorkspaceReconciliationService {
       this.projectRegistry.list(),
       this.workspaceRegistry.listActive(),
     ]);
-    const affectedProjectIds = new Set<string>();
+    const affectedProjectIds = new Set<string | null>();
     if (rootPaths) {
       // Git init/removal also affects nested selected roots. Workspaces can be
       // attached to a project whose selected root is elsewhere.
@@ -239,7 +239,7 @@ export class WorkspaceReconciliationService {
       (workspace) =>
         !workspace.archivedAt && (!rootPaths || affectedProjectIds.has(workspace.projectId)),
     );
-    const workspacesByProject = new Map<string, PersistedWorkspaceRecord[]>();
+    const workspacesByProject = new Map<string | null, PersistedWorkspaceRecord[]>();
     const workspaceStates = await mapBounded(activeWorkspaces, async (workspace) => ({
       workspace,
       state: await this.inspectDirectory(workspace.cwd),
@@ -260,6 +260,7 @@ export class WorkspaceReconciliationService {
       workspacesByProject,
       changes,
     );
+    await this.reconcileUnassignedWorkspaces(workspacesByProject.get(null) ?? [], changes);
     if (changes.length > 0) this.onChanges?.(changes);
     return { changesApplied: changes, durationMs: Date.now() - start };
   }
@@ -292,7 +293,7 @@ export class WorkspaceReconciliationService {
         .map(({ project }) => project.projectId),
     );
 
-    const workspacesByProject = new Map<string, PersistedWorkspaceRecord[]>();
+    const workspacesByProject = new Map<string | null, PersistedWorkspaceRecord[]>();
     for (const { workspace, state } of workspaceDirectoryStates) {
       if (state !== "directory") continue;
       if ((await this.workspaceRegistry.get(workspace.workspaceId))?.archivedAt !== null) continue;
@@ -309,7 +310,9 @@ export class WorkspaceReconciliationService {
     const missingWorkspaces = workspaceDirectoryStates
       .filter(
         ({ workspace, state }) =>
-          state === "missing" && reachableProjectIds.has(workspace.projectId),
+          state === "missing" &&
+          workspace.projectId !== null &&
+          reachableProjectIds.has(workspace.projectId),
       )
       .map(({ workspace }) => workspace);
     await mapBounded(missingWorkspaces, async (workspace) => {
@@ -344,6 +347,9 @@ export class WorkspaceReconciliationService {
       workspacesByProject,
       changes,
     );
+    // An unassigned workspace has no project root to prove a missing volume is reachable.
+    // Keep missing records, and refresh Git only for directories that were inspected above.
+    await this.reconcileUnassignedWorkspaces(workspacesByProject.get(null) ?? [], changes);
 
     if (changes.length > 0 && this.onChanges) {
       this.onChanges(changes);
@@ -366,7 +372,7 @@ export class WorkspaceReconciliationService {
 
   private async reconcileGitMetadataForProjects(
     projectsToReconcile: PersistedProjectRecord[],
-    workspacesByProject: Map<string, PersistedWorkspaceRecord[]>,
+    workspacesByProject: Map<string | null, PersistedWorkspaceRecord[]>,
     changes: ReconciliationChange[],
   ): Promise<void> {
     const checkoutReads: CachedCheckoutRead[] = [];
@@ -408,6 +414,22 @@ export class WorkspaceReconciliationService {
         }
       }),
     );
+  }
+
+  private async reconcileUnassignedWorkspaces(
+    workspaces: PersistedWorkspaceRecord[],
+    changes: ReconciliationChange[],
+  ): Promise<void> {
+    await mapBounded(workspaces, async (workspace) => {
+      try {
+        await this.reconcileWorkspace(workspace, await this.readCheckout(workspace.cwd), changes);
+      } catch (error) {
+        this.logger.warn(
+          { err: error, workspaceId: workspace.workspaceId },
+          "Skipped unassigned workspace Git reconciliation",
+        );
+      }
+    });
   }
 
   private async reconcileProject(input: ProjectReconciliationInput): Promise<void> {
@@ -457,34 +479,39 @@ export class WorkspaceReconciliationService {
     }
 
     await Promise.all(
-      workspaceCheckouts.map(async (entry) => {
-        if (!entry) return;
-        const { workspace, checkout: wsGit } = entry;
-        const timestamp = new Date().toISOString();
-        if (!reconcileWorkspacePlacement({ workspace, checkout: wsGit, updatedAt: timestamp }))
-          return;
-        let fields: Partial<MutableWorkspacePlacement> | null = null;
-        await this.workspaceRegistry.update(workspace.workspaceId, (current) => {
-          if (current.cwd !== workspace.cwd || current.projectId !== workspace.projectId)
-            return current;
-          const update = reconcileWorkspacePlacement({
-            workspace: current,
-            checkout: wsGit,
-            updatedAt: timestamp,
-          });
-          if (!update) return current;
-          fields = update.fields;
-          return { ...current, ...fields, updatedAt: timestamp };
-        });
-        if (!fields) return;
-        changes.push({
-          kind: "workspace_updated",
-          workspaceId: workspace.workspaceId,
-          directory: workspace.cwd,
-          fields,
-        });
-      }),
+      workspaceCheckouts.map((entry) =>
+        entry ? this.reconcileWorkspace(entry.workspace, entry.checkout, changes) : undefined,
+      ),
     );
+  }
+
+  private async reconcileWorkspace(
+    workspace: PersistedWorkspaceRecord,
+    checkout: ProjectCheckoutLitePayload,
+    changes: ReconciliationChange[],
+  ): Promise<void> {
+    const timestamp = new Date().toISOString();
+    if (!reconcileWorkspacePlacement({ workspace, checkout, updatedAt: timestamp })) return;
+    let fields: Partial<MutableWorkspacePlacement> | null = null;
+    await this.workspaceRegistry.update(workspace.workspaceId, (current) => {
+      if (current.cwd !== workspace.cwd || current.projectId !== workspace.projectId)
+        return current;
+      const update = reconcileWorkspacePlacement({
+        workspace: current,
+        checkout,
+        updatedAt: timestamp,
+      });
+      if (!update) return current;
+      fields = update.fields;
+      return { ...current, ...fields, updatedAt: timestamp };
+    });
+    if (fields)
+      changes.push({
+        kind: "workspace_updated",
+        workspaceId: workspace.workspaceId,
+        directory: workspace.cwd,
+        fields,
+      });
   }
 
   private async syncProjectRootWatches(): Promise<void> {

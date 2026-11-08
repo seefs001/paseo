@@ -42,7 +42,7 @@ export function createPluginWorkspaceSnapshot(
   const snapshot = Object.freeze({
     ref: entityRefs.workspace(hostId, workspace.id),
     hostId,
-    project: entityRefs.project(hostId, workspace.projectId),
+    project: workspace.projectId === null ? null : entityRefs.project(hostId, workspace.projectId),
     pinnedAt: workspace.pinnedAt ?? null,
     labels: Object.freeze([...(workspace.labels ?? [])]),
     background: workspace.background ?? false,

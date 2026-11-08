@@ -3725,6 +3725,25 @@ export class DaemonClient {
     return { title: payload.title };
   }
 
+  async setWorkspaceProject(options: {
+    workspaceId: string;
+    projectId: string | null;
+    requestId?: string;
+  }): Promise<{ projectId: string | null }> {
+    if (this.lastServerInfoMessage?.features?.workspaceProjectChange !== true) {
+      throw new Error("Update this host to change a workspace's project");
+    }
+    const { requestId, workspaceId, projectId } = options;
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.project.set.response">({
+        requestId,
+        message: { type: "workspace.project.set.request", workspaceId, projectId },
+      });
+    if (!payload.accepted)
+      throw new Error(payload.error ?? "Changing the workspace project failed");
+    return { projectId: payload.projectId };
+  }
+
   async setWorkspaceResident(
     workspaceId: string,
     resident: boolean,

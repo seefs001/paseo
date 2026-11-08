@@ -15,7 +15,7 @@ export interface PluginHookContext {
 
 export interface PluginHookWorkspace {
   id: string;
-  projectId: string;
+  projectId: string | null;
   cwd: string;
   name: string | null;
   archivedAt: string | null;

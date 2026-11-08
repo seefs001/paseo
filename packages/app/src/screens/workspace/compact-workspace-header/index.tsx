@@ -17,6 +17,7 @@ import { IconButtonChromeProvider } from "@/components/ui/icon-button-chrome";
 export { MobileWorkspaceTabSwitcher } from "./tab-switcher";
 
 interface CompactWorkspaceHeaderProps {
+  projectAssigned?: boolean;
   serverId: string;
   isLoading: boolean;
   title: string;
@@ -34,6 +35,7 @@ interface CompactWorkspaceHeaderProps {
 
 /** The compact header with the workspace's project row and controls. */
 export function CompactWorkspaceHeader({
+  projectAssigned,
   isLoading,
   title,
   subtitle,
@@ -52,12 +54,13 @@ export function CompactWorkspaceHeader({
   const projectRow = useMemo(
     () => (
       <WorkspaceHeaderProjectRow
+        projectAssigned={projectAssigned}
         subtitle={subtitle}
         isSubtitleDistinct={isSubtitleDistinct}
         serverId={serverId}
       />
     ),
-    [subtitle, isSubtitleDistinct, serverId],
+    [subtitle, isSubtitleDistinct, serverId, projectAssigned],
   );
   const symbols = {
     "tab-count": tabSwitcher,

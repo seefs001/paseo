@@ -1,7 +1,6 @@
 import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import type { AwaitingAgent } from "@/board/chat-desk";
 import type { BoardCard } from "@/board/columns";
-import { ArtifactsTrack } from "@/artifacts/track";
 import { ChatAwaitingTrack, ChatTaskTrack } from "@/components/board/chat-desk-tracks";
 import { memo, useCallback, useMemo, type ReactElement } from "react";
 import { BackgroundWorkTrack, createHostBackgroundWorkModel } from "@/background-work";
@@ -154,7 +153,6 @@ export const AgentTracks = memo(function AgentTracks({
         agentId={agentId}
         compact={isCompact}
       />
-      <ArtifactsTrack serverId={serverId} workspaceId={workspaceId} agentId={agentId} />
       <WorkspaceDiffStatPill
         serverId={serverId}
         workspaceId={workspaceId}
