@@ -17,25 +17,19 @@ import { StyleSheet } from "react-native-unistyles";
 import { Portal } from "@gorhom/portal";
 import { OverlayLayerProvider, useOverlayLayer } from "@/lib/overlay-root";
 import { FloatingSurface } from "@/components/ui/floating";
-import {
-  measureFloatingPanelPortalHost,
-  useFloatingPanelPortalHostName,
-} from "@/components/ui/floating-panel-portal";
+import { useFloatingPanelPortalHostName } from "@/components/ui/floating-panel-portal";
 import { isWeb } from "@/constants/platform";
 import { useHoverSafeZone } from "@/hooks/use-hover-safe-zone";
-import {
-  computePosition,
-  measureElement,
-  type Alignment,
-  type Placement,
-  type Rect,
-  type Size,
-} from "./anchor";
+import { computePosition, type Alignment, type Placement, type Rect } from "./anchor";
 
 const CLOSE_GRACE_MS = 100;
 const FADE_DURATION_MS = 80;
 
 type HoverCardPhase = "closed" | "open" | "closing";
+
+// One card per layer: moving onto a sibling trigger replaces the open card instead of stacking
+// a second one beside it for the grace period. Nested cards open on a higher layer.
+const openCardCloseByLayer = new Map<number, () => void>();
 
 interface HoverCardContextValue {
   open: boolean;
@@ -132,12 +126,28 @@ function WebHoverCard({
     }, CLOSE_GRACE_MS);
   }, [closeNow, keyboardFocusInside]);
 
+  // A sibling replaces the card without leaving its closing fade beside the new card.
+  const dismissImmediately = useCallback(() => {
+    clearGraceTimer();
+    setPhase("closed");
+  }, [clearGraceTimer]);
+
   const openNow = useCallback(() => {
     clearGraceTimer();
-    if (!disabled) {
-      setPhase("open");
-    }
-  }, [clearGraceTimer, disabled]);
+    if (disabled) return;
+    const openSibling = openCardCloseByLayer.get(layer);
+    if (openSibling && openSibling !== dismissImmediately) openSibling();
+    openCardCloseByLayer.set(layer, dismissImmediately);
+    setPhase("open");
+  }, [clearGraceTimer, dismissImmediately, disabled, layer]);
+
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      if (openCardCloseByLayer.get(layer) === dismissImmediately)
+        openCardCloseByLayer.delete(layer);
+    };
+  }, [dismissImmediately, layer, open]);
 
   const keyPressed = useCallback(
     (event: KeyboardInputEvent): boolean => {
@@ -321,19 +331,32 @@ interface HoverCardContentProps {
 
 export function HoverCardContent(props: HoverCardContentProps): ReactElement | null {
   const ctx = useContext(HoverCardContext);
+  const portalHostName = useFloatingPanelPortalHostName();
   if (!ctx?.mounted) return null;
   return (
-    <HoverCardSurface
-      {...props}
-      open={ctx.open}
-      onExited={ctx.finishClose}
-      layer={ctx.layer}
-      triggerRef={ctx.triggerRef}
-      contentRef={ctx.contentRef}
-    />
+    <Portal hostName={portalHostName}>
+      <HoverCardSurface
+        {...props}
+        open={ctx.open}
+        onExited={ctx.finishClose}
+        layer={ctx.layer}
+        triggerRef={ctx.triggerRef}
+        contentRef={ctx.contentRef}
+      />
+    </Portal>
   );
 }
 
+function readDomRect(view: View | null): Rect | null {
+  if (!isWeb) return null;
+  const element = view as unknown as HTMLElement | null;
+  if (!element) return null;
+  const { x, y, width, height } = element.getBoundingClientRect();
+  return { x, y, width, height };
+}
+
+// Rendered inside the portal so the card is placed in the commit that mounts it: the first
+// painted frame already sits beside the trigger. Web-only, like the rest of the open card.
 function HoverCardSurface({
   open,
   onExited,
@@ -354,40 +377,29 @@ function HoverCardSurface({
   layer: number;
   triggerRef: RefObject<View | null>;
   contentRef: RefObject<View | null>;
-}): ReactElement | null {
-  const portalHostName = useFloatingPanelPortalHostName();
-  const [anchor, setAnchor] = useState<{ triggerRect: Rect; hostRect: Rect } | null>(null);
-  const [contentSize, setContentSize] = useState<Size | null>(null);
+}): ReactElement {
+  const overlayRef = useRef<View>(null);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    if (!triggerRef.current) return;
-    let cancelled = false;
-    void Promise.all([
-      measureElement(triggerRef.current),
-      measureFloatingPanelPortalHost(portalHostName),
-    ]).then(([triggerRect, hostRect]) => {
-      if (!cancelled && hostRect) setAnchor({ triggerRect, hostRect });
-      return undefined;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [portalHostName, triggerRef]);
-
-  const position = useMemo(() => {
-    if (!anchor || !contentSize) return null;
+  const place = useCallback(() => {
+    if (!isWeb) return;
+    const triggerRect = readDomRect(triggerRef.current);
+    const overlayRect = readDomRect(overlayRef.current);
+    const content = contentRef.current as unknown as HTMLElement | null;
+    if (!triggerRect || !overlayRect || !content) return;
     const { width, height } = Dimensions.get("window");
     const { x, y } = computePosition({
-      triggerRect: anchor.triggerRect,
-      contentSize,
+      triggerRect,
+      contentSize: { width: content.offsetWidth, height: content.offsetHeight },
       displayArea: { x: 0, y: 0, width, height },
       placement,
       flipHorizontal: true,
       alignment,
       offset,
     });
-    return { x: x - anchor.hostRect.x, y: y - anchor.hostRect.y };
-  }, [alignment, anchor, contentSize, offset, placement]);
+    const next = { x: x - overlayRect.x, y: y - overlayRect.y };
+    setPosition((current) => (current?.x === next.x && current.y === next.y ? current : next));
+  }, [alignment, contentRef, offset, placement, triggerRef]);
   const placed = position !== null;
 
   useLayoutEffect(() => {
@@ -414,13 +426,7 @@ function HoverCardSurface({
     };
   }, [contentRef, onExited, open, placed]);
 
-  const handleLayout = useCallback(
-    (event: { nativeEvent: { layout: { width: number; height: number } } }) => {
-      const { width, height } = event.nativeEvent.layout;
-      setContentSize({ width, height });
-    },
-    [],
-  );
+  useLayoutEffect(place, [place]);
 
   const frameStyle = useMemo(
     () => ({
@@ -433,27 +439,27 @@ function HoverCardSurface({
   );
   const surfaceStyle = useMemo(() => [styles.surface, style], [style]);
 
-  if (!anchor) return null;
-
   return (
-    <Portal hostName={portalHostName}>
-      <View pointerEvents="box-none" style={[styles.portalOverlay, { zIndex: layer }]}>
-        <FloatingSurface
-          ref={contentRef}
-          pointerEvents={open ? "auto" : "none"}
-          aria-hidden={!open}
-          collapsable={false}
-          onLayout={handleLayout}
-          role={role}
-          accessibilityLabel={accessibilityLabel}
-          testID={testID}
-          style={surfaceStyle}
-          frameStyle={frameStyle}
-        >
-          {children}
-        </FloatingSurface>
-      </View>
-    </Portal>
+    <View
+      ref={overlayRef}
+      pointerEvents="box-none"
+      style={[styles.portalOverlay, { zIndex: layer }]}
+    >
+      <FloatingSurface
+        ref={contentRef}
+        pointerEvents={open ? "auto" : "none"}
+        aria-hidden={!open}
+        collapsable={false}
+        onLayout={place}
+        role={role}
+        accessibilityLabel={accessibilityLabel}
+        testID={testID}
+        style={surfaceStyle}
+        frameStyle={frameStyle}
+      >
+        {children}
+      </FloatingSurface>
+    </View>
   );
 }
 

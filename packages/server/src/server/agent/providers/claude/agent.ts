@@ -2380,6 +2380,7 @@ class ClaudeAgentSession implements AgentSession {
   private historySessionId: string | null = null;
   private replayingHistory = false;
   private turnState: TurnState = "idle";
+  private readonly turnNamespace = randomUUID();
   private nextTurnOrdinal = 1;
   private cancelCurrentTurn: (() => void) | null = null;
   private cachedRuntimeInfo: AgentRuntimeInfo | null = null;
@@ -2598,6 +2599,7 @@ class ClaudeAgentSession implements AgentSession {
       this.activeForegroundQuery = this.query;
       this.activeForegroundInput = this.input;
       this.startQueryPump();
+      this.runtimeSafety.notePromptSent();
       this.input.push(sdkMessage);
       setTimeout(() => {
         if (this.activeForegroundTurnId === turnId) {
@@ -3996,7 +3998,7 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private createTurnId(owner: "foreground" | "autonomous"): string {
-    return `${owner}-turn-${this.nextTurnOrdinal++}`;
+    return `${owner}-turn-${this.turnNamespace}-${this.nextTurnOrdinal++}`;
   }
 
   private isTerminalTurnEvent(event: AgentStreamEvent): boolean {
