@@ -11,6 +11,12 @@ import {
   type ScheduleTarget,
 } from "@getpaseo/protocol/schedule/types";
 import type { ScheduleWorkspaceTarget } from "./schedule-workspace-targets";
+import {
+  toAgentRoleSnapshot,
+  type AgentRole,
+  type AgentRoleSnapshot,
+} from "@getpaseo/protocol/agent-role";
+import type { MaterializedAgentProfile } from "@/agent-profiles";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import {
@@ -33,7 +39,11 @@ import {
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
 import { shortenPath } from "@/utils/shorten-path";
 import { normalizeScheduleFormCadence } from "./schedule-cadence-options";
-import { PROJECT_OPTION_PREFIX, type ScheduleProjectTarget } from "./schedule-project-targets";
+import {
+  NO_PROJECT_OPTION_ID,
+  PROJECT_OPTION_PREFIX,
+  type ScheduleProjectTarget,
+} from "./schedule-project-targets";
 
 export interface ScheduleFormDisplay {
   label: string;
@@ -45,6 +55,7 @@ export interface ScheduleFormHost {
   label: string;
   supportsWorkspaceMultiplicity?: boolean;
   supportsScheduleWorkspaceTargets?: boolean;
+  supportsScheduleProjectlessTargets?: boolean;
 }
 
 export interface ScheduleFormSnapshot {
@@ -95,6 +106,7 @@ export interface ScheduleFormState {
   targetKind: ScheduleFormTargetKind;
   isHeartbeat: boolean;
   supportsWorkspaceTargets: boolean;
+  supportsProjectlessTargets: boolean;
   selectedWorkspaceId: string | null;
   selectedAgentId: string | null;
   workspaceDisplay: ScheduleFormDisplay | null;
@@ -119,6 +131,10 @@ export interface ScheduleFormState {
   selectedModel: string;
   selectedMode: string;
   selectedThinkingOptionId: string;
+  selectedRole: AgentRoleSnapshot | null;
+  systemPrompt: string | undefined;
+  featureValues: Record<string, unknown> | undefined;
+  roleProviderSupport: "loading" | "supported" | "unsupported";
   workingDir: string;
   projectDisplay: ScheduleFormDisplay | null;
   selectedProjectOptionId: string;
@@ -155,6 +171,8 @@ export interface ScheduleFormModel {
   setHost: (serverId: string | null) => void;
   setProject: (optionId: string, display: ScheduleFormDisplay) => void;
   setModel: (provider: AgentProvider, modelId: string) => void;
+  setRole: (role: AgentRole | null) => void;
+  applyProfile: (profile: MaterializedAgentProfile) => void;
   setThinking: (thinkingOptionId: string) => void;
   setSessionMode: (modeId: string) => void;
   setName: (value: string) => void;
@@ -178,7 +196,7 @@ export function buildFormTarget(
     };
   }
   if (!state.selectedProvider || !state.workingDir.trim()) {
-    throw new Error("Choose a project or workspace and an agent model");
+    throw new Error("Choose a target and an agent model");
   }
   const existingConfig = schedule?.target.type === "new-agent" ? schedule.target.config : undefined;
   const title = existingConfig ? existingConfig.title : state.name.trim() || undefined;
@@ -189,6 +207,10 @@ export function buildFormTarget(
       ...existingConfig,
       provider: state.selectedProvider,
       cwd: state.workingDir.trim(),
+      projectAssigned: state.selectedProjectOptionId === NO_PROJECT_OPTION_ID ? false : undefined,
+      role: state.selectedRole ?? undefined,
+      systemPrompt: state.systemPrompt,
+      featureValues: state.featureValues,
       model: state.selectedModel || undefined,
       modeId: state.selectedMode || undefined,
       thinkingOptionId: state.selectedThinkingOptionId || undefined,
@@ -397,6 +419,13 @@ function isSelectedModelValidForProviders(input: {
   return provider.modelSelection.rows.some((row) => row.modelId === selectedModel);
 }
 
+function resolveRoleProviderSupport(
+  entry: ProviderSnapshotEntry | null,
+): ScheduleFormState["roleProviderSupport"] {
+  if (!entry || entry.status !== "ready") return "loading";
+  return entry.supportsSystemPrompt === true ? "supported" : "unsupported";
+}
+
 function normalizeInitialValues(input: {
   snapshot: ScheduleFormSnapshot;
 }): FormInitialValues | undefined {
@@ -512,8 +541,13 @@ function resolveInitialIsolation(input: {
   return input.preferences?.isolation ?? "local";
 }
 
-function resolveSelectedProjectOptionId(target: ScheduleProjectTarget | null): string {
-  return target?.optionId ?? "";
+function resolveSelectedProjectOptionId(input: {
+  target: ScheduleProjectTarget | null;
+  config: ReturnType<typeof newAgentConfig>;
+  workspaceId: string | null;
+}): string {
+  if (input.config?.projectAssigned === false && !input.workspaceId) return NO_PROJECT_OPTION_ID;
+  return input.target?.optionId ?? "";
 }
 
 function buildInitialProviderResolution(
@@ -616,9 +650,13 @@ function resolveCanSubmit(state: ScheduleFormState): boolean {
   if (state.prompt.trim().length === 0) {
     return false;
   }
+  if (state.selectedRole && state.roleProviderSupport !== "supported") return false;
   const hasWorkingDir = state.workingDir.trim().length > 0;
   const hasMatchedProject = state.selectedProjectOptionId.trim().length > 0;
   if (state.mode === "create" && !state.selectedWorkspaceId && !hasMatchedProject) {
+    return false;
+  }
+  if (state.selectedProjectOptionId === NO_PROJECT_OPTION_ID && !state.supportsProjectlessTargets) {
     return false;
   }
   if (!hasWorkingDir) {
@@ -640,6 +678,8 @@ function updateDerivedState(input: {
   targetsLoading: boolean;
 }): ScheduleFormState {
   const modeOptions = resolveModeOptions(input.providerEntries, input.state.selectedProvider);
+  const providerEntry = resolveSelectedEntry(input.providerEntries, input.state.selectedProvider);
+  const roleProviderSupport = resolveRoleProviderSupport(providerEntry);
   const availableThinkingOptions = resolveThinkingOptions(
     input.providerEntries,
     input.state.selectedProvider,
@@ -669,6 +709,7 @@ function updateDerivedState(input: {
   });
   const host = input.hosts.find((entry) => entry.serverId === input.state.selectedServerId);
   const supportsWorkspaceTargets = host?.supportsScheduleWorkspaceTargets === true;
+  const supportsProjectlessTargets = host?.supportsScheduleProjectlessTargets === true;
   const workspaces = input.workspaceTargets.filter(
     (target) => target.serverId === input.state.selectedServerId,
   );
@@ -688,6 +729,8 @@ function updateDerivedState(input: {
   const nextState: ScheduleFormState = {
     ...input.state,
     supportsWorkspaceTargets,
+    supportsProjectlessTargets,
+    roleProviderSupport,
     targetAvailability,
     workspaceOptions: workspaces.map((target) => ({
       id: target.workspaceId,
@@ -703,12 +746,18 @@ function updateDerivedState(input: {
     })),
     hosts: [...input.hosts],
     projectOptions: buildProjectOptions(input.targets, input.state.selectedServerId),
-    projectDisplay: resolveProjectDisplay({
-      targets: input.targets,
-      serverId: input.state.selectedServerId,
-      cwd: input.state.workingDir,
-    }),
-    selectedProjectOptionId: projectTarget?.optionId ?? input.state.selectedProjectOptionId,
+    projectDisplay:
+      input.state.selectedProjectOptionId === NO_PROJECT_OPTION_ID
+        ? input.state.projectDisplay
+        : resolveProjectDisplay({
+            targets: input.targets,
+            serverId: input.state.selectedServerId,
+            cwd: input.state.workingDir,
+          }),
+    selectedProjectOptionId:
+      input.state.selectedProjectOptionId === NO_PROJECT_OPTION_ID
+        ? NO_PROJECT_OPTION_ID
+        : (projectTarget?.optionId ?? input.state.selectedProjectOptionId),
     selectedModelDisplay: resolveModelDisplay({
       entries: input.providerEntries,
       provider: input.state.selectedProvider,
@@ -737,6 +786,14 @@ function buildStoredTargetDisplay(
   label: string | null | undefined,
 ): ScheduleFormDisplay | null {
   return id ? { label: label || id } : null;
+}
+
+function buildInitialRoleState(config: ReturnType<typeof newAgentConfig>) {
+  return {
+    selectedRole: config?.role ?? null,
+    systemPrompt: config?.systemPrompt,
+    featureValues: config?.featureValues,
+  };
 }
 
 function buildInitialTargetSelection(
@@ -789,7 +846,10 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
     mode: snapshot.mode,
     targetKind,
     ...targetSelection,
+    ...buildInitialRoleState(config),
     supportsWorkspaceTargets: false,
+    supportsProjectlessTargets: false,
+    roleProviderSupport: "loading",
     workspaceOptions: [],
     conversationOptions: [],
     targetAvailability: "ready",
@@ -811,7 +871,11 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
       targets: snapshot.defaults.projectTargets,
       selectedServerId,
     }),
-    selectedProjectOptionId: resolveSelectedProjectOptionId(selectedProjectTarget),
+    selectedProjectOptionId: resolveSelectedProjectOptionId({
+      target: selectedProjectTarget,
+      config,
+      workspaceId: targetSelection.selectedWorkspaceId,
+    }),
     selectedModelDisplay: buildInitialModelDisplay(initialModel),
     selectedModeDisplay: buildInitialModeDisplay(initialMode),
     selectedThinkingDisplay: buildInitialThinkingDisplay(initialThinking),
@@ -1222,6 +1286,9 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
           selectedAgentId: null,
           workspaceDisplay: null,
           conversationDisplay: null,
+          selectedRole: null,
+          systemPrompt: undefined,
+          featureValues: undefined,
           workingDir: "",
           projectDisplay: null,
           selectedProjectOptionId: "",
@@ -1233,8 +1300,12 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       if (closed) {
         return;
       }
-      const target = findProjectTargetByOptionId(projectTargets, optionId);
-      if (!target) {
+      const withoutProject = optionId === NO_PROJECT_OPTION_ID;
+      if (withoutProject && !state.supportsProjectlessTargets) return;
+      const target = withoutProject
+        ? { serverId: state.selectedServerId, cwd: "~", optionId: NO_PROJECT_OPTION_ID }
+        : findProjectTargetByOptionId(projectTargets, optionId);
+      if (!target?.serverId) {
         return;
       }
       const providerScopeChanged =
@@ -1248,6 +1319,9 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
         workingDir: target.cwd,
         projectDisplay: display,
         selectedProjectOptionId: target.optionId,
+        ...(state.selectedServerId !== target.serverId
+          ? { selectedRole: null, systemPrompt: undefined, featureValues: undefined }
+          : {}),
       };
       publish(providerScopeChanged ? clearProviderSelection(nextState) : nextState);
       if (!providerScopeChanged) {
@@ -1288,6 +1362,39 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
           currentMode: state.selectedMode,
         }),
         selectedThinkingOptionId,
+        featureValues: state.selectedProvider === provider ? state.featureValues : undefined,
+      });
+    },
+    setRole(role) {
+      if (closed || state.targetKind !== "new-agent") return;
+      if (!role && !state.selectedRole) return;
+      publish({
+        ...state,
+        selectedRole: role ? toAgentRoleSnapshot(role) : null,
+        systemPrompt: role?.instructions,
+      });
+    },
+    applyProfile(profile) {
+      if (closed || state.targetKind !== "new-agent") return;
+      const modelId = profile.modelId || state.selectedModel;
+      userModified = {
+        ...userModified,
+        provider: true,
+        model: true,
+        modeId: true,
+        thinkingOptionId: true,
+      };
+      publish({
+        ...state,
+        selectedProvider: profile.provider,
+        selectedModel: pickModelForProvider({
+          entries: providerEntries,
+          provider: profile.provider,
+          modelId,
+        }),
+        selectedMode: profile.modeId,
+        selectedThinkingOptionId: profile.thinkingOptionId,
+        featureValues: profile.featureValues,
       });
     },
     setThinking(thinkingOptionId) {

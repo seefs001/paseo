@@ -7255,6 +7255,7 @@ export class DaemonClient {
   }
 
   async scheduleCreate(options: CreateScheduleOptions): Promise<ScheduleCreatePayload> {
+    this.requireScheduleProjectlessTargets(options.target);
     if ("workspaceId" in options.target && options.target.workspaceId) {
       this.requireScheduleWorkspaceTargets();
     }
@@ -7370,7 +7371,23 @@ export class DaemonClient {
     }
   }
 
+  private requireScheduleProjectlessTargets(
+    target: CreateScheduleOptions["target"] | undefined,
+  ): void {
+    const needsProjectlessTargets =
+      target?.type === "new-agent" &&
+      !target.workspaceId &&
+      target.config.projectAssigned === false;
+    if (
+      needsProjectlessTargets &&
+      this.getLastServerInfoMessage()?.features?.scheduleProjectlessTargets !== true
+    ) {
+      throw new Error("Update the host to create schedules without a project");
+    }
+  }
+
   async scheduleUpdate(options: UpdateScheduleOptions): Promise<ScheduleUpdatePayload> {
+    this.requireScheduleProjectlessTargets(options.target);
     if (options.target !== undefined) this.requireScheduleWorkspaceTargets();
     return this.sendCorrelatedSessionRequest({
       requestId: options.requestId,

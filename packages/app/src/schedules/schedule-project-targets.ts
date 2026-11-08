@@ -2,6 +2,7 @@ import type { ProjectSummary } from "@/utils/projects";
 import { shortenPath } from "@/utils/shorten-path";
 
 export const PROJECT_OPTION_PREFIX = "project:";
+export const NO_PROJECT_OPTION_ID = "no-project";
 
 export interface ScheduleProjectTarget {
   optionId: string;

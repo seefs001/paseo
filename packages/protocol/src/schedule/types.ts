@@ -31,6 +31,8 @@ export const ScheduleTargetSchema = z.discriminatedUnion("type", [
     config: z.object({
       provider: AgentProviderSchema,
       cwd: z.string().trim().min(1),
+      // False creates an explicitly unassigned workspace instead of inferring a project from cwd.
+      projectAssigned: z.boolean().optional(),
       modeId: z.string().trim().min(1).optional(),
       model: z.string().trim().min(1).optional(),
       thinkingOptionId: z.string().trim().min(1).optional(),

@@ -4349,6 +4349,7 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceRequestReceipts: z.boolean().optional(),
         creationLifecycle: z.boolean().optional(),
         scheduleWorkspaceTargets: z.boolean().optional(),
+        scheduleProjectlessTargets: z.boolean().optional(),
         agentSessionShare: z.boolean().optional(),
         agentSideConversation: z.boolean().optional(),
         // COMPAT(hubAgentRpc): added in v0.8.0; remove gate after 2027-03-05.

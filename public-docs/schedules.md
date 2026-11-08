@@ -8,7 +8,7 @@ category: Schedules
 
 # Schedules
 
-A schedule runs work on a cron cadence. By default, it starts a fresh agent with a prompt, repo, and agent settings. It can also [file a fog task on the Desk without starting an agent](/docs/schedules-cli#file-board-tasks).
+A schedule runs work on a cron cadence. By default, it starts a fresh agent with a prompt and agent settings, optionally in a project. It can also [file a fog task on the Desk without starting an agent](/docs/schedules-cli#file-board-tasks).
 
 Paseo also has **heartbeats**. A heartbeat sends a recurring prompt back into one existing agent so it can reassess and continue the same conversation.
 
@@ -31,7 +31,7 @@ Both run on a cadence you set. To start an agent from an external event instead 
 
 ## Ways to create one
 
-- **In the app** — open the Schedules view and create one with agent settings, a cron cadence, a repo, and a prompt. This is the main way to create and manage schedules.
+- **In the app** — open the Schedules view and create one with agent settings, a cron cadence, an optional project, and a prompt. This is the main way to create and manage schedules.
 - **[From chat](/docs/schedules-chat)** — ask the agent in a chat and it sets the schedule up for you.
 - **[From the CLI](/docs/schedules-cli)** — `paseo schedule create`, for headless boxes and scripts.
 - **[Over MCP](/docs/mcp)** — agents create and manage schedules programmatically.
@@ -40,13 +40,19 @@ Both run on a cadence you set. To start an agent from an external event instead 
 
 In the app, open **Schedules** and create or edit a schedule. Both target fields are optional:
 
-- Leave **Workspace** and **Conversation** unselected to keep the default: each run creates a workspace and a new conversation using the selected project and agent settings.
+- Leave **Workspace** and **Conversation** unselected to create a workspace and a new conversation each run. Select a project, or choose **No project** to run in the host user's home directory without assigning the workspace to a project. **No project** uses local isolation and requires an updated host.
 - Choose **Workspace** only to create a new conversation in that workspace each run. Paseo does not create another workspace.
 - Choose **Workspace** and **Conversation** to send the prompt to that same conversation each run. It keeps its current model and mode; the form hides new-agent settings.
 
 The conversation picker lists available conversations in the selected workspace on the selected host. Changing or clearing the workspace clears the conversation selection. Update the host if these fields are unavailable.
 
 Schedules targeting an existing conversation keep all schedule management actions, including prompt editing, pause, run once, and logs. If the conversation is busy, the run fails without interrupting it; the next cron time remains scheduled. Archived, deleted, or mismatched targets are rejected. If a run finds that its target is gone, it records the reason in the run log and ends the schedule. Archiving a target conversation also ends its schedules.
+
+## Choose a role
+
+For schedules that create a conversation, choose **Role** to apply instructions from a role on the selected host. **No role** leaves role instructions unset. A role's default Agent profile fills in the agent settings; you can change those settings before saving. Providers without per-agent system prompts cannot run a selected role.
+
+The schedule saves the role name and instructions with its agent settings. Later role edits do not change saved schedules; select the role again and save to use its latest instructions. Schedules targeting an existing conversation keep that conversation's role and hide this field.
 
 ## Keep run workspaces
 

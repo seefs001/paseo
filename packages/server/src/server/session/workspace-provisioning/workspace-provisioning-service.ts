@@ -67,7 +67,7 @@ export interface WorkspaceProvisioningService {
   createWorkspaceForDirectory(
     cwd: string,
     title?: string | null,
-    projectId?: string,
+    projectId?: string | null,
     context?: {
       expectsInitialAgent?: boolean;
       workspaceId?: string;
@@ -247,7 +247,7 @@ export function createWorkspaceProvisioningService(deps: {
   async function createWorkspaceForDirectory(
     cwd: string,
     title?: string | null,
-    projectId?: string,
+    projectId?: string | null,
     context?: {
       expectsInitialAgent?: boolean;
       workspaceId?: string;
@@ -257,10 +257,17 @@ export function createWorkspaceProvisioningService(deps: {
   ): Promise<PersistedWorkspaceRecord> {
     const normalizedCwd = resolve(cwd);
     const checkout = await workspaceGitService.getCheckout(normalizedCwd);
-    const project = projectId
-      ? await refreshProjectKind(await requireActiveProject(projectId), normalizedCwd, checkout)
-      : // COMPAT(workspaceCreateMissingProjectId): added in v0.1.107, remove after 2027-01-15.
-        await findOrCreateProjectForDirectory(normalizedCwd);
+    let project: PersistedProjectRecord | null = null;
+    if (projectId) {
+      project = await refreshProjectKind(
+        await requireActiveProject(projectId),
+        normalizedCwd,
+        checkout,
+      );
+    } else if (projectId !== null) {
+      // COMPAT(workspaceCreateMissingProjectId): added in v0.1.107, remove after 2027-01-15.
+      project = await findOrCreateProjectForDirectory(normalizedCwd);
+    }
     const create = async () => {
       const baseMetadata =
         checkout.isGit && checkout.isPaseoOwnedWorktree
@@ -269,7 +276,7 @@ export function createWorkspaceProvisioningService(deps: {
       const timestamp = new Date().toISOString();
       const workspace = createPersistedWorkspaceRecord({
         workspaceId: context?.workspaceId ?? generateWorkspaceId(),
-        projectId: project.projectId,
+        projectId: project?.projectId ?? null,
         ...initialWorkspacePlacement({ source: "checkout", cwd: normalizedCwd, checkout }),
         baseBranch: baseMetadata?.baseRef ?? baseMetadata?.baseRefName ?? null,
         title: title?.trim() || null,

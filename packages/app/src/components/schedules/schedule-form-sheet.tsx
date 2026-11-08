@@ -15,7 +15,7 @@ import {
   type ReactNode,
 } from "react";
 import { Text, View } from "react-native";
-import { Brain, Folder, GitBranch } from "lucide-react-native";
+import { Brain, Folder, GitBranch, MessageSquare } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
@@ -30,6 +30,7 @@ import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
 import { useProviderIcon } from "@/components/provider-icons";
 import { CadenceEditor } from "@/components/schedules/cadence-editor";
+import { ScheduleRoleField } from "@/components/schedules/schedule-role-field";
 import {
   SelectField,
   SelectFieldTrigger,
@@ -48,7 +49,10 @@ import { useAggregatedAgents } from "@/hooks/use-aggregated-agents";
 import { useProjects } from "@/hooks/use-projects";
 import { useHosts } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
-import { buildScheduleProjectTargets } from "@/schedules/schedule-project-targets";
+import {
+  buildScheduleProjectTargets,
+  NO_PROJECT_OPTION_ID,
+} from "@/schedules/schedule-project-targets";
 import { useScheduleFormModel } from "@/schedules/use-schedule-form-model";
 import { useScheduleFormProviderSnapshot } from "@/schedules/use-schedule-form-provider-snapshot";
 import {
@@ -128,6 +132,8 @@ function selectScheduleHosts(
         state.sessions[host.serverId]?.serverInfo?.features?.workspaceMultiplicity === true,
       supportsScheduleWorkspaceTargets:
         state.sessions[host.serverId]?.serverInfo?.features?.scheduleWorkspaceTargets === true,
+      supportsScheduleProjectlessTargets:
+        state.sessions[host.serverId]?.serverInfo?.features?.scheduleProjectlessTargets === true,
     }));
 }
 
@@ -703,6 +709,7 @@ function ScheduleTargetFields({
   controlSize,
   mutationServerId,
 }: ScheduleTargetFieldsProps): ReactElement {
+  const { t } = useTranslation();
   const hostOptions = useMemo<SelectFieldOption<string>[]>(
     () =>
       state.hosts.map((host) => ({
@@ -723,7 +730,25 @@ function ScheduleTargetFields({
     }
     return null;
   }, [selectedHost, state.selectedServerId]);
-  const projectOptions = state.projectOptions;
+  const projectOptions = useMemo(() => {
+    if (!state.supportsProjectlessTargets) return state.projectOptions;
+    return [
+      {
+        id: NO_PROJECT_OPTION_ID,
+        value: NO_PROJECT_OPTION_ID,
+        label: t("workspaceProject.none"),
+        testID: "schedule-project-option-none",
+      },
+      ...state.projectOptions,
+    ];
+  }, [state.projectOptions, state.supportsProjectlessTargets, t]);
+  const projectDisplay = useMemo(
+    () =>
+      state.selectedProjectOptionId === NO_PROJECT_OPTION_ID
+        ? { label: t("workspaceProject.none") }
+        : state.projectDisplay,
+    [state.projectDisplay, state.selectedProjectOptionId, t],
+  );
   const modeOptions = useMemo<SelectFieldOption<string>[]>(
     () =>
       state.modeOptions.map((option) => ({
@@ -860,7 +885,7 @@ function ScheduleTargetFields({
         <SelectField
           label="Project"
           value={state.selectedProjectOptionId || null}
-          selectedDisplay={state.projectDisplay}
+          selectedDisplay={projectDisplay}
           options={projectOptions}
           onChange={handleSelectProject}
           placeholder="Select project"
@@ -874,6 +899,10 @@ function ScheduleTargetFields({
           triggerTestID="schedule-project-trigger"
           renderOption={renderProjectOption}
         />
+      ) : null}
+
+      {state.disclosure.showModelField ? (
+        <ScheduleRoleField model={model} state={state} size={controlSize} />
       ) : null}
 
       {state.disclosure.showModelField ? (
@@ -1110,10 +1139,14 @@ function ProjectOptionItem({
   const leadingSlot = useMemo(
     () => (
       <View style={styles.optionIconBox}>
-        <Folder size={16} color={styles.providerIcon.color} />
+        {option.id === NO_PROJECT_OPTION_ID ? (
+          <MessageSquare size={16} color={styles.providerIcon.color} />
+        ) : (
+          <Folder size={16} color={styles.providerIcon.color} />
+        )}
       </View>
     ),
-    [],
+    [option.id],
   );
 
   return (

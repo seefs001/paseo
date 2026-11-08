@@ -92,6 +92,9 @@ function resolveTarget(input: ResolveScheduleInput): ScheduleTargetResolution {
       provider: schedule.target.config.provider,
     };
   }
+  if (schedule.target.config.projectAssigned === false) {
+    return { label: i18n.t("workspaceProject.none"), provider: schedule.target.config.provider };
+  }
   return {
     label: describeScheduleCwd({ serverId, cwd: schedule.target.config.cwd, projectNameByCwd }),
     provider: schedule.target.config.provider,

@@ -14,6 +14,7 @@ import { type BoundCreateAgentCommand, formatProviderModel } from "../agent/crea
 import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../worktree-session.js";
 import { ScheduleStore } from "./store.js";
+import { expandUserPath } from "../path-utils.js";
 import { BoardTaskError, type BoardTaskService } from "../board/tasks.js";
 import { computeNextRunAt, validateScheduleCadence } from "./cron.js";
 import type {
@@ -248,6 +249,7 @@ type ScheduleAgentManager = Pick<
 
 interface ScheduleWorkspaceCreateInput {
   cwd: string;
+  projectAssigned?: boolean;
   firstAgentContext: FirstAgentContext;
 }
 
@@ -1060,7 +1062,10 @@ export class ScheduleService {
       });
     }
 
-    const config = schedule.target.config;
+    const config = {
+      ...schedule.target.config,
+      cwd: expandUserPath(schedule.target.config.cwd),
+    };
     await this.assertNewAgentCwdDirectory(targetWorkspace?.cwd ?? config.cwd);
     const ownsWorkspace = targetWorkspace === null;
     let workspace: PersistedWorkspaceRecord | null = null;
@@ -1155,6 +1160,13 @@ export class ScheduleService {
   private async validateWorkspaceTarget(
     target: ScheduleTarget,
   ): Promise<PersistedWorkspaceRecord | null> {
+    const projectlessWorktree =
+      target.type === "new-agent" &&
+      target.config.projectAssigned === false &&
+      target.config.isolation === "worktree";
+    if (projectlessWorktree) {
+      throw new ScheduleStateConflictError("Worktree isolation requires a project");
+    }
     if (target.type === "board-task" || !target.workspaceId) return null;
     if (!this.getWorkspace) {
       throw new ScheduleStateConflictError(
@@ -1199,7 +1211,11 @@ export class ScheduleService {
     const firstAgentContext = { prompt };
     switch (config.isolation ?? "local") {
       case "local":
-        return this.createDirectoryWorkspace({ cwd: config.cwd, firstAgentContext });
+        return this.createDirectoryWorkspace({
+          cwd: config.cwd,
+          ...(config.projectAssigned === false ? { projectAssigned: false } : {}),
+          firstAgentContext,
+        });
       case "worktree":
         return (await this.createPaseoWorktreeWorkspace({ cwd: config.cwd, firstAgentContext }))
           .workspace;

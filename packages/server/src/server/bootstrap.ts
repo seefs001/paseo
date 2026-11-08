@@ -1468,11 +1468,13 @@ export async function createPaseoDaemon(
 
   const createScheduleLocalWorkspaceExternal = async (input: {
     cwd: string;
+    projectAssigned?: boolean;
     firstAgentContext: FirstAgentContext;
   }) => {
     const workspace = await workspaceProvisioning.createWorkspaceForDirectory(
       input.cwd,
       resolveFirstAgentPromptTitle(input.firstAgentContext),
+      input.projectAssigned === false ? null : undefined,
     );
     workspaceAutoName.scheduleForDirectory({
       workspaceId: workspace.workspaceId,
