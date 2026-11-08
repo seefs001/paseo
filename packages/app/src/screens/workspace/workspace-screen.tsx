@@ -31,6 +31,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -3327,11 +3328,8 @@ function WorkspaceScreenContent({
     () => isFocusModeEnabled && !isMobile,
     [isFocusModeEnabled, isMobile],
   );
-  const workspaceFloatingPanelPortalHostName = useMemo(
-    () =>
-      `${WORKSPACE_FLOATING_PANEL_PORTAL_HOST_PREFIX}:${normalizedServerId}:${normalizedWorkspaceId}`,
-    [normalizedServerId, normalizedWorkspaceId],
-  );
+  // Retained routes can mount the same workspace more than once.
+  const workspaceFloatingPanelPortalHostName = `${WORKSPACE_FLOATING_PANEL_PORTAL_HOST_PREFIX}:${useId()}`;
   const renderWorkspaceScreenHeader = useCallback(
     () =>
       showScreenHeader ? (
