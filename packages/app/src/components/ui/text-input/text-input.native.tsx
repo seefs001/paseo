@@ -232,7 +232,13 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
 
 const styles = StyleSheet.create((theme) => ({
   highlight: { backgroundColor: theme.colors.interactionHighlight },
+  quote: { backgroundColor: theme.colors.surface3, color: theme.colors.foregroundMuted },
 }));
+
+function highlightStyle(part: HighlightedInputTextProps["part"]) {
+  if (!part.highlighted) return undefined;
+  return part.kind === "quote" ? styles.quote : styles.highlight;
+}
 
 function HighlightedInputText({ part, onHighlightPress }: HighlightedInputTextProps) {
   const handlePress = useCallback(() => {
@@ -240,7 +246,7 @@ function HighlightedInputText({ part, onHighlightPress }: HighlightedInputTextPr
   }, [onHighlightPress, part.start]);
   return (
     <Text
-      style={part.highlighted ? styles.highlight : undefined}
+      style={highlightStyle(part)}
       onPress={part.highlighted && onHighlightPress ? handlePress : undefined}
       suppressHighlighting
     >
@@ -250,6 +256,6 @@ function HighlightedInputText({ part, onHighlightPress }: HighlightedInputTextPr
 }
 
 interface HighlightedInputTextProps {
-  part: { start: number; text: string; highlighted: boolean };
+  part: { start: number; text: string; highlighted: boolean; kind?: "quote" };
   onHighlightPress: EditingTextInputProps["onHighlightPress"];
 }

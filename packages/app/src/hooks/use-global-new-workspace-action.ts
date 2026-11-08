@@ -36,7 +36,10 @@ export function useGlobalNewWorkspaceAction() {
                   sourceDirectory: activeWorkspace.projectRootPath,
                   projectId: activeWorkspace.projectId,
                 }
-              : { serverId },
+              : {
+                  serverId,
+                  projectAssigned: activeWorkspace?.projectId === null ? false : undefined,
+                },
           )
         : buildNewWorkspaceRoute()) as never,
     );

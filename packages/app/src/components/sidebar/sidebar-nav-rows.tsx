@@ -111,7 +111,10 @@ const SidebarNewWorkspaceRow = memo(function SidebarNewWorkspaceRow({
                   sourceDirectory: activeWorkspace.projectRootPath,
                   projectId: activeWorkspace.projectId,
                 }
-              : { serverId: activeWorkspaceServerId },
+              : {
+                  serverId: activeWorkspaceServerId,
+                  projectAssigned: activeWorkspace?.projectId === null ? false : undefined,
+                },
           )
         : buildNewWorkspaceRoute(),
     );

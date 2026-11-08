@@ -1,3 +1,4 @@
+import { isInlineQuote, isValidInlineQuote } from "@/attachments/inline-quote";
 import type { ChatQuoteContextAttachment, ComposerAttachment } from "@/attachments/types";
 import type { ImageAttachment } from "@/composer/types";
 import {
@@ -12,7 +13,10 @@ import {
 import { workspaceFileAttachmentToAgentAttachment } from "@/attachments/workspace-file";
 import { pluginResourceAttachmentToAgentAttachment } from "@/plugins/attachments";
 import { i18n } from "@/i18n/i18next";
-import { formatChatQuoteForAgent } from "@/attachments/chat-quote-format";
+import {
+  formatArtifactQuoteForAgent,
+  formatChatQuoteForAgent,
+} from "@/attachments/chat-quote-format";
 import {
   getSessionResourceClient,
   ResourceReferenceError,
@@ -73,21 +77,13 @@ export function splitComposerAttachmentsForSubmit(
     }
 
     if (attachment.kind === "artifact_quote") {
-      const { source } = attachment;
       agentAttachments.push({
         type: "text",
         mimeType: "text/plain",
         title: attachment.title,
         contextKind: "artifact_quote",
-        text: [
-          `Artifact: ${attachment.title}`,
-          `Host: ${source.serverId}`,
-          `Workspace: ${source.workspaceId}`,
-          `Artifact ID: ${source.artifactId}`,
-          `Observed revision: ${source.revision}`,
-          "Quoted content (captured when selected, not a historical-version link):",
-          attachment.selectedText,
-        ].join("\n"),
+        text: formatArtifactQuoteForAgent(attachment),
+        ...quoteRange(attachment),
       });
       continue;
     }
@@ -145,7 +141,14 @@ function chatQuoteToAgentAttachment(
     contextKind: "chat_quote",
     title: `“${attachment.selectedText.replace(/\s+/g, " ").trim()}”`,
     text: formatChatQuoteForAgent({ ...attachment, ...(comment ? { comment } : {}) }),
+    ...quoteRange(attachment),
   };
+}
+
+function quoteRange(attachment: ComposerAttachment): { range?: { start: number; end: number } } {
+  return isInlineQuote(attachment)
+    ? { range: { start: attachment.start, end: attachment.end } }
+    : {};
 }
 
 interface PrepareComposerMessageInput extends SplitComposerAttachmentsOptions {
@@ -169,7 +172,9 @@ export function prepareComposerMessageForSubmit(input: PrepareComposerMessageInp
   });
   const attachments = [
     ...findTextReferenceLinks(text),
-    ...input.attachments.filter((attachment) => !isTextReference(attachment)),
+    ...input.attachments
+      .filter((attachment) => !isTextReference(attachment))
+      .map((attachment) => placeInlineQuote(attachment, input.text, text)),
   ];
   const split = splitComposerAttachmentsForSubmit(attachments, {
     format: input.format,
@@ -180,6 +185,29 @@ export function prepareComposerMessageForSubmit(input: PrepareComposerMessageInp
     images: split.images,
     attachments: [...(input.resourceCards ?? []), ...split.attachments],
   };
+}
+
+/**
+ * Binds an inline quote to its place in the sent text. The daemon trims the message, so the
+ * range is taken from the trimmed text. A quote whose text no longer matches its range (or a
+ * draft whose legacy references rewrote the text) is sent without a place, like older quotes.
+ */
+function placeInlineQuote<T extends ComposerAttachment>(
+  attachment: T,
+  draftText: string,
+  sentText: string,
+): T {
+  if (!isInlineQuote(attachment)) return attachment;
+  const { start: _start, end: _end, ...unplaced } = attachment;
+  const leading = sentText.length - sentText.trimStart().length;
+  const trimmedLength = sentText.trim().length;
+  const placed =
+    draftText === sentText &&
+    isValidInlineQuote(sentText, attachment) &&
+    attachment.start >= leading &&
+    attachment.end - leading <= trimmedLength;
+  if (!placed) return unplaced as T;
+  return { ...attachment, start: attachment.start - leading, end: attachment.end - leading };
 }
 
 /**

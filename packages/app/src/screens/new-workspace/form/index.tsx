@@ -16,7 +16,8 @@ import {
   FieldTrigger,
   type FieldTriggerVariant,
 } from "./field-trigger";
-import { branchIcon, folderIcon, ProjectIcon, pullRequestIcon } from "./icons";
+import { NO_PROJECT_OPTION_ID } from "../project-selection";
+import { branchIcon, chatIcon, folderIcon, ProjectIcon, pullRequestIcon } from "./icons";
 import { LaunchControl } from "./launch-control";
 import { AddProjectOption, IsolationOption, ProjectOption, RefOption } from "./options";
 
@@ -101,13 +102,16 @@ function useProjectPicker(
   const renderOption = useCallback<RenderOption>(
     (row) => {
       const item = projectByOptionId.get(row.option.id);
+      const selectable =
+        row.option.id === NO_PROJECT_OPTION_ID ||
+        Boolean(item && isProjectSelectable(item, supportsWorkspaceMultiplicity));
       return (
         <ProjectOption
           {...row}
           project={item}
           iconDataUri={item ? (iconDataByProjectViewKey.get(item.viewKey) ?? null) : null}
           selectedServerId={selectedServerId}
-          disabled={isPending || !item || !isProjectSelectable(item, supportsWorkspaceMultiplicity)}
+          disabled={isPending || !selectable}
         />
       );
     },
@@ -177,6 +181,8 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
   const selectedProjectIconUri = selectedProject
     ? (project.iconDataByProjectViewKey.get(selectedProject.viewKey) ?? null)
     : null;
+  const fallbackProjectIcon =
+    project.selectedOptionId === NO_PROJECT_OPTION_ID ? chatIcon : folderIcon;
   const projectIcon = useMemo(
     () =>
       selectedProject ? (
@@ -186,9 +192,9 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
           iconDataUri={selectedProjectIconUri}
         />
       ) : (
-        folderIcon
+        fallbackProjectIcon
       ),
-    [selectedProject, selectedProjectIconUri],
+    [fallbackProjectIcon, selectedProject, selectedProjectIconUri],
   );
   const hostIcon = useMemo(
     () => <HostStatusDot serverId={host.selectedServerId} />,

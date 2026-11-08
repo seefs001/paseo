@@ -65,11 +65,21 @@ import {
   DraftAgentControls,
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
-import { ChatQuoteAttachmentPill } from "@/attachments/chat-quote-pill";
+import {
+  InlineQuoteSheet,
+  LegacyComposerQuotes,
+  isComposerQuote,
+  type ComposerQuote,
+} from "@/composer/attachments/quotes";
+import {
+  isInlineQuote,
+  isValidInlineQuote,
+  removeInlineQuoteText,
+  type InlineQuote,
+} from "@/attachments/inline-quote";
 import { withChatQuoteComment } from "@/attachments/chat-quote";
 import { ContextWindowMeter } from "@/components/context-window-meter";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
-import { ArtifactQuotePill } from "@/artifacts/quote";
 import {
   selectAgentSentMessages,
   selectAgentTurnPresentation,
@@ -162,6 +172,7 @@ import {
   insertProfileReference,
   insertRoleReference,
   insertSessionReference,
+  isRangedAttachment,
   isTextReference,
   textReferenceToAgentAttachment,
   updateProfileReferences,
@@ -381,8 +392,13 @@ interface RenderAttachmentTrayArgs {
   };
 }
 
+/** Quotes saved before inline quoting have no range and keep their place above the text. */
+function isLegacyQuote(attachment: ComposerAttachment): attachment is ComposerQuote {
+  return isComposerQuote(attachment) && !isInlineQuote(attachment);
+}
+
 function isTrayAttachment(attachment: ComposerAttachment): attachment is TrayAttachment {
-  return !isTextReference(attachment);
+  return !isTextReference(attachment) && !isComposerQuote(attachment);
 }
 
 function haveSameRanges(
@@ -392,7 +408,10 @@ function haveSameRanges(
   return (
     left.length === right.length &&
     left.every(
-      (range, index) => range.start === right[index]?.start && range.end === right[index]?.end,
+      (range, index) =>
+        range.start === right[index]?.start &&
+        range.end === right[index]?.end &&
+        range.style === right[index]?.style,
     )
   );
 }
@@ -428,40 +447,54 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
     labels,
   } = args;
   // Profile references live inline in the text; the tray only shows standalone attachments.
-  if (!selectedAttachments.some(isTrayAttachment) && pendingFiles.length === 0) return null;
-  // Quotes lead the tray on their own rows, so they read as context for what is typed below.
-  const ordered = selectedAttachments
-    .map((attachment, index) => ({ attachment, index }))
-    .sort(
-      (left, right) =>
-        Number(right.attachment.kind === "chat_quote") -
-        Number(left.attachment.kind === "chat_quote"),
-    );
+  const hasQuotes = selectedAttachments.some(isLegacyQuote);
+  if (!hasQuotes && !selectedAttachments.some(isTrayAttachment) && pendingFiles.length === 0) {
+    return null;
+  }
+  // Quotes lead as one block, so they read as context for what is typed below.
+  const indexed = selectedAttachments.map((attachment, index) => ({ attachment, index }));
+  const quotes = indexed.flatMap((entry) =>
+    isLegacyQuote(entry.attachment) ? [{ attachment: entry.attachment, index: entry.index }] : [],
+  );
+  const others = indexed.filter((entry) => !isComposerQuote(entry.attachment));
+  const hasOthers =
+    others.some((entry) => isTrayAttachment(entry.attachment)) || pendingFiles.length > 0;
   return (
-    <View style={styles.attachmentTray} testID="composer-attachment-tray">
-      {ordered.map(({ attachment, index }) =>
-        isTrayAttachment(attachment)
-          ? renderComposerAttachmentPill({
-              serverId,
-              attachment,
-              index,
-              disabled: isComposerLocked,
-              onOpen: handleOpenAttachment,
-              onRemove: handleRemoveAttachment,
-              onChangeChatQuoteComment: handleChangeChatQuoteComment,
-              labels,
-            })
-          : null,
-      )}
-      {pendingFiles.map(({ id, file }) => (
-        <AttachmentFrame key={id} testID="composer-pending-file-attachment">
-          <AttachmentLabel
-            icon={pendingFilePillIcon}
-            title={file.fileName}
-            subtitle={getFileTypeLabel(file.fileName) ?? ""}
-          />
-        </AttachmentFrame>
-      ))}
+    <View style={styles.attachmentTrayColumn} testID="composer-attachment-tray">
+      {quotes.length > 0 ? (
+        <LegacyComposerQuotes
+          quotes={quotes}
+          disabled={isComposerLocked}
+          onRemove={handleRemoveAttachment}
+          onChangeComment={handleChangeChatQuoteComment}
+        />
+      ) : null}
+      {hasOthers ? (
+        <View style={styles.attachmentTray}>
+          {others.map(({ attachment, index }) =>
+            isTrayAttachment(attachment)
+              ? renderComposerAttachmentPill({
+                  serverId,
+                  attachment,
+                  index,
+                  disabled: isComposerLocked,
+                  onOpen: handleOpenAttachment,
+                  onRemove: handleRemoveAttachment,
+                  labels,
+                })
+              : null,
+          )}
+          {pendingFiles.map(({ id, file }) => (
+            <AttachmentFrame key={id} testID="composer-pending-file-attachment">
+              <AttachmentLabel
+                icon={pendingFilePillIcon}
+                title={file.fileName}
+                subtitle={getFileTypeLabel(file.fileName) ?? ""}
+              />
+            </AttachmentFrame>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -494,7 +527,7 @@ function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
   );
 }
 
-type TrayAttachment = Exclude<ComposerAttachment, TextReference>;
+type TrayAttachment = Exclude<ComposerAttachment, TextReference | ComposerQuote>;
 
 interface RenderComposerAttachmentPillArgs {
   serverId: string;
@@ -504,12 +537,11 @@ interface RenderComposerAttachmentPillArgs {
   disabled: boolean;
   onOpen: (attachment: ComposerAttachment) => void;
   onRemove: (index: number) => void;
-  onChangeChatQuoteComment: (index: number, comment: string) => void;
   labels: RenderAttachmentTrayArgs["labels"];
 }
 
 function renderComposerAttachmentPill(args: RenderComposerAttachmentPillArgs): ReactElement {
-  const { attachment, index, disabled, onOpen, onRemove, onChangeChatQuoteComment, labels } = args;
+  const { attachment, index, disabled, onOpen, onRemove, labels } = args;
   if (attachment.kind === "image") {
     return (
       <ImageAttachmentPill
@@ -521,29 +553,6 @@ function renderComposerAttachmentPill(args: RenderComposerAttachmentPillArgs): R
         onRemove={onRemove}
         openLabel={labels.openImage}
         removeLabel={labels.removeImage}
-      />
-    );
-  }
-  if (attachment.kind === "artifact_quote") {
-    return (
-      <ArtifactQuotePill
-        key={attachment.id}
-        attachment={attachment}
-        index={index}
-        disabled={disabled}
-        onRemove={onRemove}
-      />
-    );
-  }
-  if (attachment.kind === "chat_quote") {
-    return (
-      <ChatQuoteAttachmentPill
-        key={attachment.id}
-        attachment={attachment}
-        index={index}
-        disabled={disabled}
-        onRemove={onRemove}
-        onChangeComment={onChangeChatQuoteComment}
       />
     );
   }
@@ -1709,8 +1718,45 @@ function ComposerContentImpl({
     [alignProfileReferences, onReplaceInput],
   );
 
+  const [pressedQuote, setPressedQuote] = useState<InlineQuote | null>(null);
+  const closeQuoteSheet = useCallback(() => setPressedQuote(null), []);
+  const removeInlineQuote = useCallback(
+    (quote: InlineQuote) => {
+      const text = textSource.getSnapshot();
+      if (!onReplaceInput || !isValidInlineQuote(text, quote)) return;
+      const next = removeInlineQuoteText(text, quote);
+      onReplaceInput({
+        text: next.text,
+        attachments: attachments.flatMap((attachment) => {
+          if (attachment === quote) return [];
+          if (!isInlineQuote(attachment) || attachment.start < quote.end) return [attachment];
+          return [
+            {
+              ...attachment,
+              start: attachment.start - next.removed,
+              end: attachment.end - next.removed,
+            },
+          ];
+        }),
+        selection: { start: next.start, end: next.start },
+      });
+    },
+    [attachments, onReplaceInput, textSource],
+  );
   const handleHighlightPress = useCallback(
     (index: number) => {
+      const text = textSource.getSnapshot();
+      const quote = attachments.find(
+        (attachment): attachment is UserComposerAttachment & InlineQuote =>
+          isInlineQuote(attachment) &&
+          isValidInlineQuote(text, attachment) &&
+          index > attachment.start &&
+          index <= attachment.end,
+      );
+      if (quote) {
+        setPressedQuote(quote);
+        return;
+      }
       const reference = findTextReferenceAt({
         text: textSource.getSnapshot(),
         attachments,
@@ -1968,7 +2014,7 @@ function ComposerContentImpl({
           const userAttachments = composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments);
           // A failed send restores text first; references written after it would be checked
           // against the still-empty draft text and dropped, so restore both in one write.
-          if (onReplaceInput && userAttachments.some(isTextReference)) {
+          if (onReplaceInput && userAttachments.some(isRangedAttachment)) {
             onReplaceInput({ text: outgoingMessage.trim(), attachments: userAttachments });
             return;
           }
@@ -2194,7 +2240,7 @@ function ComposerContentImpl({
     (index: number, comment: string) => {
       setSelectedAttachments((prev) =>
         prev.map((attachment, current) =>
-          current === index && attachment.kind === "chat_quote"
+          current === index && isComposerQuote(attachment)
             ? withChatQuoteComment(attachment, comment)
             : attachment,
         ),
@@ -2266,7 +2312,7 @@ function ComposerContentImpl({
         queue: queueWriter,
       });
       if (!result) return;
-      if (onReplaceInput && result.attachments.some(isTextReference)) {
+      if (onReplaceInput && result.attachments.some(isRangedAttachment)) {
         onReplaceInput({ text: result.text, attachments: result.attachments });
         return;
       }
@@ -2592,13 +2638,14 @@ function ComposerContentImpl({
 
   const handleSelectionChange = useCallback(
     (selection: { start: number; end: number }) => {
+      textSource.reportSelection?.(selection);
       if (isWeb) {
         cursorPublication.stage(selection.start);
       } else {
         cursor.setState(selection.start);
       }
     },
-    [cursorPublication, cursor],
+    [cursorPublication, cursor, textSource],
   );
 
   const handleFocusChange = useCallback(
@@ -2946,6 +2993,12 @@ function ComposerContentImpl({
                   onHighlightPress={handleHighlightPress}
                   submitLabel={submitLabel}
                 />
+                <InlineQuoteSheet
+                  quote={pressedQuote}
+                  disabled={isComposerLocked}
+                  onClose={closeQuoteSheet}
+                  onRemove={removeInlineQuote}
+                />
               </RenderProfile>
               <Combobox
                 options={githubSearchOptions}
@@ -3076,6 +3129,9 @@ const styles = StyleSheet.create((theme: Theme) => ({
   },
   discPressed: {
     opacity: 0.7,
+  },
+  attachmentTrayColumn: {
+    gap: theme.spacing[2],
   },
   attachmentTray: {
     flexDirection: "row",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ComboboxOption as ComboboxOptionType } from "@/components/ui/combobox";
 import { isWorkspaceArchivePending } from "@/contexts/session-workspace-upserts";
 import {
@@ -8,6 +9,7 @@ import {
   type HostProjectListItem,
 } from "@/projects/host-projects";
 import {
+  NO_PROJECT_OPTION_ID,
   createManualProjectSelectionContextKey,
   createProjectSelectionContextKey,
   createProjectSelection,
@@ -27,6 +29,10 @@ interface NewWorkspaceProjectPickerInput {
   routeProjectContextViewKey: string | null;
   lastActiveProject: HostProjectListItem | null;
   allowAllProjects: boolean;
+  allowNoProject?: boolean;
+  initiallyUnassigned?: boolean;
+  unassignedDirectory?: string;
+  routeServerId?: string;
 }
 
 interface NewWorkspaceProjectPickerState {
@@ -88,7 +94,12 @@ export function useNewWorkspaceProjectPicker({
   routeProjectContextViewKey,
   lastActiveProject,
   allowAllProjects,
+  allowNoProject = false,
+  initiallyUnassigned = false,
+  unassignedDirectory,
+  routeServerId,
 }: NewWorkspaceProjectPickerInput): NewWorkspaceProjectPickerState {
+  const { t } = useTranslation();
   const selectableProjects = useMemo(
     () =>
       filterWorkspaceProjectsForHost({ projects, serverId: selectedServerId, allowAllProjects }),
@@ -149,9 +160,12 @@ export function useNewWorkspaceProjectPicker({
       shouldPreserveMissingProject,
     ],
   );
-  const [projectSelection, setProjectSelection] = useState<ProjectSelection>(() =>
-    createProjectSelection(selectionContext),
-  );
+  const [projectSelection, setProjectSelection] = useState<ProjectSelection>(() => {
+    if (initiallyUnassigned) {
+      return { contextKey: manualSelectionContextKey, project: null, source: "none" };
+    }
+    return createProjectSelection(selectionContext);
+  });
 
   useEffect(() => {
     setProjectSelection((current) => reconcileProjectSelection(current, selectionContext));
@@ -159,12 +173,23 @@ export function useNewWorkspaceProjectPicker({
 
   const activeSelection = reconcileProjectSelection(projectSelection, selectionContext);
   const selectedProject = resolveProjectSelection(activeSelection, selectionContext);
-  const { options: projectPickerOptions, projectByOptionId } = useMemo(
-    () => computeProjectOptionData(selectableProjects),
-    [selectableProjects],
-  );
+  const { options: projectPickerOptions, projectByOptionId } = useMemo(() => {
+    const data = computeProjectOptionData(selectableProjects);
+    if (allowNoProject) {
+      data.options.unshift({ id: NO_PROJECT_OPTION_ID, label: t("workspaceProject.none") });
+    }
+    return data;
+  }, [allowNoProject, selectableProjects, t]);
   const handleSelectProjectOption = useCallback(
     (id: string) => {
+      if (id === NO_PROJECT_OPTION_ID && allowNoProject) {
+        setProjectSelection({
+          contextKey: manualSelectionContextKey,
+          project: null,
+          source: "none",
+        });
+        return;
+      }
       const project = projectByOptionId.get(id);
       if (!project) return;
       if (
@@ -179,18 +204,32 @@ export function useNewWorkspaceProjectPicker({
         source: "manual",
       });
     },
-    [allowAllProjects, manualSelectionContextKey, projectByOptionId],
+    [allowAllProjects, allowNoProject, manualSelectionContextKey, projectByOptionId],
   );
+
+  let selectedSourceDirectory: string | null = null;
+  let selectedProjectOptionId = "";
+  let projectTriggerLabel = "Choose project";
+  if (selectedProject) {
+    selectedSourceDirectory = getHostProjectSourceDirectory(selectedProject, selectedServerId);
+    selectedProjectOptionId = projectOptionId(selectedProject.viewKey);
+    projectTriggerLabel = selectedProject.projectName;
+  } else if (allowNoProject || activeSelection.source === "none") {
+    selectedSourceDirectory = "~";
+    if (initiallyUnassigned && selectedServerId === routeServerId) {
+      selectedSourceDirectory = unassignedDirectory?.trim() || "~";
+    }
+    selectedProjectOptionId = NO_PROJECT_OPTION_ID;
+    projectTriggerLabel = t("workspaceProject.none");
+  }
 
   return {
     selectedProject,
-    selectedSourceDirectory: selectedProject
-      ? getHostProjectSourceDirectory(selectedProject, selectedServerId)
-      : null,
+    selectedSourceDirectory,
     projectPickerOptions,
     projectByOptionId,
-    selectedProjectOptionId: selectedProject ? projectOptionId(selectedProject.viewKey) : "",
-    projectTriggerLabel: selectedProject?.projectName ?? "Choose project",
+    selectedProjectOptionId,
+    projectTriggerLabel,
     handleSelectProjectOption,
   };
 }

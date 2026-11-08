@@ -12,7 +12,7 @@ Paseo 围绕工作区组织，而不是围绕聊天。
 
 ## 项目包含工作区 {#projects-contain-workspaces}
 
-侧边栏从项目开始。项目可以是一个 git 仓库、一个 GitHub 项目，或者运行 Paseo daemon 的机器上的任意目录。
+工作区可以属于一个项目，也可以选择**无项目**。无项目工作区在侧边栏中显示聊天图标。项目可以是一个 git 仓库、一个 GitHub 项目，或者运行 Paseo daemon 的机器上的任意目录。
 
 每个项目中都有工作区。例如：
 
@@ -48,7 +48,9 @@ Agent 以会话的形式在工作区中运行。一个工作区可以同时打�
 
 关于从启动并行 Agent 到审查和测试其改动的桌面端完整流程，请参见[运行并行任务](/docs/parallel-development)。
 
-你可以在应用中或通过 CLI 创建工作区：
+在**新建工作区**中选择**无项目**，即可使用主机用户目录，不会创建项目。聊天、空工作区和终端启动都支持此选项。此时使用**本地**隔离；新建 worktree 仍需来源项目。使用前请同时更新应用和主机。
+
+你也可以通过 CLI 创建工作区：
 
 ```bash
 paseo workspace create --isolation local --path ~/dev/my-app --title main

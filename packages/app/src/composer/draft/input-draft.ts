@@ -1,3 +1,4 @@
+import { reportComposerSelection, takeQuoteCaret } from "@/attachments/inline-quote";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UserComposerAttachment } from "@/attachments/types";
 import type { TextReplacement } from "@/composer/types";
@@ -30,7 +31,7 @@ import type { ComposerTextSource } from "@/composer/text-source";
 import { isWeb } from "@/constants/platform";
 import {
   applyProfileReferenceEdit,
-  isTextReference,
+  isRangedAttachment,
   type ProfileReferenceRange,
 } from "@/composer/profile-reference/model";
 
@@ -136,12 +137,15 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
           )
             listener();
         }),
+      reportSelection: (selection) => reportComposerSelection(draftKey, selection),
     }),
     [draftKey],
   );
   const attachmentFocusRequestId = useDraftStore(
     (state) => state.attachmentFocusRequestByDraftKey[draftKey] ?? 0,
   );
+  // A quote added from elsewhere writes the draft text directly; show it with the caret after it.
+  const lastFocusRequestRef = useRef(attachmentFocusRequestId);
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   const isHydrated = hydratedDraftKey === draftKey;
   const textReplacementRevisionRef = useRef(0);
@@ -191,6 +195,17 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     [draftKey],
   );
 
+  useEffect(() => {
+    if (lastFocusRequestRef.current === attachmentFocusRequestId) return;
+    lastFocusRequestRef.current = attachmentFocusRequestId;
+    const text = textSource.getSnapshot();
+    const caret = takeQuoteCaret(draftKey) ?? { start: text.length, end: text.length };
+    publishTextReplacement("replace", text, caret);
+  }, [attachmentFocusRequestId, draftKey, publishTextReplacement, textSource]);
+
+  // Forget this composer's selection when it stops showing the draft, so a later quote appends.
+  useEffect(() => () => reportComposerSelection(draftKey, null), [draftKey]);
+
   const replaceInput = useCallback(
     (next: {
       text: string;
@@ -210,7 +225,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       const store = useDraftStore.getState();
       const record = store.drafts[draftKey];
       const current = record?.lifecycle === "active" ? record.input : undefined;
-      const hasReferences = current?.attachments.some(isTextReference);
+      const hasReferences = current?.attachments.some(isRangedAttachment);
       if (current && hasReferences) {
         textPublication.cancel();
         const next = applyProfileReferenceEdit({

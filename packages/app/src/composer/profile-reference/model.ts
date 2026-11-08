@@ -12,6 +12,7 @@ import {
   buildAgentSessionAddressCard,
 } from "@/utils/session-mention-autocomplete";
 import { z } from "zod";
+import { isInlineQuote, isValidInlineQuote } from "@/attachments/inline-quote";
 
 export const ProfileReferenceSchema = z.object({
   kind: z.literal("profile_reference"),
@@ -147,6 +148,13 @@ export function findResourceLinks(text: string): ResourceLinkReference[] {
 export interface ProfileReferenceRange {
   start: number;
   end: number;
+  /** Quotes paint as quoted text; other ranges are references. */
+  style?: "quote";
+}
+
+/** Attachments bound to a range of the draft text, which edits must move or drop. */
+export function isRangedAttachment(attachment: { kind: string }): boolean {
+  return isTextReference(attachment) || isInlineQuote(attachment);
 }
 
 interface ReferenceTextInput<T extends ComposerAttachment> {
@@ -236,13 +244,17 @@ export function textReferenceContainsIndex(
 export function getProfileReferenceHighlights<T extends ComposerAttachment>(
   input: ReferenceTextInput<T>,
 ): ProfileReferenceRange[] {
+  const quotes = input.attachments.flatMap((attachment): ProfileReferenceRange[] =>
+    isInlineQuote(attachment) && isValidInlineQuote(input.text, attachment)
+      ? [{ start: attachment.start, end: attachment.end, style: "quote" }]
+      : [],
+  );
   return [
-    ...validReferences(input),
-    ...findTextReferenceLinks(input.text),
-    ...findResourceLinks(input.text),
-  ]
-    .map(({ start, end }) => ({ start, end }))
-    .sort((left, right) => left.start - right.start);
+    ...validReferences(input).map(({ start, end }) => ({ start, end })),
+    ...findTextReferenceLinks(input.text).map(({ start, end }) => ({ start, end })),
+    ...findResourceLinks(input.text).map(({ start, end }) => ({ start, end })),
+    ...quotes,
+  ].sort((left, right) => left.start - right.start);
 }
 
 function validReferences<T extends ComposerAttachment>(
@@ -303,8 +315,13 @@ export function updateProfileReferences<T extends ComposerAttachment>(
   const isTrim = input.text !== input.previousText && input.text === input.previousText.trim();
   const trimmedPrefix = input.previousText.length - input.previousText.trimStart().length;
   return input.attachments.flatMap((attachment) => {
-    if (!isTextReference(attachment)) return [attachment];
-    if (!isValidTextReference({ text: input.previousText, reference: attachment })) return [];
+    if (isInlineQuote(attachment)) {
+      if (!isValidInlineQuote(input.previousText, attachment)) return [];
+    } else if (!isTextReference(attachment)) {
+      return [attachment];
+    } else if (!isValidTextReference({ text: input.previousText, reference: attachment })) {
+      return [];
+    }
     if (input.previousText === input.text) return [attachment];
     if (isTrim) {
       const start = attachment.start - trimmedPrefix;

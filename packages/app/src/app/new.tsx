@@ -17,6 +17,7 @@ export default function NewWorkspaceRoute() {
     dir?: string;
     name?: string;
     projectId?: string;
+    projectAssigned?: string;
     draftId?: string;
     task?: string;
   }>();
@@ -24,6 +25,7 @@ export default function NewWorkspaceRoute() {
   const sourceDirectory = typeof params.dir === "string" ? params.dir : undefined;
   const displayName = typeof params.name === "string" ? params.name : undefined;
   const projectId = typeof params.projectId === "string" ? params.projectId : undefined;
+  const projectAssigned = params.projectAssigned === "false" ? false : undefined;
   const draftId = typeof params.draftId === "string" ? params.draftId : undefined;
   const boardTaskId = typeof params.task === "string" ? params.task : undefined;
   const screenKey = JSON.stringify([
@@ -31,6 +33,7 @@ export default function NewWorkspaceRoute() {
     sourceDirectory ?? null,
     displayName ?? null,
     projectId ?? null,
+    projectAssigned ?? null,
     draftId ?? null,
   ]);
 
@@ -52,6 +55,7 @@ export default function NewWorkspaceRoute() {
             sourceDirectory={sourceDirectory}
             displayName={displayName}
             projectId={projectId}
+            projectAssigned={projectAssigned}
             draftId={draftId}
             boardTaskId={boardTaskId}
           />

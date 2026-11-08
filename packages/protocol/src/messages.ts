@@ -790,6 +790,7 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
           contextKind: z.string().optional(),
           title: z.string().nullable().optional(),
           text: z.string(),
+          range: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
         }),
       )
       .optional(),
@@ -1288,6 +1289,8 @@ export const TextAttachmentSchema = z
     contextKind: z.string().optional(),
     title: z.string().nullable().optional(),
     text: z.string(),
+    /** Where this quote sits in the message text, as UTF-16 offsets. Quotes only. */
+    range: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
     externalResource: ExternalResourceAttachmentMetadataSchema.optional(),
   })
   .transform(({ contextKind, ...attachment }) => ({
@@ -1296,7 +1299,8 @@ export const TextAttachmentSchema = z
     contextKind === "agent_session" ||
     contextKind === "agent_profile" ||
     contextKind === "agent_role" ||
-    contextKind === "chat_quote"
+    contextKind === "chat_quote" ||
+    contextKind === "artifact_quote"
       ? { contextKind }
       : {}),
   }));
@@ -3366,6 +3370,7 @@ export const WorkspaceCreateRequestSchema = z.object({
       // Path of the existing checkout/directory to back the workspace.
       path: z.string(),
       projectId: z.string().optional(),
+      projectAssigned: z.boolean().optional(),
     }),
     z.object({
       kind: z.literal("worktree"),
@@ -4352,6 +4357,8 @@ export const ServerInfoStatusPayloadSchema = z
         scheduleProjectlessTargets: z.boolean().optional(),
         agentSessionShare: z.boolean().optional(),
         agentSideConversation: z.boolean().optional(),
+        // COMPAT(inlineQuotes): added in v0.15.4; remove gate after 2027-05-08.
+        inlineQuotes: z.boolean().optional(),
         // COMPAT(hubAgentRpc): added in v0.8.0; remove gate after 2027-03-05.
         hubAgentRpc: z.boolean().optional(),
         hubAgentFileRead: z.boolean().optional(),
@@ -4509,6 +4516,7 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(workspaceResident): added in v0.8, remove gate after 2027-05-04.
         workspaceResident: z.boolean().optional(),
         workspaceProjectChange: z.boolean().optional(),
+        workspaceProjectlessCreate: z.boolean().optional(),
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: z.boolean().optional(),
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.

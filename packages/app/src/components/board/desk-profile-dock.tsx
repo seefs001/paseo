@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { AgentProfileGlyph, useAgentProfiles, type AgentProfile } from "@/agent-profiles";
 import { canCreateWorktreeForProjectKind } from "@/projects/host-projects";
+import { useHostFeature } from "@/runtime/host-features";
 import { useHostDirectories } from "@/stores/session-store-hooks";
 import { DeskDropTarget, useDeskDragActive } from "./desk-dnd";
 import { isPlannedTask, type DeskDropTargetSpec } from "./desk-dnd-drop";
@@ -17,6 +18,7 @@ export function DeskProfileDock({ serverId }: { serverId: string }): ReactElemen
   const active = useDeskDragActive();
   const task = active?.type === "task" && active.serverId === serverId ? active.task : null;
   const { profiles } = useAgentProfiles(task ? serverId : null);
+  const supportsProjectlessCreate = useHostFeature(serverId, "workspaceProjectlessCreate");
   const serverIds = useMemo(() => [serverId], [serverId]);
   const [directory] = useHostDirectories(serverIds);
   const projectKind = task?.projectId
@@ -26,6 +28,7 @@ export function DeskProfileDock({ serverId }: { serverId: string }): ReactElemen
     projectKind && canCreateWorktreeForProjectKind(projectKind) ? "worktree" : "local";
 
   if (!task || !isPlannedTask(task) || task.claimedBy !== null) return null;
+  if (task.projectId === null && !supportsProjectlessCreate) return null;
   return (
     <View style={styles.dock} testID="desk-profile-dock">
       <Text style={styles.label}>{t("board.plan2.dnd.startWith")}</Text>

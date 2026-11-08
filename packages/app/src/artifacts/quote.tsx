@@ -2,14 +2,11 @@ import type { Artifact } from "@getpaseo/protocol/messages";
 import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react-native";
-import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { StyleSheet } from "react-native-unistyles";
 import type { ArtifactQuoteContextAttachment } from "@/attachments/types";
 import { generateAttachmentId } from "@/attachments/utils";
-import { ChatQuoteLine } from "@/attachments/chat-quote-pill";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { PressHighlight } from "@/components/ui/press-highlight";
-import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { useToast } from "@/contexts/toast-context";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useDraftStore } from "@/stores/draft-store";
@@ -17,7 +14,6 @@ import { useSessionStore } from "@/stores/session-store";
 import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
-import { openArtifactViewer } from "./viewer-state";
 import { toErrorMessage } from "@/utils/error-messages";
 
 export interface ArtifactQuoteInput {
@@ -87,8 +83,6 @@ export function ArtifactQuoteSheet({
       setPending(true);
       try {
         const store = useDraftStore.getState();
-        await store.hydrateDraftInput({ draftKey: destination.draftKey });
-        const draft = store.getDraftInput(destination.draftKey) ?? { text: "", attachments: [] };
         const attachment: ArtifactQuoteContextAttachment = {
           kind: "artifact_quote",
           id: generateAttachmentId(),
@@ -101,10 +95,7 @@ export function ArtifactQuoteSheet({
             revision: quote.artifact.revision,
           },
         };
-        store.saveDraftInput({
-          draftKey: destination.draftKey,
-          draft: { ...draft, attachments: [...draft.attachments, attachment] },
-        });
+        await store.attachChatQuote({ draftKey: destination.draftKey, attachment });
         onClose();
         revealWorkspaceTab(workspaceKey, destination.tabId);
         toast.show(t("artifacts.interaction.added"));
@@ -165,53 +156,9 @@ function QuoteDestinationRow({
   );
 }
 
-const ThemedX = withUnistyles(X, (theme) => ({ color: theme.colors.foregroundMuted }));
-
-export function ArtifactQuotePill({
-  attachment,
-  index,
-  disabled,
-  onRemove,
-}: {
-  attachment: ArtifactQuoteContextAttachment;
-  index: number;
-  disabled: boolean;
-  onRemove: (index: number) => void;
-}) {
-  const { t } = useTranslation();
-  const open = useCallback(() => {
-    openArtifactViewer(attachment.source.serverId, attachment.source.artifactId);
-  }, [attachment.source]);
-  const remove = useCallback(() => onRemove(index), [index, onRemove]);
-  return (
-    <View style={styles.quote} testID="composer-artifact-quote">
-      <View style={styles.excerpt}>
-        <Text style={styles.muted} numberOfLines={1}>
-          {attachment.title} · {attachment.source.revision}
-        </Text>
-        <ChatQuoteLine
-          text={attachment.selectedText}
-          onPress={open}
-          accessibilityLabel={attachment.title}
-        />
-      </View>
-      <ToolbarButton
-        compact
-        onPress={remove}
-        disabled={disabled}
-        label={t("composer.attachments.removeChatQuote")}
-      >
-        <ThemedX size={14} />
-      </ToolbarButton>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create((theme) => ({
   list: { gap: theme.spacing[2], padding: theme.spacing[4] },
   destination: { padding: theme.spacing[3], borderRadius: theme.borderRadius.md },
   title: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
   muted: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
-  quote: { flexDirection: "row", alignItems: "flex-start", gap: theme.spacing[2] },
-  excerpt: { flex: 1, minWidth: 0, gap: theme.spacing[1] },
 }));

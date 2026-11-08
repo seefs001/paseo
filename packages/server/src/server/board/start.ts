@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
 import type {
   BoardTask,
   BoardTaskStartRequestSchema,
@@ -32,13 +33,13 @@ export function startBoardTask(deps: BoardTaskStartDependencies, input: BoardTas
     if (task.completedAt !== null) {
       throw new BoardTaskError("task_completed", "Completed tasks cannot be started");
     }
-    if (task.projectId === null) {
-      throw new BoardTaskError("task_has_no_project", "Choose a project before starting this task");
-    }
-    const project = await deps.projectRegistry.get(task.projectId);
-    if (!project || project.archivedAt) {
-      throw new BoardTaskError("project_not_found", "Project not found");
-    }
+    const { project, cwd } = await resolveStartPlacement(deps.projectRegistry, {
+      projectId: task.projectId,
+      isolation: input.isolation,
+    });
+    const projectAssociation = project
+      ? { projectId: project.projectId }
+      : { projectAssigned: false };
     const selection = resolveAgentConfig(deps, input.agent);
     const digest = createHash("sha256")
       .update(JSON.stringify([task.id, input.idempotencyKey]))
@@ -57,11 +58,11 @@ export function startBoardTask(deps: BoardTaskStartDependencies, input: BoardTas
     const parentBranch = await readParentBranch(deps, task);
     const source: WorkspaceCreateRequest["source"] =
       input.isolation === "local"
-        ? { kind: "directory", path: project.rootPath, projectId: project.projectId }
+        ? { kind: "directory", path: cwd, ...projectAssociation }
         : {
             kind: "worktree",
-            cwd: project.rootPath,
-            projectId: project.projectId,
+            cwd,
+            projectId: project?.projectId,
             action: "branch-off",
             ...(parentBranch ? { baseBranch: parentBranch } : {}),
           };
@@ -77,7 +78,7 @@ export function startBoardTask(deps: BoardTaskStartDependencies, input: BoardTas
       agent: {
         config: {
           provider: selection.provider,
-          cwd: project.rootPath,
+          cwd,
           title: task.title,
           model: selection.model,
           modeId: selection.modeId,
@@ -104,6 +105,23 @@ export function startBoardTask(deps: BoardTaskStartDependencies, input: BoardTas
     return { workspaceId: creation.workspaceId, agentId: creation.agentId };
   };
   return deps.service.start(input.taskId, launch, input.callerAgentId);
+}
+
+async function resolveStartPlacement(
+  projectRegistry: Pick<ProjectRegistry, "get">,
+  input: Pick<BoardTask, "projectId"> & Pick<BoardTaskStartInput, "isolation">,
+) {
+  if (input.projectId === null) {
+    if (input.isolation === "worktree") {
+      throw new BoardTaskError("task_has_no_project", "Worktree isolation requires a project");
+    }
+    return { project: null, cwd: homedir() };
+  }
+  const project = await projectRegistry.get(input.projectId);
+  if (!project || project.archivedAt) {
+    throw new BoardTaskError("project_not_found", "Project not found");
+  }
+  return { project, cwd: project.rootPath };
 }
 
 function buildStartPrompt(task: BoardTask): string {

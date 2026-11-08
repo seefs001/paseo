@@ -20,7 +20,7 @@ export function buildWorkspaceArchiveRedirectRoute(input: {
   const sourceDirectory =
     archivedWorkspace?.projectRootPath || archivedWorkspace?.workspaceDirectory;
   if (archivedWorkspace?.projectId === null)
-    return buildNewWorkspaceRoute({ serverId: input.serverId });
+    return buildNewWorkspaceRoute({ serverId: input.serverId, projectAssigned: false });
   if (!sourceDirectory) {
     return buildHostRootRoute(input.serverId);
   }

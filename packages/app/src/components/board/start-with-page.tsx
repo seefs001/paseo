@@ -28,14 +28,16 @@ export function BoardStartWithPage({
 }: {
   serverId: string;
   taskId: string;
-  project: ProjectDescriptor;
+  project: ProjectDescriptor | null;
 }): ReactElement {
   const { t } = useTranslation();
   const toast = useToast();
   const close = useDropdownMenuClose();
   const { profiles, isSupported } = useAgentProfiles(serverId);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const isolation = canCreateWorktreeForProjectKind(project.projectKind) ? "worktree" : "local";
+  const canCreateWorktree =
+    project !== null && canCreateWorktreeForProjectKind(project.projectKind);
+  const isolation = canCreateWorktree ? "worktree" : "local";
 
   const start = useCallback(
     async (profileId: string) => {

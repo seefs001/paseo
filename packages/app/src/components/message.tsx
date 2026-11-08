@@ -2,8 +2,9 @@ import { useDisclosureHold } from "@/agent-stream/disclosure";
 import { MessagePreview, MessageSender } from "@/components/user-message";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
-import { parseSentChatQuote } from "@/attachments/chat-quote-format";
-import { SentChatQuote } from "@/attachments/chat-quote-pill";
+import { parseSentArtifactQuote, parseSentChatQuote } from "@/attachments/chat-quote-format";
+import { openChatQuoteSource } from "@/attachments/chat-quote-jump";
+import { QuoteStack, type QuoteStackItem } from "@/attachments/quote-stack";
 import { AssistantTurnInfo } from "@/components/assistant-turn-info";
 import type { AgentTurnInfo } from "@getpaseo/protocol/agent-types";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
@@ -24,7 +25,7 @@ import {
 import { useReferencePreview } from "@/composer/profile-reference/preview";
 import { findSentResourceCard } from "@/composer/profile-reference/resolve";
 import { ReferenceCopySurface } from "@/composer/profile-reference/copy-surface";
-import { ProfileReferenceMessage } from "@/composer/profile-reference/message";
+import { ProfileReferenceMessage, type MessageQuote } from "@/composer/profile-reference/message";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { TaskListRow } from "@/components/task-list-row";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -34,6 +35,8 @@ import { useRevealedText, type MarkdownPhase } from "@/hooks/use-revealed-text";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { buildToolCallPresentation } from "@/tool-calls/presentation";
+import { getArtifactRegistration } from "@/tool-calls/artifact-registration";
+import { openArtifactViewer } from "@/artifacts/viewer-state";
 import { getNmemCall } from "@/tool-calls/nmem/model";
 import { NmemDetails } from "@/tool-calls/nmem/details";
 import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/types/stream";
@@ -513,23 +516,18 @@ export const UserMessage = memo(function UserMessage({
     [referencePreview, references, sentCards],
   );
   const hasText = displayText.trim().length > 0;
-  const sentQuotes = useMemo(
-    () =>
-      visibleAttachments.flatMap((attachment) =>
-        attachment.type === "text" && attachment.contextKind === "chat_quote"
-          ? [{ key: attachment.text, ...parseSentChatQuote(attachment.text) }]
-          : [],
-      ),
-    [visibleAttachments],
+  const inlineQuotes = useMemo(
+    () => buildInlineQuotes({ attachments: visibleAttachments, displayText, references, t }),
+    [displayText, references, t, visibleAttachments],
   );
+  const sentQuotes = useMemo(
+    () => buildSentQuoteItems(visibleAttachments, t, inlineQuotes.placed),
+    [inlineQuotes.placed, visibleAttachments, t],
+  );
+  // Quotes show in the text or in the quote block, never as chips.
   const chipAttachments = useMemo(
-    () =>
-      sentQuotes.length === 0
-        ? visibleAttachments
-        : visibleAttachments.filter(
-            (attachment) => attachment.type !== "text" || attachment.contextKind !== "chat_quote",
-          ),
-    [sentQuotes.length, visibleAttachments],
+    () => visibleAttachments.filter((attachment) => !isSentQuoteAttachment(attachment)),
+    [visibleAttachments],
   );
   const hasQuotes = sentQuotes.length > 0;
   const hasImages = images.length > 0;
@@ -631,14 +629,7 @@ export const UserMessage = memo(function UserMessage({
             ) : null}
             {hasQuotes ? (
               <View style={quotesContainerStyle}>
-                {sentQuotes.map((quote) => (
-                  <SentChatQuote
-                    key={quote.key}
-                    text={quote.selectedText}
-                    comment={quote.comment}
-                    source={quote.source}
-                  />
-                ))}
+                <QuoteStack items={sentQuotes} variant="sent" testID="user-message-quotes" />
               </View>
             ) : null}
             {hasText ? (
@@ -648,6 +639,7 @@ export const UserMessage = memo(function UserMessage({
                     text={displayText}
                     references={references}
                     onOpenReference={handleOpenReference}
+                    quotes={inlineQuotes.quotes}
                   />
                 </Text>
               </ReferenceCopySurface>
@@ -2496,9 +2488,17 @@ export const ToolCall = memo(function ToolCall({
     }
     return () => onOpenFilePath(openFilePath);
   }, [presentation.openFilePath, onOpenFilePath]);
+  const openArtifact = useRegisteredArtifactOpener({
+    serverId,
+    toolName,
+    status,
+    detail: effectiveDetail,
+  });
 
   const handleToggle = useCallback(() => {
-    if (nmemCall) {
+    if (openArtifact) {
+      openArtifact();
+    } else if (nmemCall) {
       setNmemDetailsOpen(true);
     } else if (!shouldRenderInline) {
       openToolCall({
@@ -2514,6 +2514,7 @@ export const ToolCall = memo(function ToolCall({
       hold(toggleExpanded);
     }
   }, [
+    openArtifact,
     nmemCall,
     hold,
     shouldRenderInline,
@@ -2608,12 +2609,15 @@ export const ToolCall = memo(function ToolCall({
         label={presentation.displayName}
         secondaryLabel={presentation.summary}
         icon={presentation.icon}
-        isExpanded={shouldRenderInline && isExpanded}
-        onToggle={presentation.canOpenDetails ? handleToggle : undefined}
+        {...toolCallBadgeInteraction({
+          opensArtifact: Boolean(openArtifact),
+          canOpenDetails: presentation.canOpenDetails,
+          shouldRenderInline,
+          isExpanded,
+          handleToggle,
+          renderDetails,
+        })}
         onOpenFile={handleOpenFile}
-        renderDetails={
-          presentation.canOpenDetails && shouldRenderInline ? renderDetails : undefined
-        }
         isLoading={status === "running" || status === "executing"}
         isError={status === "failed"}
         isLastInSequence={isLastInSequence}
@@ -2623,6 +2627,44 @@ export const ToolCall = memo(function ToolCall({
     </>
   );
 }, areToolCallPropsEqual);
+
+/** A registered artifact opens like a link; other states keep the call details. */
+function useRegisteredArtifactOpener(input: {
+  serverId: string | undefined;
+  toolName: string;
+  status: string;
+  detail: ToolCallDetail | undefined;
+}): (() => void) | undefined {
+  const { serverId, toolName, status, detail } = input;
+  const registration = useMemo(
+    () => getArtifactRegistration({ toolName, status, detail }),
+    [toolName, status, detail],
+  );
+  const artifactId = registration?.state === "registered" ? registration.artifactId : null;
+  return useMemo(() => {
+    if (!artifactId || !serverId) return undefined;
+    return () => openArtifactViewer(serverId, artifactId);
+  }, [artifactId, serverId]);
+}
+
+function toolCallBadgeInteraction(input: {
+  opensArtifact: boolean;
+  canOpenDetails: boolean;
+  shouldRenderInline: boolean;
+  isExpanded: boolean;
+  handleToggle: () => void;
+  renderDetails: () => ReactNode;
+}) {
+  if (input.opensArtifact) {
+    return { isExpanded: false, onToggle: input.handleToggle, renderDetails: undefined };
+  }
+  return {
+    isExpanded: input.shouldRenderInline && input.isExpanded,
+    onToggle: input.canOpenDetails ? input.handleToggle : undefined,
+    renderDetails:
+      input.canOpenDetails && input.shouldRenderInline ? input.renderDetails : undefined,
+  };
+}
 
 function areToolCallPropsEqual(previous: ToolCallProps, next: ToolCallProps) {
   if (previous.toolName !== next.toolName) return false;
@@ -2644,4 +2686,124 @@ function areToolCallPropsEqual(previous: ToolCallProps, next: ToolCallProps) {
   if (previous.itemId !== next.itemId) return false;
   if (previous.standalone !== next.standalone) return false;
   return true;
+}
+
+function isSentQuoteAttachment(attachment: AgentAttachment): boolean {
+  return (
+    attachment.type === "text" &&
+    (attachment.contextKind === "chat_quote" || attachment.contextKind === "artifact_quote")
+  );
+}
+
+/** Quotes on a sent message, in send order. Bodies are parsed only for tagged quote attachments. */
+function buildSentQuoteItems(
+  attachments: readonly AgentAttachment[],
+  t: (key: string, options?: Record<string, unknown>) => string,
+  placed: ReadonlySet<AgentAttachment>,
+): QuoteStackItem[] {
+  return attachments.flatMap((attachment, index): QuoteStackItem[] => {
+    if (attachment.type !== "text" || placed.has(attachment)) return [];
+    const key = `${index}:${attachment.text}`;
+    if (attachment.contextKind === "chat_quote") {
+      const quote = parseSentChatQuote(attachment.text);
+      const { source } = quote;
+      return [
+        {
+          key,
+          kind: "chat",
+          sourceLabel: t("composer.attachments.quoteFromConversation"),
+          text: quote.selectedText,
+          comment: quote.comment,
+          onOpen: source ? () => openChatQuoteSource(source) : undefined,
+          openLabel: t("composer.attachments.openChatQuoteSource"),
+        },
+      ];
+    }
+    if (attachment.contextKind === "artifact_quote") {
+      const quote = parseSentArtifactQuote(attachment.text, attachment.title);
+      const { source } = quote;
+      return [
+        {
+          key,
+          kind: "artifact",
+          sourceLabel: source
+            ? t("composer.attachments.artifactQuoteSource", {
+                title: quote.title,
+                revision: source.revision,
+              })
+            : quote.title,
+          text: quote.selectedText,
+          comment: quote.comment,
+          onOpen: source ? () => openArtifactViewer(source.serverId, source.artifactId) : undefined,
+          openLabel: t("composer.attachments.openArtifactQuoteSource"),
+        },
+      ];
+    }
+    return [];
+  });
+}
+
+/** Maps an offset in the sent text to the decoded text, where reference links show as labels. */
+function toDisplayOffset(
+  rawOffset: number,
+  references: readonly MessageReference[],
+): number | null {
+  let delta = 0;
+  for (const reference of references) {
+    const rawStart = reference.start + delta;
+    const rawEnd = rawStart + reference.markdown.length;
+    if (rawOffset <= rawStart) break;
+    if (rawOffset < rawEnd) return null;
+    delta += reference.markdown.length - (reference.end - reference.start);
+  }
+  return rawOffset - delta;
+}
+
+/**
+ * Quotes sent with a place in the text. Only tagged quote attachments with a range count, and
+ * only when the text at that range is exactly the quoted excerpt; anything else, including
+ * typed text that looks like a quote, stays plain text.
+ */
+function buildInlineQuotes(input: {
+  attachments: readonly AgentAttachment[];
+  displayText: string;
+  references: readonly MessageReference[];
+  t: (key: string, options?: Record<string, unknown>) => string;
+}): { quotes: MessageQuote[]; placed: ReadonlySet<AgentAttachment> } {
+  const { displayText, references, t } = input;
+  const placed = new Set<AgentAttachment>();
+  const quotes = input.attachments.flatMap((attachment, index): MessageQuote[] => {
+    if (attachment.type !== "text" || !attachment.range) return [];
+    const isChat = attachment.contextKind === "chat_quote";
+    if (!isChat && attachment.contextKind !== "artifact_quote") return [];
+    const start = toDisplayOffset(attachment.range.start, references);
+    const end = toDisplayOffset(attachment.range.end, references);
+    if (start === null || end === null || end <= start) return [];
+    const parsed = isChat
+      ? parseSentChatQuote(attachment.text)
+      : parseSentArtifactQuote(attachment.text, attachment.title);
+    if (displayText.slice(start, end) !== parsed.selectedText) return [];
+    placed.add(attachment);
+    let onOpen: (() => void) | undefined;
+    if (isChat) {
+      const source = (parsed as ReturnType<typeof parseSentChatQuote>).source;
+      if (source) onOpen = () => openChatQuoteSource(source);
+    } else {
+      const source = (parsed as ReturnType<typeof parseSentArtifactQuote>).source;
+      if (source) onOpen = () => openArtifactViewer(source.serverId, source.artifactId);
+    }
+    return [
+      {
+        key: `${index}:${start}`,
+        start,
+        end,
+        onOpen,
+        accessibilityLabel: isChat
+          ? t("composer.attachments.openChatQuoteSource")
+          : t("composer.attachments.openArtifactQuoteSource"),
+        testID: isChat ? "user-message-inline-chat-quote" : "user-message-inline-artifact-quote",
+      },
+    ];
+  });
+  return { quotes, placed };
 }

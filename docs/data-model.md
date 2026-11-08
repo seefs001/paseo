@@ -32,7 +32,8 @@ recovery possible after the checkout metadata is deleted. A newly opened workspa
 the checkout's selected base; separate worktrees keep separate bases.
 An explicit **Change project** operation may replace one active workspace's `projectId` with
 another active project on the same host, or with `null` for **No project**. Explicit `null`
-is durable membership, not missing data to infer from the directory. A missing referenced project
+is durable membership, not missing data to infer from the directory. You can also create an
+[unassigned workspace](../public-docs/workspaces.md#creating-a-workspace) directly. A missing referenced project
 remains an error; it is not treated as user-requested unassignment. This changes grouping, not the filesystem: execution
 directory, checkout ownership, workspace identity, conversations, terminals, tabs, pins and
 resident status stay unchanged. Same-directory siblings keep their membership. Schedules retain

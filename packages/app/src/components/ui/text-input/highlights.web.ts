@@ -82,7 +82,16 @@ export function useTextInputHighlights(
         if (part.highlighted) {
           const span = document.createElement("span");
           // Unistyles' live CSS token follows theme changes without subscribing the editor.
-          span.style.backgroundColor = "var(--colors-interaction-highlight)";
+          if (part.kind === "quote") {
+            // A quote reads as quoted text: a faint wash and a bar on every line it wraps to.
+            span.style.backgroundColor = "var(--colors-surface3)";
+            span.style.boxShadow =
+              "inset 2px 0 0 var(--colors-border-accent, var(--colors-border))";
+            span.style.setProperty("box-decoration-break", "clone");
+            span.style.setProperty("-webkit-box-decoration-break", "clone");
+          } else {
+            span.style.backgroundColor = "var(--colors-interaction-highlight)";
+          }
           span.textContent = part.text;
           fragment.append(span);
         } else {

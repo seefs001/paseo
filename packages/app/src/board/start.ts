@@ -91,7 +91,7 @@ export function startBoardTask(input: {
         sourceDirectory: project.projectRootPath,
         displayName: project.projectCustomName ?? project.projectDisplayName,
       }
-    : {};
+    : { projectAssigned: false };
   router.push(buildNewWorkspaceRoute({ serverId, draftId, boardTaskId: task.id, ...projectRoute }));
 }
 

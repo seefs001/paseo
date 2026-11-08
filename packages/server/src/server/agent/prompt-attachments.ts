@@ -61,14 +61,16 @@ export function userVisiblePromptText(prompt: AgentPromptInput): string {
 
 /**
  * Prompt context the timeline keeps beside the user's text so the App can show it in history.
- * Only quoted messages: other attachments are not displayed from history.
+ * Only quoted messages and artifact excerpts: other attachments are not displayed from history.
  */
 export function userMessageContextAttachments(
   prompt: AgentPromptInput,
 ): UserMessageContextAttachment[] {
   if (typeof prompt === "string") return [];
   return prompt.flatMap((block) =>
-    block.type === "text" && "mimeType" in block && block.contextKind === "chat_quote"
+    block.type === "text" &&
+    "mimeType" in block &&
+    (block.contextKind === "chat_quote" || block.contextKind === "artifact_quote")
       ? [
           {
             type: "text" as const,
@@ -76,6 +78,7 @@ export function userMessageContextAttachments(
             contextKind: block.contextKind,
             ...(block.title !== undefined ? { title: block.title } : {}),
             text: block.text,
+            ...(block.range ? { range: block.range } : {}),
           },
         ]
       : [],

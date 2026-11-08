@@ -151,7 +151,9 @@ export class WorkspaceCreation {
                 request.source.kind === "directory"
                   ? request.source.path
                   : await resolveWorktreeSourceCwd(request.source, this.deps.projectRegistry);
-              const relativeCwd = relative(resolve(sourceCwd), resolve(agentInput.config.cwd));
+              const sourceDirectory = resolve(expandTilde(sourceCwd));
+              const agentDirectory = resolve(expandTilde(agentInput.config.cwd));
+              const relativeCwd = relative(sourceDirectory, agentDirectory);
               if (
                 relativeCwd === ".." ||
                 relativeCwd.startsWith(`..${sep}`) ||
@@ -225,6 +227,10 @@ export class WorkspaceCreation {
       throw new Error("Unexpected workspace source");
     }
 
+    if (request.source.projectAssigned === false && request.source.projectId !== undefined) {
+      throw new Error("An unassigned workspace cannot specify a project");
+    }
+    const projectId = request.source.projectAssigned === false ? null : request.source.projectId;
     const cwd = expandTilde(request.source.path);
     const directoryExists = await this.deps.isDirectory(cwd).catch(() => false);
     if (!directoryExists) {
@@ -236,7 +242,7 @@ export class WorkspaceCreation {
     const workspace = await this.deps.workspaceProvisioning.createWorkspaceForDirectory(
       cwd,
       explicitTitle ?? promptTitle,
-      request.source.projectId,
+      projectId,
       {
         expectsInitialAgent: Boolean(request.firstAgentContext),
         workspaceId,

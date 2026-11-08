@@ -21,7 +21,18 @@ interface ManualProjectSelection {
   source: "manual";
 }
 
-export type ProjectSelection = InitialProjectSelection | ManualProjectSelection;
+interface NoProjectSelection {
+  contextKey: string;
+  project: null;
+  source: "none";
+}
+
+export const NO_PROJECT_OPTION_ID = "no-project";
+
+export type ProjectSelection =
+  | InitialProjectSelection
+  | ManualProjectSelection
+  | NoProjectSelection;
 
 export interface ProjectSelectionContext {
   contextKey: string;
@@ -104,7 +115,7 @@ function resolveSelectedProjectFromInitialInputs(
 }
 
 function refreshSelectionProject(
-  selection: ProjectSelection,
+  selection: Exclude<ProjectSelection, NoProjectSelection>,
   project: HostProjectListItem,
 ): ProjectSelection {
   if (selection.project === project) {
@@ -206,10 +217,12 @@ export function reconcileProjectSelection(
 ): ProjectSelection {
   const initialSelection = createProjectSelection(context);
   const currentContextKey =
-    current.source === "manual" ? context.manualContextKey : context.contextKey;
+    current.source === "initial" ? context.contextKey : context.manualContextKey;
   if (current.contextKey !== currentContextKey) {
     return initialSelection;
   }
+
+  if (current.source === "none") return current;
 
   if (shouldResetHydratedInitialSelection(current, context)) {
     return initialSelection;

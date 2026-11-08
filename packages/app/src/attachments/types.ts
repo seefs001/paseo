@@ -107,6 +107,9 @@ export interface ChatQuoteContextAttachment {
     agentId: string;
     messageId: string;
   };
+  /** The quote's range in the draft text. Absent on quotes added before inline quoting. */
+  start?: number;
+  end?: number;
 }
 
 export interface ArtifactQuoteContextAttachment {
@@ -114,12 +117,17 @@ export interface ArtifactQuoteContextAttachment {
   id: string;
   title: string;
   selectedText: string;
+  /** The user's note about the excerpt, sent with it. */
+  comment?: string;
   source: {
     serverId: string;
     workspaceId: string;
     artifactId: string;
     revision: number;
   };
+  /** The quote's range in the draft text. Absent on quotes added before inline quoting. */
+  start?: number;
+  end?: number;
 }
 
 export interface AgentSessionContextAttachment {

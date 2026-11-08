@@ -1,6 +1,7 @@
 import { isTurnTrigger, isTurnBoundary } from "@/agent-stream/turn-membership";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import type { StreamItem, ToolCallItem, ThoughtItem } from "@/types/stream";
+import { isRegisterArtifactCall } from "../artifact-registration";
 import { getSkillReadName } from "../skill-read";
 import { getNmemCall } from "../nmem/model";
 import { getCodemodeMcpCall } from "../mcp";
@@ -81,6 +82,7 @@ export function isGroupableToolCall(
     descriptor.detail.type === "plan" ||
     descriptor.name.trim().toLowerCase() === "speak" ||
     getSkillReadName(descriptor.detail) !== undefined ||
+    isRegisterArtifactCall(descriptor.name) ||
     getNmemCall(descriptor.detail) !== null ||
     getCodemodeMcpCall(descriptor) !== null;
   return !isStandalone;

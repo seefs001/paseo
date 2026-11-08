@@ -1,12 +1,10 @@
+import { updateProfileReferences } from "@/composer/profile-reference/model";
+import { insertInlineQuote, type ComposerQuote } from "@/attachments/inline-quote";
 import { create } from "zustand";
 import { generateMessageId } from "@/types/stream";
 import { persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type {
-  AttachmentMetadata,
-  ChatQuoteContextAttachment,
-  WorkspaceFileComposerAttachment,
-} from "@/attachments/types";
+import type { AttachmentMetadata, WorkspaceFileComposerAttachment } from "@/attachments/types";
 import { appendWorkspaceFileAttachment } from "@/attachments/workspace-file";
 import {
   garbageCollectAttachments,
@@ -60,10 +58,8 @@ interface DraftStoreActions {
     draftKey: string;
     attachment: WorkspaceFileComposerAttachment;
   }) => Promise<void>;
-  attachChatQuote: (input: {
-    draftKey: string;
-    attachment: ChatQuoteContextAttachment;
-  }) => Promise<void>;
+  /** Writes a quote into the draft text at its end and asks the composer to show it. */
+  attachChatQuote: (input: { draftKey: string; attachment: ComposerQuote }) => Promise<void>;
   getCreateModalDraft: () => DraftInput | null;
   saveCreateModalDraft: (draft: DraftInput | null) => void;
   collectActiveAttachmentIds: () => string[];
@@ -465,11 +461,19 @@ export const useDraftStore = create<DraftStore>()(
         set((state) => {
           const existing = state.drafts[draftKey];
           const draft = toDraftInputIfReady(existing) ?? { text: "", attachments: [] };
+          const inline = insertInlineQuote({ draftKey, text: draft.text, quote: attachment });
+          // Existing quotes and references after the insertion point move with the text.
+          const moved = updateProfileReferences({
+            previousText: draft.text,
+            text: inline.text,
+            attachments: draft.attachments,
+            selectionBefore: inline.replaced,
+          });
           return {
             drafts: {
               ...state.drafts,
               [draftKey]: createDraftRecord({
-                draft: { ...draft, attachments: [...draft.attachments, attachment] },
+                draft: { text: inline.text, attachments: [...moved, inline.quote] },
                 lifecycle: "active",
                 previousVersion: existing?.version,
               }),

@@ -50,7 +50,17 @@ const workspace = await client.workspaces.create({
 
 传入 `agent` 可以在一次调用中同时创建工作区及其第一个 Agent。参见[后台工作区组合示例](./agents.md#run-work-in-a-background-workspace)。可见性在工作区选项中设置；`agent.background` 会被拒绝。
 
-如果你已经有 `projectId`，可以在任一种来源中传入它。大多数集成应该省略它；daemon 会根据目录查找或创建项目。
+如果你已经有 `projectId`，可以在任一种来源中传入它。省略时保留原行为：daemon 根据目录查找或创建项目。
+
+创建无项目工作区时，使用目录来源，传入 `projectAssigned: false`，不要同时传入 `projectId`：
+
+```ts
+const workspace = await client.workspaces.create({
+  source: { kind: "directory", path: "~", projectAssigned: false },
+});
+```
+
+这需要 `features.workspaceProjectlessCreate`；对不支持的主机，客户端提示更新，不会改为创建项目。应用中的**无项目**选项见[工作区](/docs/workspaces#creating-a-workspace)。
 
 传入 `background: true` 可以让工作区不出现在默认的发现结果中。它的 Agent 和终端仍然是持久的，有正常的历史记录、生命周期钩子、归档和精确 ID 访问。应用侧边栏提供 **显示后台工作区**，不会丢弃已同步的状态。
 

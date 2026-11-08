@@ -1,14 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { CornerDownRight, Pencil, X } from "lucide-react-native";
+import { CornerDownRight } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { ChatQuoteContextAttachment } from "@/attachments/types";
 import { openChatQuoteSource } from "@/attachments/chat-quote-jump";
-import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { PressHighlight } from "@/components/ui/press-highlight";
-import { Field, FormTextInput } from "@/components/ui/form-field";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 type ChatQuoteSource = ChatQuoteContextAttachment["source"];
@@ -99,99 +96,9 @@ export function ChatQuotePreview({ text, source }: ChatQuotePreviewProps) {
   return <SentChatQuote text={text} source={source} />;
 }
 
-interface ChatQuoteAttachmentPillProps {
-  attachment: ChatQuoteContextAttachment;
-  index: number;
-  disabled: boolean;
-  onRemove: (index: number) => void;
-  onChangeComment: (index: number, comment: string) => void;
-}
-
-/**
- * The quote in the composer, above the input. Pressing it opens a sheet to edit the comment
- * or go to the quoted message; the trailing button removes it.
- */
-export function ChatQuoteAttachmentPill({
-  attachment,
-  index,
-  disabled,
-  onRemove,
-  onChangeComment,
-}: ChatQuoteAttachmentPillProps) {
-  const { t } = useTranslation();
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [commentDraft, setCommentDraft] = useState(attachment.comment ?? "");
-  const openSheet = useCallback(() => {
-    setCommentDraft(attachment.comment ?? "");
-    setSheetOpen(true);
-  }, [attachment.comment]);
-  // The draft commits on close so typing does not rewrite the composer draft per keystroke.
-  const closeSheet = useCallback(() => {
-    setSheetOpen(false);
-    if (commentDraft.trim() !== (attachment.comment ?? "")) onChangeComment(index, commentDraft);
-  }, [attachment.comment, commentDraft, index, onChangeComment]);
-  const goToSource = useCallback(() => {
-    openChatQuoteSource(attachment.source);
-  }, [attachment.source]);
-  const remove = useCallback(() => onRemove(index), [index, onRemove]);
-  const header = useMemo<SheetHeader>(() => ({ title: t("composer.attachments.chatQuote") }), [t]);
-  return (
-    <View style={styles.composerRow} testID="composer-chat-quote">
-      <ChatQuoteLine
-        testID="composer-chat-quote-attachment-pill"
-        text={attachment.selectedText}
-        comment={attachment.comment}
-        clampComment
-        onPress={goToSource}
-        accessibilityLabel={t("composer.attachments.openChatQuoteSource")}
-      />
-      <ToolbarButton
-        compact
-        onPress={openSheet}
-        disabled={disabled}
-        label={t("composer.attachments.openChatQuote", { text: attachment.selectedText })}
-        testID="composer-chat-quote-edit"
-      >
-        {editIcon}
-      </ToolbarButton>
-      <ToolbarButton
-        compact
-        onPress={remove}
-        disabled={disabled}
-        label={t("composer.attachments.removeChatQuote")}
-        testID="composer-chat-quote-remove"
-      >
-        {removeIcon}
-      </ToolbarButton>
-      <AdaptiveModalSheet header={header} visible={sheetOpen} onClose={closeSheet}>
-        <View style={styles.sheet}>
-          <Text style={styles.sheetQuote} selectable>
-            {attachment.selectedText}
-          </Text>
-          <Field label={t("composer.attachments.chatQuoteComment")}>
-            <FormTextInput
-              testID="chat-quote-comment-input"
-              initialValue={commentDraft}
-              onChangeText={setCommentDraft}
-              editable={!disabled}
-              multiline
-              placeholder={t("composer.attachments.chatQuoteCommentPlaceholder")}
-              style={styles.commentInput}
-            />
-          </Field>
-        </View>
-      </AdaptiveModalSheet>
-    </View>
-  );
-}
-
 const ThemedQuoteIcon = withUnistyles(CornerDownRight);
-const ThemedX = withUnistyles(X);
-const ThemedPencil = withUnistyles(Pencil);
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const quoteIcon = <ThemedQuoteIcon size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
-const editIcon = <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
-const removeIcon = <ThemedX size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />;
 
 const styles = StyleSheet.create((theme) => ({
   line: {
@@ -218,27 +125,5 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     paddingLeft: ICON_SIZE.sm + theme.spacing[2],
-  },
-  composerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: theme.spacing[2],
-    width: "100%",
-    paddingBottom: theme.spacing[2],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  sheet: {
-    gap: theme.spacing[3],
-  },
-  sheetQuote: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.content,
-    paddingLeft: theme.spacing[3],
-    borderLeftWidth: 2,
-    borderLeftColor: theme.colors.border,
-  },
-  commentInput: {
-    minHeight: 72,
   },
 }));

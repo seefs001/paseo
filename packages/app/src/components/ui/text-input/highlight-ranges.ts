@@ -4,6 +4,7 @@ interface HighlightedTextPart {
   start: number;
   text: string;
   highlighted: boolean;
+  kind?: "quote";
 }
 
 export function splitHighlightedText(
@@ -20,7 +21,7 @@ export function splitHighlightedText(
     if (start > cursor) {
       parts.push({ start: cursor, text: text.slice(cursor, start), highlighted: false });
     }
-    parts.push({ start, text: text.slice(start, end), highlighted: true });
+    parts.push({ start, text: text.slice(start, end), highlighted: true, kind: range.style });
     cursor = end;
   }
   if (cursor < text.length) {

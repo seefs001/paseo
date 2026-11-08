@@ -3593,6 +3593,20 @@ export class DaemonClient {
     }
   }
 
+  /**
+   * A quote placed in the message text needs a host that keeps its place; an older host drops
+   * it and its history would show the quote twice. Quotes without a place still send.
+   */
+  private requireInlineQuotes(request: { attachments?: readonly unknown[] } | undefined): void {
+    const placed = request?.attachments?.some(
+      (attachment) =>
+        typeof attachment === "object" && attachment !== null && "range" in attachment,
+    );
+    if (placed && this.lastServerInfoMessage?.features?.inlineQuotes !== true) {
+      throw new Error("Update the Paseo host to send quotes inside the message text.");
+    }
+  }
+
   async createAgent(options: CreateAgentRequestOptions): Promise<AgentSnapshotPayload> {
     if (options.git !== undefined || options.worktreeName !== undefined) {
       throw new Error(
@@ -3600,6 +3614,7 @@ export class DaemonClient {
       );
     }
     if (options.background !== undefined) this.requireBackgroundCreation(options);
+    this.requireInlineQuotes(options);
     const result = await this.creations.createAgent({
       ...options,
       config: resolveAgentConfig(options),
@@ -4367,6 +4382,7 @@ export class DaemonClient {
     ) {
       throw new Error("Update the Paseo host to send messages with a qualified agent address.");
     }
+    this.requireInlineQuotes(options);
     const requestId = this.createRequestId();
     const messageId = options.messageId ?? crypto.randomUUID();
     const message = SessionInboundMessageSchema.parse({
@@ -5532,9 +5548,17 @@ export class DaemonClient {
     requestId?: string,
   ): Promise<WorkspaceCreatePayload> {
     const resolvedRequestId = this.createRequestId(requestId ?? input.requestId);
+    if (
+      input.source.kind === "directory" &&
+      input.source.projectAssigned === false &&
+      this.lastServerInfoMessage?.features?.workspaceProjectlessCreate !== true
+    ) {
+      throw new Error("Update the host to create workspaces without a project");
+    }
     if (input.background !== undefined || input.callerAgentId) this.requireBackgroundWorkspaces();
     if (input.agent?.background !== undefined)
       throw new Error("Configure background on the workspace, not its initial agent.");
+    this.requireInlineQuotes(input.agent);
     const result = await this.creations.createWorkspace({
       ...input,
       requestId: resolvedRequestId,

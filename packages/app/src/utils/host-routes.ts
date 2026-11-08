@@ -445,6 +445,7 @@ interface NewWorkspaceRouteOptions {
   sourceDirectory?: string;
   displayName?: string;
   projectId?: string;
+  projectAssigned?: boolean;
   draftId?: string;
   /** Board task to link to the workspace this screen creates, on the same host. */
   boardTaskId?: string;
@@ -464,6 +465,9 @@ function buildNewWorkspaceSearch(options: NewWorkspaceRouteOptions): string {
   }
   if (options.projectId) {
     params.set("projectId", options.projectId);
+  }
+  if (options.projectAssigned === false) {
+    params.set("projectAssigned", "false");
   }
   if (options.draftId) {
     params.set("draftId", options.draftId);

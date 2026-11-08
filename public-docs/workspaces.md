@@ -14,7 +14,7 @@ A workspace is the place where a task happens. It has a working directory and ca
 
 ## Projects contain workspaces
 
-The sidebar starts with projects. A project can be a git repository, a GitHub project, or any directory on a machine running the Paseo daemon.
+A workspace can belong to a project or have **No project**. Unassigned workspaces appear in the sidebar with a chat icon. A project can be a git repository, a GitHub project, or any directory on a machine running the Paseo daemon.
 
 Inside each project are workspaces. For example:
 
@@ -50,7 +50,9 @@ The workspace is the product concept; a git worktree is one way to isolate its f
 
 For a desktop walkthrough from starting parallel agents to reviewing and testing their changes, see [Run parallel tasks](/docs/parallel-development).
 
-You can create a workspace in the app or from the CLI:
+In **New workspace**, select **No project** to work in the host user's home directory without registering a project. This works for chat, an empty workspace, and terminal launches. It uses **Local** isolation; creating a worktree still needs a source project. Update both the app and host to use this option.
+
+You can also create a workspace from the CLI:
 
 ```bash
 paseo workspace create --isolation local --path ~/dev/my-app --title main

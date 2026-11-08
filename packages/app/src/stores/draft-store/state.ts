@@ -6,7 +6,7 @@ import {
 import { PluginResourceComposerAttachmentSchema } from "@/plugins/attachments";
 import { z } from "zod";
 import {
-  isTextReference,
+  isRangedAttachment,
   ProfileReferenceSchema,
   RoleReferenceSchema,
   SessionReferenceSchema,
@@ -47,7 +47,7 @@ export function editDraftRecordText(
   if (record?.lifecycle === "active" && record.input.text === text) return record;
   const previousText = record?.lifecycle === "active" ? record.input.text : "";
   const previousAttachments = record?.lifecycle === "active" ? record.input.attachments : [];
-  const hasTextReferences = previousAttachments.some(isTextReference);
+  const hasTextReferences = previousAttachments.some(isRangedAttachment);
   const attachments = hasTextReferences
     ? updateProfileReferences({ previousText, text, attachments: previousAttachments })
     : previousAttachments;
@@ -120,18 +120,23 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
         agentId: z.string(),
         messageId: z.string(),
       }),
+      start: z.number().int().nonnegative().optional(),
+      end: z.number().int().nonnegative().optional(),
     }),
     z.strictObject({
       kind: z.literal("artifact_quote"),
       id: z.string(),
       title: z.string(),
       selectedText: z.string(),
+      comment: z.string().optional(),
       source: z.strictObject({
         serverId: z.string(),
         workspaceId: z.string(),
         artifactId: z.string(),
         revision: z.number().int().positive(),
       }),
+      start: z.number().int().nonnegative().optional(),
+      end: z.number().int().nonnegative().optional(),
     }),
     z.strictObject({ kind: z.literal("image"), metadata: AttachmentMetadataSchema }),
     z.strictObject({ kind: z.literal("file"), attachment: UploadedFileSchema }),

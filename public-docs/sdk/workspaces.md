@@ -54,7 +54,17 @@ Pass `agent` to create the workspace and its first agent in one call. See the
 [combined background workspace example](./agents.md#run-work-in-a-background-workspace).
 Set visibility on the workspace options; `agent.background` is rejected.
 
-You can pass `projectId` in either source when you already have one. Most integrations should omit it; the daemon finds or creates the project from the directory.
+You can pass `projectId` in either source when you already have one. Omitting it preserves the directory-based project lookup or creation.
+
+To create an unassigned workspace, use a directory source with `projectAssigned: false` and omit `projectId`:
+
+```ts
+const workspace = await client.workspaces.create({
+  source: { kind: "directory", path: "~", projectAssigned: false },
+});
+```
+
+This requires `features.workspaceProjectlessCreate`; the client asks you to update unsupported hosts instead of creating a project. See [Workspaces](/docs/workspaces#creating-a-workspace) for the app's **No project** option.
 
 Pass `background: true` to hide a workspace from default discovery. Its agents and terminals
 remain durable, with ordinary history, lifecycle hooks, archive, and exact-ID access. The app's

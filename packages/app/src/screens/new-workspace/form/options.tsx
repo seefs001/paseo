@@ -7,7 +7,15 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { getHostProjectSourceDirectory, type HostProjectListItem } from "@/projects/host-projects";
 import { pickerItemLabel, type PickerItem } from "../../new-workspace-picker-item";
-import { addProjectIcon, branchIcon, folderIcon, ProjectIcon, pullRequestIcon } from "./icons";
+import { NO_PROJECT_OPTION_ID } from "../project-selection";
+import {
+  addProjectIcon,
+  branchIcon,
+  chatIcon,
+  folderIcon,
+  ProjectIcon,
+  pullRequestIcon,
+} from "./icons";
 
 interface OptionRowState {
   option: ComboboxOption;
@@ -48,7 +56,20 @@ export function ProjectOption({
       ) : undefined,
     [iconDataUri, project],
   );
-  if (!project) return <View key={option.id} />;
+  if (!project) {
+    if (option.id !== NO_PROJECT_OPTION_ID) return <View key={option.id} />;
+    return (
+      <ComboboxItem
+        testID="new-workspace-project-picker-no-project"
+        label={option.label}
+        selected={selected}
+        active={active}
+        disabled={disabled}
+        onPress={onPress}
+        leadingSlot={chatIcon}
+      />
+    );
+  }
   return (
     <ComboboxItem
       testID={`new-workspace-project-picker-option-${project.viewKey}`}

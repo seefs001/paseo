@@ -191,7 +191,7 @@ export function useForkAgent(
                 displayName: agent.projectPlacement?.projectName,
                 projectId: agent.projectPlacement?.projectKey,
               }
-            : {}),
+            : { projectAssigned: false }),
           draftId,
         }),
       );

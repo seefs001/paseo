@@ -211,15 +211,13 @@ export function selectWorkspaceStructureProjects(
 
   for (const serverId of serverIds) {
     const session = state.sessions[serverId];
-    const workspaces = session?.workspaces;
-    const projects = session?.projects;
-    if (!projects || projects.size === 0) {
+    if (!session) {
       continue;
     }
     sessions.push({
       serverId,
-      workspaces: workspaces?.values() ?? [],
-      projects: projects.values(),
+      workspaces: session.workspaces?.values() ?? [],
+      projects: session.projects?.values() ?? [],
     });
   }
 

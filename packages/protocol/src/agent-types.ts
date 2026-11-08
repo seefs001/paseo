@@ -395,6 +395,8 @@ export interface UserMessageContextAttachment {
   contextKind?: string;
   title?: string | null;
   text: string;
+  /** Where a quote sits in the user's message text, as UTF-16 offsets. */
+  range?: { start: number; end: number };
 }
 
 export type AgentTimelineItem =

@@ -929,14 +929,15 @@ function userMessageHistoryAttachments(
   attachments: readonly UserMessageContextAttachment[] | undefined,
 ): AgentAttachment[] | undefined {
   const quotes = (attachments ?? []).flatMap((attachment): AgentAttachment[] =>
-    attachment.contextKind === "chat_quote"
+    attachment.contextKind === "chat_quote" || attachment.contextKind === "artifact_quote"
       ? [
           {
             type: "text",
             mimeType: "text/plain",
-            contextKind: "chat_quote",
+            contextKind: attachment.contextKind,
             ...(attachment.title !== undefined ? { title: attachment.title } : {}),
             text: attachment.text,
+            ...(attachment.range ? { range: attachment.range } : {}),
           },
         ]
       : [],

@@ -72,6 +72,7 @@ const STORED_AGENT_SCHEMA = z.object({
             contextKind: z.string().optional(),
             title: z.string().nullable().optional(),
             text: z.string(),
+            range: z.object({ start: z.number().int(), end: z.number().int() }).optional(),
           }),
         ),
       }),

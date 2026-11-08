@@ -173,6 +173,7 @@ interface NewWorkspaceScreenProps {
   serverId: string;
   sourceDirectory?: string;
   projectId?: string;
+  projectAssigned?: boolean;
   displayName?: string;
   draftId?: string;
   boardTaskId?: string;
@@ -200,8 +201,9 @@ interface WorkspaceIsolationState {
 function useWorkspaceIsolation(input: {
   supportsMultiplicity: boolean;
   worktreeSupport: "supported" | "unsupported" | "unknown";
+  hasProject: boolean;
 }): WorkspaceIsolationState {
-  const { supportsMultiplicity, worktreeSupport } = input;
+  const { supportsMultiplicity, worktreeSupport, hasProject } = input;
   // The last isolation choice is remembered alongside the other New Workspace
   // form preferences (provider, model, mode). A manual in-screen pick overrides
   // the remembered default until the screen remounts.
@@ -224,7 +226,7 @@ function useWorkspaceIsolation(input: {
     setIsolation,
     effectiveIsolation: isWorktree ? "worktree" : "local",
     canCreateWorktree,
-    showRefPicker: !supportsMultiplicity || isWorktree,
+    showRefPicker: hasProject && (!supportsMultiplicity || isWorktree),
   };
 }
 
@@ -293,7 +295,7 @@ async function createMultiplicityWorkspace(input: {
   worktreeSlug: string;
   client: NonNullable<ReturnType<typeof useHostRuntimeClient>>;
   isolation: "local" | "worktree";
-  project: HostProjectListItem;
+  project: HostProjectListItem | null;
   sourceDirectory: string;
   checkoutRequest: PickerCheckoutRequest | undefined;
   withInitialAgent: boolean;
@@ -308,9 +310,15 @@ async function createMultiplicityWorkspace(input: {
   serverId: string;
   createFailedMessage: string;
 }): Promise<WorkspaceCreationResult> {
-  const projectId = getHostProjectId(input.project, input.serverId);
-  if (!projectId) throw new Error("Project is not available on the selected host");
+  let projectId: string | undefined;
+  if (input.project) {
+    const hostProjectId = getHostProjectId(input.project, input.serverId);
+    if (!hostProjectId) throw new Error("Project is not available on the selected host");
+    projectId = hostProjectId;
+  }
   const isWorktree = input.isolation === "worktree";
+  if (isWorktree && !input.project) throw new Error("Worktree isolation requires a project");
+  const projectAssociation = input.project ? { projectId } : { projectAssigned: false };
   const firstAgentContext = buildFirstAgentContext({
     prompt: input.prompt,
     attachments: input.attachments,
@@ -330,7 +338,7 @@ async function createMultiplicityWorkspace(input: {
       : {
           kind: "directory",
           path: input.sourceDirectory,
-          projectId,
+          ...projectAssociation,
         },
     ...(firstAgentContext ? { firstAgentContext } : {}),
   });
@@ -804,22 +812,22 @@ function useNewWorkspaceInitialContext({
   serverId,
   sourceDirectory: sourceDirectoryProp,
   projectId,
+  projectAssigned,
   displayName: displayNameProp,
 }: NewWorkspaceScreenProps): NewWorkspaceInitialContextState {
   const allHosts = useHosts();
   const allServerIds = useMemo(() => allHosts.map((h) => h.serverId), [allHosts]);
   const projects = useHostProjects(allServerIds);
   const routeDisplayName = displayNameProp?.trim() ?? "";
-  const routePlacement = useMemo(
-    () =>
-      hostProjectFromRoute({
-        serverId,
-        projectId,
-        displayName: routeDisplayName,
-        sourceDirectory: sourceDirectoryProp,
-      }),
-    [projectId, routeDisplayName, serverId, sourceDirectoryProp],
-  );
+  const routePlacement = useMemo(() => {
+    if (projectAssigned === false) return null;
+    return hostProjectFromRoute({
+      serverId,
+      projectId,
+      displayName: routeDisplayName,
+      sourceDirectory: sourceDirectoryProp,
+    });
+  }, [projectAssigned, projectId, routeDisplayName, serverId, sourceDirectoryProp]);
   const routeProject = useMemo(() => {
     if (!routePlacement) return null;
     return (
@@ -882,6 +890,7 @@ export function NewWorkspaceScreen({
   serverId,
   sourceDirectory: sourceDirectoryProp,
   projectId,
+  projectAssigned,
   displayName: displayNameProp,
   draftId,
   boardTaskId,
@@ -913,11 +922,13 @@ export function NewWorkspaceScreen({
     serverId,
     sourceDirectory: sourceDirectoryProp,
     projectId,
+    projectAssigned,
     displayName: displayNameProp,
   });
   // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
   const supportsWorkspaceMultiplicity = useHostFeature(selectedServerId, "workspaceMultiplicity");
   const supportsForgeSearch = useHostFeature(selectedServerId, "forgeSearch");
+  const supportsProjectlessCreate = useHostFeature(selectedServerId, "workspaceProjectlessCreate");
   const [creationIdentity] = useState(() => ({
     draftId: draftId ?? generateDraftId(),
     worktreeSlug: createNameId(),
@@ -1007,6 +1018,10 @@ export function NewWorkspaceScreen({
     routeProjectContextViewKey,
     lastActiveProject,
     allowAllProjects: supportsWorkspaceMultiplicity,
+    allowNoProject: supportsProjectlessCreate,
+    initiallyUnassigned: projectAssigned === false,
+    unassignedDirectory: sourceDirectoryProp,
+    routeServerId: serverId,
   });
   const projectIconTargets = useMemo(
     () => buildNewWorkspaceProjectIconTargets(projects, selectedServerId),
@@ -1075,6 +1090,7 @@ export function NewWorkspaceScreen({
     useWorkspaceIsolation({
       supportsMultiplicity: supportsWorkspaceMultiplicity,
       worktreeSupport,
+      hasProject: selectedProject !== null,
     });
 
   const branchSuggestionsQuery = useQuery({
@@ -1260,14 +1276,16 @@ export function NewWorkspaceScreen({
       if (creationResult.workspace) {
         return creationResult;
       }
-      if (!selectedProject) {
-        throw new Error("Choose a project");
+      if (!selectedProject && !supportsProjectlessCreate) {
+        throw new Error(t("workspaceProject.updateHost"));
       }
       if (!selectedSourceDirectory) {
         throw new Error("Choose a host for this project");
       }
       const connectedClient = withConnectedClient();
-      const createsWorktree = !supportsWorkspaceMultiplicity || effectiveIsolation === "worktree";
+      const createsWorktree =
+        selectedProject !== null &&
+        (!supportsWorkspaceMultiplicity || effectiveIsolation === "worktree");
       const checkoutStatusForCreate = createsWorktree
         ? await ensureCheckoutStatus({
             queryClient,
@@ -1325,6 +1343,7 @@ export function NewWorkspaceScreen({
       selectedServerId,
       selectedSourceDirectory,
       serverId,
+      supportsProjectlessCreate,
       supportsWorkspaceMultiplicity,
       t,
       toast,

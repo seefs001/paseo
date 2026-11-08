@@ -1,6 +1,7 @@
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation";
 import { z } from "zod";
+import { isRegisterArtifactCall } from "./artifact-registration";
 import { getSkillReadName } from "./skill-read";
 import { getNmemCall } from "./nmem/model";
 import { getCodemodeMcpCall } from "./mcp";
@@ -367,6 +368,7 @@ function splitStandaloneCalls(children: AgentToolCallItem[]) {
     const detail = child.payload.data.detail;
     const isStandalone =
       getSkillReadName(detail) !== undefined ||
+      isRegisterArtifactCall(child.payload.data.name) ||
       getNmemCall(detail) !== null ||
       getCodemodeMcpCall(child.payload.data) !== null;
     const destination = isStandalone ? standaloneCalls : nestedCalls;

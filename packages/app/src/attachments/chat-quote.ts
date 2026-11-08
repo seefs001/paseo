@@ -1,4 +1,7 @@
-import type { ChatQuoteContextAttachment } from "@/attachments/types";
+import type {
+  ArtifactQuoteContextAttachment,
+  ChatQuoteContextAttachment,
+} from "@/attachments/types";
 import { generateAttachmentId } from "@/attachments/utils";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useDraftStore } from "@/stores/draft-store";
@@ -34,11 +37,10 @@ export function addChatQuoteToAgent(input: ChatQuoteInput): void {
   });
 }
 
-export function withChatQuoteComment(
-  attachment: ChatQuoteContextAttachment,
-  comment: string,
-): ChatQuoteContextAttachment {
+export function withChatQuoteComment<
+  T extends ChatQuoteContextAttachment | ArtifactQuoteContextAttachment,
+>(attachment: T, comment: string): T {
   const { comment: _previous, ...rest } = attachment;
   const trimmed = comment.trim();
-  return trimmed ? { ...rest, comment: trimmed } : rest;
+  return (trimmed ? { ...rest, comment: trimmed } : rest) as T;
 }

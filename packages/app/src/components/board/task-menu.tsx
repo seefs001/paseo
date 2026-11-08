@@ -42,6 +42,7 @@ import {
   type MenuPageDefinition,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/contexts/toast-context";
+import { useHostFeature } from "@/runtime/host-features";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import type { Theme } from "@/styles/theme";
 import { confirmDialog } from "@/utils/confirm-dialog";
@@ -227,10 +228,10 @@ export function useTaskMenu(
   const dismissWaitsFor = useCallback(() => setWaitsFor("closed"), []);
 
   const assignGoalPage = useAssignGoalPage(serverId, isDone ? null : task);
-  const canStartWith = canStart && project !== null;
+  const canStartWith = useCanStartWith(serverId, canStart, project !== null);
   const pages = useMemo<readonly MenuPageDefinition[]>(() => {
     const list: MenuPageDefinition[] = assignGoalPage ? [assignGoalPage] : [];
-    if (canStartWith && project) {
+    if (canStartWith) {
       list.push({
         id: BOARD_START_WITH_PAGE_ID,
         title: t("board.ui.startWith.title"),
@@ -366,6 +367,12 @@ export function useTaskMenu(
     );
 
   return { items, pages, overlay, start: canStart && !startDisabled ? start : null };
+}
+
+/** Start with needs a project unless the host creates workspaces without one. */
+function useCanStartWith(serverId: string, canStart: boolean, hasProject: boolean): boolean {
+  const supportsProjectlessCreate = useHostFeature(serverId, "workspaceProjectlessCreate");
+  return canStart && (hasProject || supportsProjectlessCreate);
 }
 
 function statusOf(pending: PendingAction | null, action: PendingAction): ActionStatus {
