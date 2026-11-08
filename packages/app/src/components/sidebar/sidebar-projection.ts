@@ -73,17 +73,10 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
       return Object.assign({}, project, { workspaces });
     });
   }
-  const pinnedWorkspaceKeys = new Set([
-    ...input.pinnedKeys.pinnedWorkspaceKeys,
-    ...(input.pinnedKeys.residentWorkspaceKeys ?? []),
-  ]);
-  const unpinnedWorkspaces = Array.from(input.workspaceEntriesByKey.values()).filter(
-    (workspace) => !pinnedWorkspaceKeys.has(workspace.workspaceKey),
-  );
   // One switch decides both what the list groups by and what the keyboard shortcuts walk, so the
   // two cannot disagree and a new grouping mode is a compile error here rather than a silent
   // fall-through to the project rows.
-  const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
+  const workspaceGroups = buildWorkspaceGroups(input);
   for (const group of workspaceGroups) group.rows.sort(compareRecency);
 
   const sections: SidebarShortcutSection[] = [{ workspaces: pinnedGroups.residentChats }];
@@ -115,16 +108,21 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
 }
 
 /** Project mode keeps its project headers and groups nothing; status mode groups the rows. */
-function buildWorkspaceGroups(
-  input: SidebarProjectionInput,
-  unpinnedWorkspaces: SidebarWorkspaceEntry[],
-): SidebarWorkspaceGroup[] {
+function buildWorkspaceGroups(input: SidebarProjectionInput): SidebarWorkspaceGroup[] {
   switch (input.groupMode) {
     case "project":
       return [];
-    case "status":
+    case "status": {
+      const pinnedWorkspaceKeys = new Set([
+        ...input.pinnedKeys.pinnedWorkspaceKeys,
+        ...(input.pinnedKeys.residentWorkspaceKeys ?? []),
+      ]);
+      const unpinnedWorkspaces = Array.from(input.workspaceEntriesByKey.values()).filter(
+        (workspace) => !pinnedWorkspaceKeys.has(workspace.workspaceKey),
+      );
       return statusWorkspaceGroups(
         buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey, input.t),
       );
+    }
   }
 }

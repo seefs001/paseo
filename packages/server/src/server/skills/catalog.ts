@@ -75,11 +75,11 @@ export class SkillCatalog {
 
   async list(): Promise<Omit<SkillsList, "requestId">> {
     await this.write;
-    return this.readCatalog();
+    const usage = await this.readUsage();
+    return this.readCatalog(usage);
   }
 
-  private async readCatalog(): Promise<Omit<SkillsList, "requestId">> {
-    const usage = await this.readUsage();
+  private async readCatalog(usage: Usage): Promise<Omit<SkillsList, "requestId">> {
     let entries;
     try {
       entries = await fs.readdir(this.directory, { withFileTypes: true });
@@ -126,7 +126,7 @@ export class SkillCatalog {
     const operation = this.write.then(async () => {
       const usage = await this.readUsage();
       if (usage.submissions.includes(submissionId)) return undefined;
-      const catalog = await this.readCatalog();
+      const catalog = await this.readCatalog(usage);
       const available = new Set(catalog.skills.map((skill) => skill.path));
       const now = Date.now();
       for (const skillPath of new Set(paths)) {

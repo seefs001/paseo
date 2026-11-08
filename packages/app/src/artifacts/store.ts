@@ -117,6 +117,15 @@ export function sortArtifacts(list: readonly Artifact[]): Artifact[] {
 }
 
 const EMPTY: readonly Artifact[] = [];
+const READY_HOST = { status: "ready" } as const;
+
+/** Host availability stays stable when another artifact changes. */
+export function useArtifactHostState(serverId: string) {
+  return useArtifacts((state) => {
+    const host = state.hosts[serverId];
+    return host?.status === "ready" ? READY_HOST : host;
+  });
+}
 
 function useHostArtifacts(serverId: string): ReadonlyMap<string, Artifact> | null {
   return useArtifacts((state) => {

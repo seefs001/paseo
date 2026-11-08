@@ -1,17 +1,14 @@
-import type { Artifact } from "@getpaseo/protocol/messages";
 import { Files } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ScrollView, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { useArtifacts, useWorkspaceArtifacts, type ArtifactHost } from "./store";
-import { MaterialFileIcon } from "@/components/material-file-icon";
+import { useArtifactHostState, useWorkspaceArtifacts, type ArtifactHost } from "./store";
+import { ArtifactRow } from "./row";
 import { PaneContentToolbar } from "@/components/ui/pane-content-toolbar";
-import { PressHighlight } from "@/components/ui/press-highlight";
 import { EditingTextInput } from "@/components/ui/text-input";
 import { usePaneContext } from "@/panels/pane-context";
 import { definePanel, type PanelPresentation } from "@/panels/panel-registry";
-import { formatTimeAgo } from "@/utils/time";
 
 const ThemedFiles = withUnistyles(Files);
 const presentation = {
@@ -40,14 +37,16 @@ export function ArtifactHostState({
 
 function ArtifactsPanel() {
   const { t } = useTranslation();
-  const { serverId, workspaceId, openPreferredTarget } = usePaneContext();
-  const host = useArtifacts((state) => state.hosts[serverId]);
+  const { serverId, workspaceId, openPreferredTarget, openFileInWorkspace } = usePaneContext();
+  const host = useArtifactHostState(serverId);
   const collection = useWorkspaceArtifacts(serverId, workspaceId);
   const [search, setSearch] = useState("");
   const rows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return collection.filter((artifact) =>
-      `${artifact.title}\n${artifact.fileName}`.toLocaleLowerCase().includes(query),
+      `${artifact.title}\n${artifact.fileName}\n${artifact.sourcePath ?? ""}`
+        .toLocaleLowerCase()
+        .includes(query),
     );
   }, [collection, search]);
   const open = useCallback(
@@ -55,6 +54,12 @@ function ArtifactsPanel() {
       openPreferredTarget({ kind: "artifact", artifactId }, "explorerFiles");
     },
     [openPreferredTarget],
+  );
+  const openFile = useCallback(
+    (path: string) => {
+      openFileInWorkspace({ location: { path }, disposition: "preferred" });
+    },
+    [openFileInWorkspace],
   );
   if (host?.status !== "ready") return <ArtifactHostState host={host} />;
   return (
@@ -69,6 +74,7 @@ function ArtifactsPanel() {
           autoCorrect={false}
           testID="artifacts-search"
         />
+        <Text style={styles.meta}>{t("artifacts.pill", { count: rows.length })}</Text>
       </PaneContentToolbar>
       {rows.length === 0 ? (
         <View style={styles.center}>
@@ -79,33 +85,17 @@ function ArtifactsPanel() {
       ) : (
         <ScrollView style={styles.container} contentContainerStyle={styles.list}>
           {rows.map((artifact) => (
-            <ArtifactRow key={artifact.id} artifact={artifact} onOpen={open} />
+            <ArtifactRow
+              key={artifact.id}
+              serverId={serverId}
+              artifact={artifact}
+              onOpen={open}
+              onOpenFile={openFile}
+            />
           ))}
         </ScrollView>
       )}
     </View>
-  );
-}
-
-function ArtifactRow({ artifact, onOpen }: { artifact: Artifact; onOpen: (id: string) => void }) {
-  const open = useCallback(() => onOpen(artifact.id), [artifact.id, onOpen]);
-  return (
-    <PressHighlight
-      onPress={open}
-      accessibilityRole="button"
-      style={styles.row}
-      testID={`artifact-row-${artifact.id}`}
-    >
-      <MaterialFileIcon fileName={artifact.fileName} size={20} />
-      <View style={styles.labels}>
-        <Text style={styles.title} numberOfLines={1}>
-          {artifact.title}
-        </Text>
-        <Text style={styles.meta} numberOfLines={1}>
-          {artifact.fileName} · {formatTimeAgo(new Date(artifact.updatedAt))}
-        </Text>
-      </View>
-    </PressHighlight>
   );
 }
 
@@ -116,18 +106,14 @@ export const artifactsPanelRegistration = definePanel("artifacts", {
 
 const styles = StyleSheet.create((theme) => ({
   container: { flex: 1, minHeight: 0 },
-  toolbar: { paddingHorizontal: theme.spacing[3] },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+  },
   search: { flex: 1, color: theme.colors.foreground, fontSize: theme.fontSize.base },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: theme.spacing[4] },
   list: { padding: theme.spacing[2] },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[3],
-    padding: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-  },
-  labels: { flex: 1, minWidth: 0, gap: theme.spacing[1] },
-  title: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
   meta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
 }));

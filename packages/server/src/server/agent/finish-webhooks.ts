@@ -126,7 +126,10 @@ export function createFinishWebhooks(deps: Dependencies): FinishWebhooks {
         if (row.item.type === "assistant_message") chunks.push(row.item.text);
         else if (chunks.length) break;
       }
-      payload.lastResponse = chunks.toReversed().join("").slice(0, 4000);
+      for (const chunk of chunks.toReversed()) {
+        payload.lastResponse += chunk.slice(0, 4000 - payload.lastResponse.length);
+        if (payload.lastResponse.length === 4000) break;
+      }
     } catch {
       deps.logger.warn(fields, "Could not read finish webhook response text");
     }

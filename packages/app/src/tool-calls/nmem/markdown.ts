@@ -39,9 +39,14 @@ export function literalNmemMarkdown(source: string): string {
   // Without flow HTML every tag parses as its own inline node, so escaping its `<`
   // keeps that tag as text instead of swallowing the lines after it.
   visit(fromMarkdown(source, { extensions: [{ disable: { null: ["htmlFlow"] } }] }));
-  let result = source;
-  for (const edit of edits.sort((a, b) => b.start - a.start)) {
-    result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
+  if (edits.length === 0) return source;
+  const parts: string[] = [];
+  let offset = 0;
+  // Traversal emits non-overlapping leaf edits in source order; assemble the output once.
+  for (const edit of edits) {
+    parts.push(source.slice(offset, edit.start), edit.text);
+    offset = edit.end;
   }
-  return result;
+  parts.push(source.slice(offset));
+  return parts.join("");
 }

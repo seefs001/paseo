@@ -67,10 +67,9 @@ export function applyCodexMcpAutoAccept(config: Record<string, unknown>): Record
   if (serverNames.length === 0) return config;
   const nextServers: Record<string, unknown> = {};
   for (const name of serverNames) {
-    nextServers[name] = {
-      ...readRecord(mcpServers[name]),
-      default_tools_approval_mode: "approve",
-    };
+    const serverConfig = readRecord(mcpServers[name]);
+    serverConfig.default_tools_approval_mode = "approve";
+    nextServers[name] = serverConfig;
   }
   return { ...config, mcp_servers: nextServers };
 }
@@ -90,12 +89,10 @@ export function applyCodexToolPolicy(
   for (const [server, tools] of grantsByServer) {
     const serverConfig = readRecord(mcpServers[server]);
     const approvals = Object.fromEntries(tools.map((tool) => [tool, { approval_mode: "approve" }]));
-    mcpServers[server] = {
-      ...serverConfig,
-      enabled_tools: tools,
-      default_tools_approval_mode: "prompt",
-      tools: approvals,
-    };
+    serverConfig.enabled_tools = tools;
+    serverConfig.default_tools_approval_mode = "prompt";
+    serverConfig.tools = approvals;
+    mcpServers[server] = serverConfig;
   }
   return { ...config, mcp_servers: mcpServers };
 }

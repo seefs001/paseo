@@ -30,11 +30,12 @@ export function parseGrokTurnUsage({
   turnId,
 }: GrokTurnUsageInput): Pick<AgentUsage, "outputTokensPerSecond"> | null {
   if (method !== "_x.ai/session_notification") return null;
+  if (sessionId === null || turnId === null) return null;
+  if (params.sessionId !== sessionId) return null;
   const parsed = GrokTurnUsageSchema.safeParse(params);
   if (!parsed.success) return null;
   const { update } = parsed.data;
-  const matchesTurn = parsed.data.sessionId === sessionId && update.prompt_id === turnId;
-  if (!matchesTurn) return null;
+  if (update.prompt_id !== turnId) return null;
 
   const { outputTokens, apiDurationMs, usageIsIncomplete } = update.usage ?? {};
   const hasMeasurement =

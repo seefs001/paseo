@@ -11,7 +11,7 @@ import { useAutocomplete } from "@/hooks/use-autocomplete";
 import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import { applySkillReplacement, findActiveSkill, rankSkills } from "./autocomplete";
+import { applySkillReplacement, filterSkills, findActiveSkill, rankSkills } from "./autocomplete";
 
 function buildSkillAutocompleteMenu(input: {
   options: AutocompleteOption[];
@@ -57,9 +57,13 @@ export function useSkillAutocomplete(input: UseAgentAutocompleteInput) {
     retry: false,
   });
   const search = range?.query ?? "";
+  const rankedSkills = useMemo(
+    () => rankSkills(query.data?.skills ?? [], ""),
+    [query.data?.skills],
+  );
   const options = useMemo<AutocompleteOption[]>(
     () =>
-      rankSkills(query.data?.skills ?? [], search).map((skill) => ({
+      filterSkills(rankedSkills, search).map((skill) => ({
         id: skill.path,
         label: `$${skill.name}`,
         description: skill.description || t("skillPicker.noDescription"),
@@ -68,7 +72,7 @@ export function useSkillAutocomplete(input: UseAgentAutocompleteInput) {
           : t("skillPicker.usage", { count: skill.usageCount }),
         kind: "skill",
       })),
-    [query.data, search, t],
+    [rankedSkills, search, t],
   );
   const onSelectOption = useCallback(
     (option: AutocompleteOption, snapshot?: AgentAutocompleteInputSnapshot) => {

@@ -32,6 +32,7 @@ const statuses = {
 } as const;
 
 const recordedCallsCache = new WeakMap<AgentToolCallItem, AgentToolCallItem[]>();
+const scriptOutputCache = new WeakMap<AgentToolCallItem, string | undefined>();
 
 function recordedCalls(parent: AgentToolCallItem): AgentToolCallItem[] {
   const cached = recordedCallsCache.get(parent);
@@ -40,7 +41,11 @@ function recordedCalls(parent: AgentToolCallItem): AgentToolCallItem[] {
   if (data.detail.type !== "unknown") return [];
   const output = data.detail.output;
   const result = ResultSchema.safeParse(output);
-  if (!result.success) return [];
+  if (!result.success) {
+    const calls: AgentToolCallItem[] = [];
+    recordedCallsCache.set(parent, calls);
+    return calls;
+  }
 
   const calls = result.data.details.calls.flatMap((raw, index): AgentToolCallItem[] => {
     const parsed = CallSchema.safeParse(raw);
@@ -280,13 +285,19 @@ function fullOutputPath(output: unknown): string | undefined {
 }
 
 function scriptOutputText(parent: AgentToolCallItem): string | undefined {
+  if (scriptOutputCache.has(parent)) return scriptOutputCache.get(parent);
   if (parent.payload.data.detail.type !== "unknown") return undefined;
   const body = visibleScriptBody(outputText(parent.payload.data.detail.output));
-  if (!body) return undefined;
-  const hasFullOutput = fullOutputPath(parent.payload.data.detail.output) !== undefined;
-  if (body.length <= SCRIPT_OUTPUT_LIMIT) return body;
-  const note = hasFullOutput ? "Output truncated. The full output is below." : "Output truncated.";
-  return `${body.slice(0, SCRIPT_OUTPUT_LIMIT)}\n\n${note}`;
+  let text = body;
+  if (body && body.length > SCRIPT_OUTPUT_LIMIT) {
+    const hasFullOutput = fullOutputPath(parent.payload.data.detail.output) !== undefined;
+    const note = hasFullOutput
+      ? "Output truncated. The full output is below."
+      : "Output truncated.";
+    text = `${body.slice(0, SCRIPT_OUTPUT_LIMIT)}\n\n${note}`;
+  }
+  scriptOutputCache.set(parent, text);
+  return text;
 }
 
 function outputText(output: unknown): string {

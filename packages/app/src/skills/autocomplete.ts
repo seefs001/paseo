@@ -14,25 +14,31 @@ export function findActiveSkill(input: {
   return { start, end: cursor, query: match[2] };
 }
 
-export function rankSkills(
+export function filterSkills(
   skills: readonly SkillCatalogEntry[],
   query: string,
 ): SkillCatalogEntry[] {
   const words = query.trim().toLocaleLowerCase().split(/\s+/);
-  return skills
-    .filter((skill) => {
-      const text = `${skill.name} ${skill.description}`.toLocaleLowerCase();
-      return words.every((word) => text.includes(word));
-    })
-    .sort(
-      (a, b) =>
-        // User-invoked skills first: the model never reaches for them on its own.
-        Number(b.userInvoked ?? false) - Number(a.userInvoked ?? false) ||
-        b.usageCount - a.usageCount ||
-        b.lastUsedAt - a.lastUsedAt ||
-        a.name.localeCompare(b.name) ||
-        a.path.localeCompare(b.path),
-    );
+  return skills.filter((skill) => {
+    const text = `${skill.name} ${skill.description}`.toLocaleLowerCase();
+    return words.every((word) => text.includes(word));
+  });
+}
+
+export function rankSkills(
+  skills: readonly SkillCatalogEntry[],
+  query: string,
+): SkillCatalogEntry[] {
+  const matches = filterSkills(skills, query);
+  return matches.sort(
+    (a, b) =>
+      // User-invoked skills first: the model never reaches for them on its own.
+      Number(b.userInvoked ?? false) - Number(a.userInvoked ?? false) ||
+      b.usageCount - a.usageCount ||
+      b.lastUsedAt - a.lastUsedAt ||
+      a.name.localeCompare(b.name) ||
+      a.path.localeCompare(b.path),
+  );
 }
 
 export function applySkillReplacement(input: {

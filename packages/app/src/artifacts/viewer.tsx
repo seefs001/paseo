@@ -1,18 +1,19 @@
 import type { Artifact, BoardTask } from "@getpaseo/protocol/messages";
-import { Buffer } from "buffer";
 import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
-import { Ellipsis, MessageSquareQuote } from "lucide-react-native";
+import { Copy, Download, Ellipsis, MessageSquareQuote } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { readArtifact, removeArtifact, useArtifact, useArtifacts } from "@/artifacts/store";
+import { readArtifact, useArtifact, useArtifactHostState } from "@/artifacts/store";
 import {
   closeArtifactViewer,
   dismissArtifactViewer,
   useArtifactViewer,
 } from "@/artifacts/viewer-state";
 import { ArtifactHostState } from "./collection";
-import { ArtifactContent, artifactMimeType } from "./content";
+import { ArtifactContent } from "./content";
+import { ArtifactSummary } from "./summary";
+import { useArtifactActions } from "./use-artifact-actions";
 import type { ArtifactQuoteInput } from "./quote";
 import { openDeskGoalSheet } from "@/board/goal-sheet";
 import { openBoardTaskSheet } from "@/board/sheet";
@@ -28,14 +29,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PaneContentToolbar, ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { useToast } from "@/contexts/toast-context";
-import { saveAndShareBytes } from "@/stores/download-store";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useSessionStore } from "@/stores/session-store";
-import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { formatTimeAgo } from "@/utils/time";
 
+const ThemedCopy = withUnistyles(Copy, (theme) => ({ color: theme.colors.foregroundMuted }));
+const ThemedDownload = withUnistyles(Download, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
 const ThemedEllipsis = withUnistyles(Ellipsis, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
@@ -88,19 +93,6 @@ function ArtifactViewer({
   );
 }
 
-export function ArtifactMeta({ artifact }: { artifact: Artifact }): ReactElement {
-  const { t } = useTranslation();
-  return (
-    <Text style={styles.muted} numberOfLines={1}>
-      {t("artifacts.row.meta", {
-        kind: t(`artifacts.kinds.${artifact.kind}`),
-        revision: artifact.revision,
-        time: formatTimeAgo(new Date(artifact.updatedAt)),
-      })}
-    </Text>
-  );
-}
-
 interface ArtifactViewProps {
   serverId: string;
   artifactId: string;
@@ -117,12 +109,10 @@ export function ArtifactView({
   onQuote,
 }: ArtifactViewProps): ReactElement {
   const { t } = useTranslation();
-  const toast = useToast();
   const artifact = useArtifact(serverId, artifactId);
-  const host = useArtifacts((state) => state.hosts[serverId]);
+  const host = useArtifactHostState(serverId);
   const [view, setView] = useState<"preview" | "source">("preview");
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [pending, setPending] = useState(false);
   const content = useFetchQuery({
     queryKey: ["artifact", serverId, artifactId, artifact?.revision ?? 0],
     queryFn: () => readArtifact(serverId, artifactId),
@@ -130,6 +120,13 @@ export function ArtifactView({
     dataShape: "value",
     immutableWhen: () => true,
   });
+  const actions = useArtifactActions({
+    serverId,
+    artifact,
+    content: content.data,
+    onRemoved: onLeave,
+  });
+  const busy = actions.pending !== null;
   const detailsHeader = useMemo(() => ({ title: t("artifacts.interaction.details") }), [t]);
   const views = useMemo(
     () => [
@@ -162,47 +159,6 @@ export function ArtifactView({
   const quote = useCallback(() => {
     if (content.data) onQuote?.({ artifact: content.data.artifact, text: content.data.content });
   }, [content.data, onQuote]);
-  const download = useCallback(async () => {
-    if (!content.data) return;
-    setPending(true);
-    try {
-      const payload = content.data;
-      await saveAndShareBytes({
-        bytes: Buffer.from(payload.content, payload.encoding),
-        fileName: payload.artifact.fileName,
-        mimeType: artifactMimeType(payload),
-      });
-      toast.show(t("common.states.downloadComplete"));
-    } catch (error) {
-      toast.error(toErrorMessage(error));
-    } finally {
-      setPending(false);
-    }
-  }, [content.data, t, toast]);
-  const downloadPress = useCallback(() => {
-    void download();
-  }, [download]);
-  const remove = useCallback(async () => {
-    const confirmed = await confirmDialog({
-      title: t("artifacts.viewer.removeTitle"),
-      message: t("artifacts.viewer.removeMessage"),
-      confirmLabel: t("artifacts.viewer.remove"),
-      destructive: true,
-    });
-    if (!confirmed) return;
-    setPending(true);
-    try {
-      await removeArtifact(serverId, artifactId);
-      onLeave();
-    } catch (error) {
-      toast.error(toErrorMessage(error));
-    } finally {
-      setPending(false);
-    }
-  }, [artifactId, onLeave, serverId, t, toast]);
-  const removePress = useCallback(() => {
-    void remove();
-  }, [remove]);
   if (host?.status !== "ready") return <ArtifactHostState host={host} />;
   if (!artifact)
     return (
@@ -232,12 +188,20 @@ export function ArtifactView({
   return (
     <View style={styles.container} testID="artifact-document">
       <PaneContentToolbar style={styles.toolbar}>
-        <Text style={styles.saved} numberOfLines={1}>
-          {t("artifacts.interaction.savedCopy")} · {artifact.revision}
-        </Text>
-        {supportsPreview ? (
-          <SegmentedControl size="sm" value={view} onValueChange={setView} options={views} />
-        ) : null}
+        <View style={styles.viewSwitcher}>
+          {supportsPreview ? (
+            <SegmentedControl size="sm" value={view} onValueChange={setView} options={views} />
+          ) : (
+            <Text style={styles.muted} numberOfLines={1}>
+              {t("artifacts.interaction.savedCopy")}
+            </Text>
+          )}
+        </View>
+        <ArtifactContentActions
+          actions={actions}
+          media={artifact.media}
+          disabled={!content.data || busy}
+        />
         {canQuote ? (
           <ToolbarButton
             label={t("artifacts.interaction.quote")}
@@ -251,11 +215,11 @@ export function ArtifactView({
         <DropdownMenu>
           <ToolbarButton
             kind="menu"
-            label={t("artifacts.interaction.details")}
-            disabled={pending}
+            label={t("workspace.fileActions.moreActions")}
+            disabled={busy}
             testID="artifact-actions"
           >
-            <ThemedEllipsis size={16} />
+            {busy ? <ThemedSpinner size={14} /> : <ThemedEllipsis size={16} />}
           </ToolbarButton>
           <DropdownMenuContent align="end">
             {onOpenFile && artifact.sourcePath ? (
@@ -264,30 +228,74 @@ export function ArtifactView({
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuItem
-              onSelect={downloadPress}
+              onSelect={actions.download}
               disabled={!content.data}
               testID="artifact-download"
             >
               {t("artifacts.interaction.download")}
             </DropdownMenuItem>
+            {artifact.sourcePath ? (
+              <DropdownMenuItem onSelect={actions.copyPath} testID="artifact-copy-path">
+                {t("workspace.fileActions.copyPath")}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onSelect={showDetails}>
               {t("artifacts.interaction.details")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={removePress} testID="artifact-remove">
+            <DropdownMenuItem onSelect={actions.remove} testID="artifact-remove">
               {t("artifacts.viewer.remove")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </PaneContentToolbar>
+      <View style={styles.summary}>
+        <ArtifactSummary artifact={artifact} />
+      </View>
       {body}
       <AdaptiveModalSheet visible={detailsOpen} onClose={closeDetails} header={detailsHeader}>
         <View style={styles.details}>
-          <ArtifactMeta artifact={artifact} />
+          <ArtifactSummary artifact={artifact} />
           <ArtifactLinks serverId={serverId} artifact={artifact} onLeave={leaveDetails} />
         </View>
       </AdaptiveModalSheet>
     </View>
+  );
+}
+
+interface ArtifactContentActionsProps {
+  actions: ReturnType<typeof useArtifactActions>;
+  media: Artifact["media"];
+  disabled: boolean;
+}
+
+function ArtifactContentActions({ actions, media, disabled }: ArtifactContentActionsProps) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {media !== "image" ? (
+        <ToolbarButton
+          label={t("common.actions.copy")}
+          onPress={actions.copy}
+          disabled={disabled}
+          testID="artifact-copy"
+        >
+          {actions.pending === "copy" ? <ThemedSpinner size={14} /> : <ThemedCopy size={16} />}
+        </ToolbarButton>
+      ) : null}
+      <ToolbarButton
+        label={t("artifacts.interaction.download")}
+        onPress={actions.download}
+        disabled={disabled}
+        testID="artifact-download-quick"
+      >
+        {actions.pending === "download" ? (
+          <ThemedSpinner size={14} />
+        ) : (
+          <ThemedDownload size={16} />
+        )}
+      </ToolbarButton>
+    </>
   );
 }
 
@@ -350,7 +358,7 @@ function ArtifactLinks({
         <TaskLink key={id} serverId={serverId} task={task} onLeave={onLeave} />
       ))}
       {artifact.sourcePath ? (
-        <Text style={styles.muted} numberOfLines={1}>
+        <Text style={styles.muted} selectable>
           {artifact.sourcePath}
         </Text>
       ) : null}
@@ -408,10 +416,16 @@ const styles = StyleSheet.create((theme) => ({
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[3],
   },
-  saved: { flex: 1, minWidth: 0, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  viewSwitcher: { flex: 1, minWidth: 0, alignItems: "flex-start" },
+  summary: {
+    flexShrink: 0,
+    padding: theme.spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
   center: {
     flex: 1,
     alignItems: "center",
