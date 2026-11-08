@@ -329,19 +329,19 @@ export function DiffModeMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" width={260} testID={`${testIDPrefix}-status-menu`}>
         <DropdownMenuItem
-          testID={`${testIDPrefix}-mode-all`}
-          selected={diffMode === "all"}
-          onSelect={onSelectAll}
-        >
-          {allLabel}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
           testID={`${testIDPrefix}-mode-uncommitted`}
           selected={diffMode === "uncommitted"}
           onSelect={onSelectUncommitted}
         >
           {uncommittedLabel}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          testID={`${testIDPrefix}-mode-all`}
+          selected={diffMode === "all"}
+          onSelect={onSelectAll}
+        >
+          {allLabel}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

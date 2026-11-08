@@ -47,5 +47,5 @@ export function resolveWorkingDiffComparisonFromState(
   state: WorkingDiffComparisonState,
   input: WorkingDiffCheckoutIdentity,
 ): WorkingDiffComparison {
-  return state.overrides[workingDiffComparisonKey(input)]?.comparison ?? "all";
+  return state.overrides[workingDiffComparisonKey(input)]?.comparison ?? "uncommitted";
 }
