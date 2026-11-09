@@ -108,16 +108,20 @@ const StoreSchema = z.object({
 });
 type Store = z.infer<typeof StoreSchema>;
 
+// "*" routes every tool, or starts every MCP server, on the owner computer. New machines
+// behave like a local session: only the SSH_REMOTE_TOOLS act on the machine.
+export const ROUTE_ALL = "*";
+
 const DEFAULT_POLICY: z.infer<typeof PolicySchema> = {
   revision: 1,
-  localTools: [],
+  localTools: [ROUTE_ALL],
   disabledTools: [],
   localSkills: true,
-  localMcpServers: [],
+  localMcpServers: [ROUTE_ALL],
 };
 
 const TOOL_NAME = /^[A-Za-z0-9_.:*-]{1,128}$/;
-const MCP_SERVER_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+const MCP_SERVER_NAME = /^(?:\*|[A-Za-z0-9_-]{1,64})$/;
 const MAX_PREVIEW_BYTES = 1024 * 1024;
 const MAX_INSTRUCTION_BYTES = 64 * 1024;
 
@@ -249,6 +253,17 @@ export class SshWorkspaceService {
             },
           };
         }
+        case "ssh.machine.directories.list.request":
+          return {
+            type: "ssh.machine.directories.list.response",
+            payload: {
+              requestId,
+              error: null,
+              machineId: msg.machineId,
+              query: msg.query,
+              directories: await this.listMachineDirectories(msg.machineId, msg.query, msg.limit),
+            },
+          };
         case "ssh.workspace.files.list.request": {
           const result = await this.listFiles(msg.workspaceId, msg.path);
           return {
@@ -746,6 +761,44 @@ export class SshWorkspaceService {
     return resolved;
   }
 
+  // Completes what the user typed against the machine's directories. Uses the probe from the
+  // last check and does not re-check: a failed listing reads as "no suggestions".
+  private async listMachineDirectories(
+    machineId: string,
+    query: string,
+    limit = 30,
+  ): Promise<string[]> {
+    const machine = await this.requireMachine(machineId);
+    const connection = this.connections.get(machineId);
+    if (machine.disabled || connection?.state !== "ready" || !connection.probe) {
+      throw new Error(connection?.detail ?? "SSH machine is not ready");
+    }
+    const split = splitDirectoryQuery(query.trim());
+    const parent = normalizeRemotePath(split.parent, connection.probe.home);
+    const result = requireCompleted(
+      await runRemote(
+        buildSshArgv(machine.target, this.files),
+        [
+          `cd -- ${shellQuote(parent)} 2>/dev/null || exit 3`,
+          'for d in .* *; do [ "$d" = . ] || [ "$d" = .. ] && continue; [ -d "$d" ] || continue',
+          "printf '%s\\0' \"$d\"; done",
+        ].join("\n"),
+        { timeoutMs: 15_000, maxStdoutBytes: 4 * 1024 * 1024 },
+      ),
+    );
+    if (result.exitCode !== 0) return [];
+    const prefix = split.prefix.toLowerCase();
+    const showHidden = prefix.startsWith(".");
+    return result.stdout
+      .toString("utf8")
+      .split("\0")
+      .filter((name) => name && (showHidden || !name.startsWith(".")))
+      .filter((name) => name.toLowerCase().startsWith(prefix))
+      .sort((a, b) => a.localeCompare(b))
+      .slice(0, Math.max(1, Math.min(limit, 200)))
+      .map((name) => `${split.display}${name}`);
+  }
+
   private async listFiles(workspaceId: string, path: string) {
     const { location, machine } = await this.resolveWorkspaceForRemote(workspaceId);
     const target = normalizeRemotePath(path || ".", machine.probe?.home ?? "/", location.directory);
@@ -1037,6 +1090,7 @@ export class SshWorkspaceService {
     }
     if (
       routing.localTools.includes(toolName) ||
+      routing.localTools.includes(ROUTE_ALL) ||
       matchesLocalMcp(toolName, routing.localMcpServers)
     ) {
       return { kind: "local", routingRevision: revision };
@@ -1364,8 +1418,26 @@ function toWireOverride(override: StoredOverride): SshWorkspaceRoutingOverride {
   return { ...override };
 }
 
+/**
+ * "~/pro" lists "~" for names starting with "pro"; "/srv/" lists "/srv". `display` keeps the
+ * user's spelling so completions read the way they were typed.
+ */
+function splitDirectoryQuery(query: string): { parent: string; prefix: string; display: string } {
+  if (!query) return { parent: "~", prefix: "", display: "~/" };
+  if (query === "~") return { parent: "~", prefix: "", display: "~/" };
+  const slash = query.lastIndexOf("/");
+  if (slash < 0) return { parent: "~", prefix: query, display: "~/" };
+  const display = query.slice(0, slash + 1);
+  return {
+    parent: display === "/" ? "/" : display.slice(0, -1) || "/",
+    prefix: query.slice(slash + 1),
+    display,
+  };
+}
+
 function matchesLocalMcp(toolName: string, servers: string[]): boolean {
   if (!toolName.startsWith("mcp__")) return false;
+  if (servers.includes(ROUTE_ALL)) return true;
   const normalized = toolName.slice(5);
   return servers.some((server) =>
     normalized.startsWith(`${server.replace(/[^A-Za-z0-9_]/g, "_")}__`),
@@ -1651,6 +1723,11 @@ function errorResponse(msg: SshInboundMessage, error: string): SshOutboundMessag
       return {
         type: "ssh.workspace.create.response",
         payload: { requestId, error, workspaceId: null, directory: null },
+      };
+    case "ssh.machine.directories.list.request":
+      return {
+        type: "ssh.machine.directories.list.response",
+        payload: { requestId, error, machineId: msg.machineId, query: msg.query, directories: [] },
       };
     case "ssh.workspace.files.list.request":
       return {

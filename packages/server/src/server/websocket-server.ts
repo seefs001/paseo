@@ -2236,7 +2236,7 @@ export class VoiceAssistantWebSocketServer {
         // COMPAT(artifacts): added in v0.15.0, remove gate after 2027-11-04.
         ...(this.board ? { artifacts: true } : {}),
         workspaceTrace: true,
-        ...(this.sshWorkspaces ? { sshWorkspaces: true } : {}),
+        ...(this.sshWorkspaces ? { sshWorkspaces: true, sshMachineDirectories: true } : {}),
         terminalCollection: true,
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
         workspaceSetupRun: true,

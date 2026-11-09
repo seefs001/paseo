@@ -6,7 +6,7 @@ import {
 import { shortenPath } from "@/utils/shorten-path";
 import type { AddProjectHost, GithubRepositoryChoice } from "./model";
 
-export type AddProjectMethodId = "directory-search" | "browse" | "github" | "new-directory";
+export type AddProjectMethodId = "directory-search" | "browse" | "github" | "new-directory" | "ssh";
 
 export interface AddProjectMethodOption {
   id: AddProjectMethodId;
@@ -62,7 +62,31 @@ export function buildAddProjectMethods(host: AddProjectHost): AddProjectMethodOp
       : "Update this host to create directories",
     disabled: !host.canCreateDirectory,
   });
+  if (host.canUseSshMachines) {
+    options.push({
+      id: "ssh",
+      label: "SSH machine",
+      description: `Open a directory on a machine ${host.label} reaches over SSH`,
+    });
+  }
   return options;
+}
+
+/**
+ * Directories offered for an SSH machine: the typed path first, then the machine's own
+ * completions, then common roots for hosts that cannot complete.
+ */
+export function buildSshDirectoryOptions(input: {
+  query: string;
+  completions: readonly string[] | null;
+}): string[] {
+  const typed = input.query.trim();
+  const fallback = input.completions === null ? ["~", "~/projects", "~/src", "~/workspace"] : [];
+  const values = [...(typed ? [typed] : []), ...(input.completions ?? []), ...fallback];
+  const unique = [...new Set(values)];
+  if (!typed || input.completions !== null) return unique;
+  const needle = typed.toLowerCase();
+  return [typed, ...unique.slice(1).filter((value) => value.toLowerCase().includes(needle))];
 }
 
 export function addProjectMethodEmptyText(host: AddProjectHost | null): string {

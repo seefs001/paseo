@@ -70,6 +70,7 @@ import {
   SshMachineTrustRequestSchema,
   SshMachinePolicySetRequestSchema,
   SshWorkspaceCreateRequestSchema,
+  SshMachineDirectoriesListRequestSchema,
   SshWorkspaceFilesListRequestSchema,
   SshWorkspaceFilesReadRequestSchema,
   SshMachineListResponseSchema,
@@ -79,6 +80,7 @@ import {
   SshMachineTrustResponseSchema,
   SshMachinePolicySetResponseSchema,
   SshWorkspaceCreateResponseSchema,
+  SshMachineDirectoriesListResponseSchema,
   SshWorkspaceFilesListResponseSchema,
   SshWorkspaceFilesReadResponseSchema,
   SshWorkspaceRoutingGetRequestSchema,
@@ -4109,6 +4111,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SshMachineTrustRequestSchema,
   SshMachinePolicySetRequestSchema,
   SshWorkspaceCreateRequestSchema,
+  SshMachineDirectoriesListRequestSchema,
   SshWorkspaceFilesListRequestSchema,
   SshWorkspaceFilesReadRequestSchema,
   SshWorkspaceRoutingGetRequestSchema,
@@ -4533,6 +4536,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceTrace: z.boolean().optional(),
         // SSH machines, SSH workspaces, Pi remote tool routing and remote read-only files.
         sshWorkspaces: z.boolean().optional(),
+        // Directory completion on SSH machines for Add Project.
+        sshMachineDirectories: z.boolean().optional(),
         terminalCollection: z.boolean().optional(),
         // COMPAT(workspaceBaseBranch): added after v0.11.2, remove gate after 2027-10-14.
         workspaceBaseBranch: z.boolean().optional(),
@@ -8259,6 +8264,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SshMachineTrustResponseSchema,
   SshMachinePolicySetResponseSchema,
   SshWorkspaceCreateResponseSchema,
+  SshMachineDirectoriesListResponseSchema,
   SshWorkspaceFilesListResponseSchema,
   SshWorkspaceFilesReadResponseSchema,
   SshWorkspaceRoutingGetResponseSchema,

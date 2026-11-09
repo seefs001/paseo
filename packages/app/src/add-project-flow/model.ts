@@ -6,6 +6,8 @@ export interface AddProjectHost {
   canCloneGithubRepositories: boolean;
   canSearchGithubRepositories: boolean;
   canCreateDirectory: boolean;
+  /** The host can run workspaces on SSH machines it reaches. */
+  canUseSshMachines?: boolean;
 }
 
 export interface GithubRepositoryChoice {
@@ -38,6 +40,14 @@ export type AddProjectPage =
       isSubmitting: boolean;
     } & SearchPageState)
   | ({ kind: "new-directory-parent"; hostId: string } & SearchPageState)
+  | ({ kind: "ssh-machine"; hostId: string } & SearchPageState)
+  | ({
+      kind: "ssh-directory";
+      hostId: string;
+      machineId: string;
+      machineLabel: string;
+      isSubmitting: boolean;
+    } & SearchPageState)
   | {
       kind: "new-directory-name";
       hostId: string;
@@ -186,6 +196,24 @@ export function openNewDirectoryParentPage(
   hostId: string,
 ): AddProjectFlowState {
   return pushAddProjectPage(state, { ...searchPage("new-directory-parent"), hostId });
+}
+
+export function openSshMachinePage(
+  state: AddProjectFlowState,
+  hostId: string,
+): AddProjectFlowState {
+  return pushAddProjectPage(state, { ...searchPage("ssh-machine"), hostId });
+}
+
+export function openSshDirectoryPage(
+  state: AddProjectFlowState,
+  input: { hostId: string; machineId: string; machineLabel: string },
+): AddProjectFlowState {
+  return pushAddProjectPage(state, {
+    ...searchPage("ssh-directory"),
+    ...input,
+    isSubmitting: false,
+  });
 }
 
 export function openNewDirectoryNamePage(

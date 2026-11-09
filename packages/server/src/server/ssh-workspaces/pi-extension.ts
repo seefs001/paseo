@@ -47,6 +47,7 @@ import http from "node:http";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import nodePath from "node:path";
+import { homedir } from "node:os";
 import {
   createBashToolDefinition,
   createEditToolDefinition,
@@ -297,7 +298,7 @@ async function remoteGrep(toolCallId, params, signal) {
   return { content: [{ type: "text", text: shown ? shown + more : "No matches found" }], details: undefined };
 }
 
-const sameMcpName = (a, b) => a.replace(/-/g, "_") === b.replace(/-/g, "_");
+const sameMcpName = (a, b) => a === "*" || a.replace(/-/g, "_") === b.replace(/-/g, "_");
 
 // MCP servers this session may start: the owner's mcp.json entries and extension
 // registrations, filtered by the routing's current selection. Pi's MCP extension sees only
@@ -381,6 +382,17 @@ export default async function paseoSshRouting(pi) {
     });
   }
 
+  // Owner-side shell for CLIs that live on the owner computer, such as a memory tool. It is
+  // routed like any other tool: "*" in localTools admits it, disabledTools turns it off.
+  const ownerBash = createBashToolDefinition(homedir());
+  pi.registerTool({
+    ...ownerBash,
+    name: "local_bash",
+    label: "local bash",
+    description:
+      "Run a shell command on the owner computer (the Paseo host), in its home directory. Use it only for owner-side CLIs such as memory or note tools. The project lives on the SSH machine: use bash for anything about the project.",
+  });
+
   pi.on("session_start", (_event, ctx) => {
     refreshSkillRoots(ctx.getSystemPromptOptions?.());
   });
@@ -398,7 +410,8 @@ export default async function paseoSshRouting(pi) {
       "This workspace runs on the SSH machine \\"" + turn.machineDisplayName + "\\". Project directory: " + DIR,
       "read, write, edit, ls, find, grep and bash operate on that machine. The owner computer's files are not the project.",
       localSkills ? "Loaded skill files are read from the owner computer, read-only; commands from skills still run on the SSH machine." : "",
-      "Tools that run on the owner computer by routing: " + local + ". Other tools are unavailable.",
+      "Tools that run on the owner computer by routing: " + (local === "*" ? "every tool except the ones above" : local) + ". Other tools are unavailable.",
+      "local_bash runs a command on the owner computer instead of the SSH machine; use it only for owner-side CLIs such as memory tools, never for project work.",
       "</execution_location>",
     ];
     if (turn.unknownOperations.length > 0) {

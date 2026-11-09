@@ -10,3 +10,4 @@ export { SshFileBrowser } from "./files/ssh-file-browser";
 
 export { useWorkspaceExecutionLocation } from "./internal/use-execution-location";
 export { withLocalOnlyGuard, useSshExplorerTabs } from "./panels/local-only";
+export { useSshMachines } from "./internal/use-ssh-machines";

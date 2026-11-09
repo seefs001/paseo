@@ -14,6 +14,8 @@ import {
   Plus,
   Search,
   Server,
+  Settings2,
+  TerminalSquare,
 } from "lucide-react-native";
 import {
   createElement,
@@ -44,6 +46,8 @@ import {
   openGithubSearchPage,
   openNewDirectoryNamePage,
   openNewDirectoryParentPage,
+  openSshDirectoryPage,
+  openSshMachinePage,
   setAddProjectActiveIndex,
   setAddProjectPageInput,
   setNewDirectoryName,
@@ -58,6 +62,7 @@ import {
   addProjectMethodEmptyText,
   buildCloneLocationOptions,
   buildManualGithubRepositoryChoices,
+  buildSshDirectoryOptions,
   buildSuggestedParentDirectories,
   filterAddProjectHosts,
   joinDirectoryPath,
@@ -84,7 +89,11 @@ import {
   useHostRuntimeClient,
   useHostRuntimeConnectionStatuses,
 } from "@/runtime/host-runtime";
-import { useHostFeatureMap } from "@/runtime/host-features";
+import { useHostFeature, useHostFeatureMap } from "@/runtime/host-features";
+import { useSshMachines } from "@/ssh-machines";
+import type { SshMachine } from "@getpaseo/protocol/ssh-workspaces";
+import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { useSessionStore } from "@/stores/session-store";
 import { useRecommendedProjectPaths } from "@/stores/session-store-hooks";
 import type { AddProjectFlowRequest } from "@/stores/add-project-flow-store";
@@ -160,6 +169,7 @@ function methodIcon(method: AddProjectMethodId): FlowRowOption["icon"] {
   if (method === "github") return GitHubIcon;
   if (method === "browse") return FolderOpen;
   if (method === "new-directory") return FolderPlus;
+  if (method === "ssh") return TerminalSquare;
   return Search;
 }
 
@@ -172,6 +182,7 @@ function directoryOptionSubtitle(option: ProjectPickerOption, shortPath: string)
 function progressText(page: AddProjectPage): string {
   if (page.kind === "github-location") return "Cloning project...";
   if (page.kind === "new-directory-name") return "Creating directory...";
+  if (page.kind === "ssh-directory") return "Connecting to the SSH machine...";
   return "Adding project...";
 }
 
@@ -179,6 +190,7 @@ function emptyText(page: AddProjectPage, host: AddProjectHost | null): string {
   if (page.kind === "host") return "No connected hosts";
   if (page.kind === "github-search") return "Enter a GitHub URL or owner/repo";
   if (page.kind === "method") return addProjectMethodEmptyText(host);
+  if (page.kind === "ssh-directory") return "Enter a directory on the machine";
   return "No matching options";
 }
 
@@ -218,6 +230,10 @@ function pageTitle(page: AddProjectPage): string {
       return "Choose parent directory";
     case "new-directory-name":
       return "Name directory";
+    case "ssh-machine":
+      return "Choose SSH machine";
+    case "ssh-directory":
+      return `Directory on ${page.machineLabel}`;
   }
 }
 
@@ -236,6 +252,10 @@ function pagePlaceholder(page: AddProjectInputPage): string {
       return "Search parent directories or enter a path...";
     case "new-directory-name":
       return "Directory name";
+    case "ssh-machine":
+      return "Search SSH machines...";
+    case "ssh-directory":
+      return "Enter a path on the machine, e.g. ~/project";
   }
 }
 
@@ -245,6 +265,122 @@ function pageInput(page: AddProjectInputPage): string {
 
 function pathTestId(path: string): string {
   return `add-project-flow-path-${encodeURIComponent(path)}`;
+}
+
+type SshMachinePage = Extract<AddProjectPage, { kind: "ssh-machine" }>;
+type SshDirectoryPage = Extract<AddProjectPage, { kind: "ssh-directory" }>;
+
+function sshTargetLabel(machine: SshMachine): string | null {
+  if (!machine.target) return null;
+  const user = machine.target.user ? `${machine.target.user}@` : "";
+  return `${user}${machine.target.host}`;
+}
+
+function buildSshMachineRows(input: {
+  page: SshMachinePage;
+  machines: readonly SshMachine[];
+  openDirectory: (input: { hostId: string; machineId: string; machineLabel: string }) => void;
+  openSettings: () => void;
+}): FlowRowOption[] {
+  const needle = input.page.query.trim().toLowerCase();
+  const machines = input.machines.filter(
+    (machine) =>
+      !machine.disabled &&
+      (!needle ||
+        machine.displayName.toLowerCase().includes(needle) ||
+        (machine.target?.host ?? "").toLowerCase().includes(needle)),
+  );
+  const rows = machines.map<FlowRowOption>((machine) => {
+    const ready = machine.connection.state === "ready";
+    return {
+      id: machine.machineId,
+      title: machine.displayName,
+      subtitle: ready ? sshTargetLabel(machine) : "Not ready: check it in SSH machine settings",
+      icon: Server,
+      disabled: !ready,
+      testID: `add-project-flow-ssh-machine-${machine.machineId}`,
+      select: () =>
+        input.openDirectory({
+          hostId: input.page.hostId,
+          machineId: machine.machineId,
+          machineLabel: machine.displayName,
+        }),
+    };
+  });
+  const empty = machines.length === 0;
+  rows.push({
+    id: "ssh-settings",
+    title: empty ? "Add SSH machine" : "Manage SSH machines",
+    subtitle: "Opens SSH machine settings for this host",
+    icon: empty ? Plus : Settings2,
+    testID: "add-project-flow-ssh-settings",
+    select: input.openSettings,
+  });
+  return rows;
+}
+
+function sshDirectorySubtitle(input: {
+  directory: string;
+  typed: boolean;
+  home: string | null;
+}): string | null {
+  if (input.typed) return "Open this directory";
+  if (input.home && input.directory.startsWith("~")) {
+    return input.directory.replace(/^~/, input.home);
+  }
+  return null;
+}
+
+function buildSshDirectoryRows(input: {
+  page: SshDirectoryPage;
+  home: string | null;
+  completions: readonly string[] | null;
+  open: (directory: string) => void;
+}): FlowRowOption[] {
+  const hasQuery = input.page.query.trim().length > 0;
+  return buildSshDirectoryOptions({ query: input.page.query, completions: input.completions }).map(
+    (directory, index) => ({
+      id: directory,
+      title: directory,
+      subtitle: sshDirectorySubtitle({
+        directory,
+        typed: index === 0 && hasQuery,
+        home: input.home,
+      }),
+      icon: Folder,
+      testID: pathTestId(directory),
+      select: () => input.open(directory),
+    }),
+  );
+}
+
+/** Rows for the SSH pages; null on any other page. */
+function buildSshPageRows(input: {
+  page: AddProjectPage;
+  machines: readonly SshMachine[] | null;
+  /** Machine directory completions for the current query; null when the host cannot complete. */
+  completions: readonly string[] | null;
+  openDirectory: (input: { hostId: string; machineId: string; machineLabel: string }) => void;
+  openSettings: () => void;
+  openProject: (machineId: string, directory: string) => void;
+}): FlowRowOption[] | null {
+  const { page } = input;
+  if (page.kind === "ssh-machine") {
+    return buildSshMachineRows({
+      page,
+      machines: input.machines ?? [],
+      openDirectory: input.openDirectory,
+      openSettings: input.openSettings,
+    });
+  }
+  if (page.kind !== "ssh-directory") return null;
+  const machine = input.machines?.find((entry) => entry.machineId === page.machineId);
+  return buildSshDirectoryRows({
+    page,
+    home: machine?.connection.probe?.home ?? null,
+    completions: input.completions,
+    open: (directory) => input.openProject(page.machineId, directory),
+  });
 }
 
 function FlowRow({
@@ -336,6 +472,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const githubSearchByHost = useHostFeatureMap(hostIds, "workspaceGithubRepositorySearch");
   // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
   const createDirectoryByHost = useHostFeatureMap(hostIds, "projectCreateDirectory");
+  const sshWorkspacesByHost = useHostFeatureMap(hostIds, "sshWorkspaces");
   const localServerId = useLocalDaemonServerId();
   const availableHosts = useMemo<AddProjectHost[]>(
     () =>
@@ -353,6 +490,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
             canCloneGithubRepositories: githubCloneByHost.get(host.serverId) === true,
             canSearchGithubRepositories: githubSearchByHost.get(host.serverId) === true,
             canCreateDirectory: createDirectoryByHost.get(host.serverId) === true,
+            canUseSshMachines: sshWorkspacesByHost.get(host.serverId) === true,
           },
         ];
       }),
@@ -364,6 +502,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       hosts,
       localServerId,
       projectAddByHost,
+      sshWorkspacesByHost,
       stableProjectIdentityByHost,
     ],
   );
@@ -381,6 +520,9 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const recommendedPaths = useRecommendedProjectPaths(hostId);
   const openProject = useOpenProject(hostId);
   const cloneGithubProject = useCloneGithubProject(hostId);
+  const sshMachines = useSshMachines(hostId ?? "");
+  const sshMachineList = sshMachines.machines;
+  const createSshWorkspace = sshMachines.createWorkspace.mutateAsync;
   const upsertProject = useCallback(
     (
       targetServerId: string,
@@ -439,6 +581,23 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       };
     },
     enabled: Boolean(client && searchesDirectories),
+    dataShape: "value",
+    retry: false,
+    staleTimeMs: 15_000,
+  });
+  const canCompleteSshDirectories = useHostFeature(hostId ?? "", "sshMachineDirectories");
+  const sshDirectoryMachineId = page.kind === "ssh-directory" ? page.machineId : null;
+  const sshDirectoryQuery = useFetchQuery({
+    queryKey: ["add-project-flow-ssh-directories", hostId, sshDirectoryMachineId, debouncedQuery],
+    queryFn: async () => {
+      if (!client || !sshDirectoryMachineId) return { query: debouncedQuery, directories: [] };
+      const directories = await client.listSshMachineDirectories({
+        machineId: sshDirectoryMachineId,
+        query: debouncedQuery,
+      });
+      return { query: debouncedQuery, directories };
+    },
+    enabled: Boolean(client && sshDirectoryMachineId && canCompleteSshDirectories),
     dataShape: "value",
     retry: false,
     staleTimeMs: 15_000,
@@ -533,6 +692,8 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         setState((current) => openDirectorySearchPage(current, hostId));
       } else if (method === "browse") {
         void browse();
+      } else if (method === "ssh") {
+        setState((current) => openSshMachinePage(current, hostId));
       } else if (method === "github") {
         setState((current) => openGithubSearchPage(current, hostId));
       } else {
@@ -542,6 +703,12 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     [browse, hostId],
   );
 
+  const sshCompletions = useMemo<readonly string[] | null>(() => {
+    if (!canCompleteSshDirectories) return null;
+    const data = sshDirectoryQuery.data;
+    // Stale completions for an older query would reorder rows under the cursor.
+    return data && data.query === query ? data.directories : EMPTY_PATHS;
+  }, [canCompleteSshDirectories, query, sshDirectoryQuery.data]);
   const directoryPaths = useMemo(
     () => (directoryQuery.data?.query === query ? directoryQuery.data.paths : EMPTY_PATHS),
     [directoryQuery.data, query],
@@ -555,6 +722,38 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       }),
     [directoryPaths, query, recommendedPaths],
   );
+  const openSshProject = useCallback(
+    async (machineId: string, directory: string) => {
+      if (!hostId || submissionInFlightRef.current) return;
+      const trimmed = directory.trim();
+      if (!trimmed) return;
+      submissionInFlightRef.current = true;
+      setState((current) =>
+        setPageStatus(current, "ssh-directory", { isSubmitting: true, error: null }),
+      );
+      try {
+        const result = await createSshWorkspace({ machineId, directory: trimmed });
+        onClose();
+        usePanelStore.getState().showMobileAgent();
+        navigateToWorkspace({ serverId: hostId, workspaceId: result.workspaceId });
+      } catch (error) {
+        setState((current) =>
+          setPageStatus(current, "ssh-directory", {
+            isSubmitting: false,
+            error: error instanceof Error ? error.message : "Unable to open the directory",
+          }),
+        );
+      } finally {
+        submissionInFlightRef.current = false;
+      }
+    },
+    [createSshWorkspace, hostId, onClose],
+  );
+  const openSshSettings = useCallback(() => {
+    if (!hostId) return;
+    onClose();
+    router.push(buildSettingsHostSectionRoute(hostId, "workspaces"));
+  }, [hostId, onClose]);
   const cloneRepository = useCallback(
     async (locationPage: GithubLocationPage, parentPath: string) => {
       if (submissionInFlightRef.current) return;
@@ -707,8 +906,21 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           setState((current) => openNewDirectoryNamePage(current, page.hostId, option.path)),
       }));
     }
+    const sshRows = buildSshPageRows({
+      page,
+      machines: sshMachineList,
+      completions: sshCompletions,
+      openDirectory: (input) => setState((current) => openSshDirectoryPage(current, input)),
+      openSettings: openSshSettings,
+      openProject: (machineId, directory) => void openSshProject(machineId, directory),
+    });
+    if (sshRows) return sshRows;
     return [];
   }, [
+    openSshProject,
+    openSshSettings,
+    sshMachineList,
+    sshCompletions,
     cloneRepository,
     directoryPaths,
     githubQuery.data,
@@ -841,7 +1053,11 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     (searchesDirectories && (query !== debouncedQuery || directoryQuery.isFetching)) ||
     (page.kind === "github-search" &&
       host?.canSearchGithubRepositories === true &&
-      (query !== debouncedQuery || githubQuery.isFetching));
+      (query !== debouncedQuery || githubQuery.isFetching)) ||
+    (page.kind === "ssh-machine" && sshMachines.isLoading) ||
+    (page.kind === "ssh-directory" &&
+      canCompleteSshDirectories &&
+      (query !== debouncedQuery || sshDirectoryQuery.isFetching));
   const queryError = queryErrorText({
     searchesDirectories,
     directoryFailed: directoryQuery.isError,

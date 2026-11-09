@@ -7003,6 +7003,19 @@ export class DaemonClient {
     return { workspaceId: payload.workspaceId, directory: payload.directory };
   }
 
+  async listSshMachineDirectories(input: {
+    machineId: string;
+    query: string;
+    limit?: number;
+  }): Promise<string[]> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.machine.directories.list.request", ...input },
+      "ssh.machine.directories.list.response",
+      30_000,
+    );
+    return payload.directories;
+  }
+
   async listSshWorkspaceFiles(input: {
     workspaceId: string;
     path: string;

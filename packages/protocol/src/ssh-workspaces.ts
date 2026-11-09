@@ -240,6 +240,26 @@ export const SshWorkspaceCreateResponseSchema = z.object({
   }),
 });
 
+// Directory completion on a machine before any workspace exists, for "Add project".
+export const SshMachineDirectoriesListRequestSchema = z.object({
+  type: z.literal("ssh.machine.directories.list.request"),
+  ...RequestBase,
+  machineId: z.string(),
+  // What the user typed: "~/pro", "/srv/", or empty for the home directory.
+  query: z.string(),
+  limit: z.number().int().optional(),
+});
+export const SshMachineDirectoriesListResponseSchema = z.object({
+  type: z.literal("ssh.machine.directories.list.response"),
+  payload: z.object({
+    ...ResponseBase,
+    machineId: z.string(),
+    query: z.string(),
+    // Completions in the form the user typed, e.g. "~/projects".
+    directories: z.array(z.string()),
+  }),
+});
+
 export const SshWorkspaceFilesListRequestSchema = z.object({
   type: z.literal("ssh.workspace.files.list.request"),
   ...RequestBase,
@@ -363,6 +383,7 @@ export const SshInboundMessageSchemas = [
   SshMachineTrustRequestSchema,
   SshMachinePolicySetRequestSchema,
   SshWorkspaceCreateRequestSchema,
+  SshMachineDirectoriesListRequestSchema,
   SshWorkspaceFilesListRequestSchema,
   SshWorkspaceFilesReadRequestSchema,
   SshWorkspaceRoutingGetRequestSchema,
@@ -379,6 +400,7 @@ export type SshInboundMessage =
   | z.infer<typeof SshMachineTrustRequestSchema>
   | z.infer<typeof SshMachinePolicySetRequestSchema>
   | z.infer<typeof SshWorkspaceCreateRequestSchema>
+  | z.infer<typeof SshMachineDirectoriesListRequestSchema>
   | z.infer<typeof SshWorkspaceFilesListRequestSchema>
   | z.infer<typeof SshWorkspaceFilesReadRequestSchema>
   | z.infer<typeof SshWorkspaceRoutingGetRequestSchema>
@@ -394,6 +416,7 @@ export type SshOutboundMessage =
   | z.infer<typeof SshMachineTrustResponseSchema>
   | z.infer<typeof SshMachinePolicySetResponseSchema>
   | z.infer<typeof SshWorkspaceCreateResponseSchema>
+  | z.infer<typeof SshMachineDirectoriesListResponseSchema>
   | z.infer<typeof SshWorkspaceFilesListResponseSchema>
   | z.infer<typeof SshWorkspaceFilesReadResponseSchema>
   | z.infer<typeof SshWorkspaceRoutingGetResponseSchema>

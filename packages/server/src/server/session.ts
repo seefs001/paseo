@@ -2736,6 +2736,7 @@ export class Session {
   private dispatchWorkspaceLifecycleMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     return (
       this.dispatchWorkspaceStateMessage(msg) ??
+      this.dispatchSshWorkspaceMessage(msg) ??
       this.dispatchWorkspaceLabelMessage(msg) ??
       this.boardSession.dispatch(msg) ??
       this.artifactSession.dispatch(msg) ??
@@ -3498,10 +3499,8 @@ export class Session {
     return undefined;
   }
 
-  private dispatchWorkspaceLabelMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+  private dispatchSshWorkspaceMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
-      case "workspace.trace.get.request":
-        return this.handleWorkspaceTrace(msg);
       case "ssh.machine.list.request":
       case "ssh.machine.save.request":
       case "ssh.machine.remove.request":
@@ -3509,6 +3508,7 @@ export class Session {
       case "ssh.machine.trust.request":
       case "ssh.machine.policy.set.request":
       case "ssh.workspace.create.request":
+      case "ssh.machine.directories.list.request":
       case "ssh.workspace.files.list.request":
       case "ssh.workspace.files.read.request":
       case "ssh.workspace.routing.get.request":
@@ -3516,6 +3516,15 @@ export class Session {
       case "ssh.workspace.operations.list.request":
       case "ssh.workspace.operations.acknowledge.request":
         return this.handleSshWorkspaceMessage(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchWorkspaceLabelMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "workspace.trace.get.request":
+        return this.handleWorkspaceTrace(msg);
       case "workspace.label.list.request":
         return this.handleWorkspaceLabelList(msg);
       case "workspace.label.assignment.set.request":

@@ -231,7 +231,8 @@ export type SshRoutingBaseline =
 
 // Bash, grep, find and file tools always run on the machine.
 const REMOTE_BUILTINS = new Set(["read", "write", "edit", "bash", "ls", "find", "grep"]);
-const TOOL_NAME = /^[A-Za-z0-9_.:-]+$/;
+// "*" alone routes every tool or MCP server to this host.
+const TOOL_NAME = /^(?:\*|[A-Za-z0-9_.:-]+)$/;
 
 export function splitToolNames(value: string): string[] {
   return [
