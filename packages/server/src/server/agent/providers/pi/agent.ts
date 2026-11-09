@@ -1612,6 +1612,7 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly currentModeId: string | null;
   private readonly logger: Logger;
   private readonly usagePoller: PiUsagePoller;
+  private initialUsageRequested = false;
   private closed = false;
   private runtimeDead = false;
   private readonly closeController = new AbortController();
@@ -1848,6 +1849,12 @@ export class PiRpcAgentSession implements AgentSession {
 
   subscribe(callback: (event: AgentStreamEvent) => void): () => void {
     this.subscribers.add(callback);
+    // A resumed session has no live usage until its next turn; seed the context
+    // window from the stored session so the composer shows it right away.
+    if (!this.initialUsageRequested && !this.closeAfterHistory) {
+      this.initialUsageRequested = true;
+      void this.usagePoller.refresh();
+    }
     return () => {
       this.subscribers.delete(callback);
     };

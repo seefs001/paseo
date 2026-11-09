@@ -105,6 +105,24 @@ export class PiUsagePoller {
     this.publishUsage(usage, turnId);
   }
 
+  async refresh(): Promise<void> {
+    if (this.closed || this.active) {
+      return;
+    }
+    const generation = this.generation;
+    let usage: AgentUsage | undefined;
+    try {
+      usage = toAgentUsage(await this.options.readStats());
+    } catch (error) {
+      this.options.onPollError(error);
+      return;
+    }
+    if (this.closed || this.active || this.generation !== generation) {
+      return;
+    }
+    this.publishUsage(usage);
+  }
+
   close(): void {
     this.closed = true;
     this.active = false;
