@@ -1,3 +1,4 @@
+import { retainAttachmentForGarbageCollection } from "@/attachments/gc-retention";
 import {
   useComposerEditingSession,
   useComposerFullscreen,
@@ -1997,7 +1998,7 @@ function ComposerContentImpl({
     ],
   );
 
-  const sendMessageWithContent = useCallback(
+  const sendMessageWithContentRetained = useCallback(
     async (
       outgoingMessage: string,
       outgoingAttachments: ComposerAttachment[],
@@ -2073,6 +2074,31 @@ function ComposerContentImpl({
       submitMessage,
       t,
     ],
+  );
+
+  const sendMessageWithContent = useCallback(
+    async (
+      outgoingMessage: string,
+      outgoingAttachments: ComposerAttachment[],
+      forceSend?: boolean,
+    ) => {
+      // Clearing the draft schedules attachment GC before the images are encoded for send.
+      const releaseImages = outgoingAttachments.flatMap((attachment) =>
+        attachment.kind === "image"
+          ? [retainAttachmentForGarbageCollection(attachment.metadata.id)]
+          : [],
+      );
+      try {
+        return await sendMessageWithContentRetained(
+          outgoingMessage,
+          outgoingAttachments,
+          forceSend,
+        );
+      } finally {
+        for (const release of releaseImages) release();
+      }
+    },
+    [sendMessageWithContentRetained],
   );
 
   const handleSubmit = useCallback(
