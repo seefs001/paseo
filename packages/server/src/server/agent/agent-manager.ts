@@ -108,6 +108,7 @@ import {
 } from "./provider-subagents/store.js";
 import { AgentBackgroundWorkStore, type AgentBackgroundWorkItem } from "./background-work/index.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
+import { isSshSessionDirectory, SSH_DIRECTORY_KEY_PREFIX } from "../ssh-workspaces/binding.js";
 import { extractAttention } from "../persistence-hooks.js";
 
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
@@ -6076,6 +6077,16 @@ export class AgentManager {
     launchConfig: AgentSessionConfig,
     launchContext: AgentLaunchContext,
   ): AgentSessionConfig {
+    // SSH workspaces route tools only through the Pi adapter. Other providers would run
+    // in the owner-side session directory, so they are refused instead of running locally.
+    if (launchConfig.cwd.startsWith(SSH_DIRECTORY_KEY_PREFIX)) {
+      throw new Error("An SSH directory key is not a local directory; start agents by workspace");
+    }
+    if (isSshSessionDirectory(launchConfig.cwd) && launchConfig.provider !== "pi") {
+      throw new Error(
+        `Provider '${launchConfig.provider}' is not supported in SSH workspaces; use Pi`,
+      );
+    }
     const savedServerNames = new Set(
       Object.keys(stripInternalPaseoMcpServer(launchConfig).mcpServers ?? {}),
     );

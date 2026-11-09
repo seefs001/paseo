@@ -22,14 +22,25 @@ export interface WorkspaceDescriptorSources {
     workspace: PersistedWorkspaceRecord,
     project: PersistedProjectRecord | null,
   ): Promise<WorkspaceDescriptorPayload["scripts"]>;
+  // Location facts for SSH workspaces; absent or null means the owner computer.
+  describeExecutionLocation?(
+    workspace: PersistedWorkspaceRecord,
+  ): WorkspaceDescriptorPayload["executionLocation"] | null;
 }
 
 export async function buildProjectPlacement(
-  sources: Pick<WorkspaceDescriptorSources, "projectRegistry" | "workspaceRuntimeStore">,
+  sources: Pick<
+    WorkspaceDescriptorSources,
+    "projectRegistry" | "workspaceRuntimeStore" | "describeExecutionLocation"
+  >,
   workspace: PersistedWorkspaceRecord,
   projectRecord?: PersistedProjectRecord | null,
 ): Promise<ProjectPlacementPayload> {
   const project = projectRecord ?? (await sources.projectRegistry.get(workspace.projectId));
+  const location = workspace.executionLocation
+    ? (sources.describeExecutionLocation?.(workspace) ?? null)
+    : null;
+  if (location) return sshProjectPlacement(workspace, project ?? null, location);
   if (workspace.projectId !== null && !project) {
     throw new Error(`Project not found for workspace ${workspace.workspaceId}`);
   }
@@ -73,6 +84,18 @@ export async function describeWorkspaceRecord(
   workspace: PersistedWorkspaceRecord,
   projectRecord?: PersistedProjectRecord | null,
 ): Promise<WorkspaceDescriptorPayload> {
+  const location = workspace.executionLocation
+    ? (sources.describeExecutionLocation?.(workspace) ?? null)
+    : null;
+  if (location) return describeSshWorkspaceRecord(sources, workspace, location);
+  return describeLocalWorkspaceRecord(sources, workspace, projectRecord);
+}
+
+async function describeLocalWorkspaceRecord(
+  sources: WorkspaceDescriptorSources,
+  workspace: PersistedWorkspaceRecord,
+  projectRecord?: PersistedProjectRecord | null,
+): Promise<WorkspaceDescriptorPayload> {
   const resolvedProjectRecord =
     projectRecord ?? (await sources.projectRegistry.get(workspace.projectId));
 
@@ -109,6 +132,7 @@ export async function describeWorkspaceRecord(
     activityAt: null,
     createdAt: workspace.createdAt,
     diffStat,
+    uncommittedDiffStat: snapshot?.git.uncommittedDiffStat ?? null,
     scripts: await sources.buildScripts(workspace, resolvedProjectRecord),
     ...(resolvedProjectRecord || workspace.projectId === null
       ? { project: await buildProjectPlacement(sources, workspace, resolvedProjectRecord) }
@@ -149,6 +173,7 @@ export async function describeCreatedWorktreeWorkspace(
     createdAt: result.workspace.createdAt,
     lastUserMessageAt: null,
     diffStat: { additions: 0, deletions: 0 },
+    uncommittedDiffStat: null,
     scripts: [],
     gitRuntime: {
       currentBranch: result.worktree.branchName || null,
@@ -160,5 +185,81 @@ export async function describeCreatedWorktreeWorkspace(
       behindOfOrigin: null,
     },
     githubRuntime: null,
+  };
+}
+
+// SSH workspaces keep their owner-side session directory internal. The wire carries the
+// directory key instead, which every workspace on the same machine directory shares and
+// which local-only RPCs refuse. Git is reported as observed on the machine; an unobserved
+// state is "directory", never a "non_git" claim.
+async function describeSshWorkspaceRecord(
+  sources: WorkspaceDescriptorSources,
+  workspace: PersistedWorkspaceRecord,
+  location: NonNullable<WorkspaceDescriptorPayload["executionLocation"]>,
+): Promise<WorkspaceDescriptorPayload> {
+  const key = location.key ?? location.directory;
+  const project = await sources.projectRegistry.get(workspace.projectId);
+  let projectKind: WorkspaceDescriptorPayload["projectKind"] = "directory";
+  if (location.gitObservation === "git") projectKind = "git";
+  else if (location.gitObservation === "not_git") projectKind = "non_git";
+  return {
+    id: workspace.workspaceId,
+    ...projectIdentityForWire(workspace, project),
+    projectRootPath: key,
+    workspaceDirectory: key,
+    setupStatus: null,
+    projectKind,
+    workspaceKind: "directory",
+    name: resolveWorkspaceDisplayName(workspace),
+    title: workspace.title,
+    pinnedAt: workspace.pinnedAt,
+    residentAt: workspace.residentAt,
+    ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
+    background: workspace.background,
+    executionLocation: location,
+    parentWorkspaceId: workspace.parentWorkspaceId,
+    archivingAt: null,
+    status: "done",
+    statusEnteredAt: null,
+    activityAt: null,
+    createdAt: workspace.createdAt,
+    diffStat: null,
+    uncommittedDiffStat: null,
+    scripts: [],
+    project: sshProjectPlacement(workspace, project, location),
+  };
+}
+
+function sshProjectPlacement(
+  workspace: PersistedWorkspaceRecord,
+  project: PersistedProjectRecord | null,
+  location: NonNullable<WorkspaceDescriptorPayload["executionLocation"]>,
+): ProjectPlacementPayload {
+  const key = location.key ?? location.directory;
+  return {
+    ...(workspace.projectId === null ? { projectAssigned: false } : {}),
+    projectKey: project?.projectId ?? "",
+    projectName: project ? resolveProjectDisplayName(project) : "",
+    workspaceName: resolveWorkspaceDisplayName(workspace),
+    checkout:
+      location.gitObservation === "git"
+        ? {
+            cwd: key,
+            isGit: true,
+            currentBranch: null,
+            remoteUrl: null,
+            worktreeRoot: key,
+            isPaseoOwnedWorktree: false,
+            mainRepoRoot: null,
+          }
+        : {
+            cwd: key,
+            isGit: false,
+            currentBranch: null,
+            remoteUrl: null,
+            worktreeRoot: null,
+            isPaseoOwnedWorktree: false,
+            mainRepoRoot: null,
+          },
   };
 }

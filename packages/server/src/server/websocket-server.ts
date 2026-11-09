@@ -1,4 +1,6 @@
+import type { SshWorkspaceService } from "./ssh-workspaces/service.js";
 import { SkillCatalog } from "./skills/catalog.js";
+import { WorkspaceTrace } from "./workspace-trace/index.js";
 import {
   ChunkedTransport,
   ChunkedTransportProtocolError,
@@ -583,6 +585,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly agentStorage: AgentStorage;
   private readonly messageReceipts: MessageReceipts;
   readonly agentMessages: AgentMessageDelivery;
+  readonly workspaceTrace: WorkspaceTrace;
   private readonly creationService: CreationService;
   private readonly workspaceCreation: WorkspaceCreation;
   private readonly daemonWorkspaceEffects: WorkspaceCreationEffects;
@@ -720,6 +723,7 @@ export class VoiceAssistantWebSocketServer {
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
     board?: BoardServices,
+    private readonly sshWorkspaces?: SshWorkspaceService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -740,7 +744,23 @@ export class VoiceAssistantWebSocketServer {
     this.skillCatalog = new SkillCatalog(paseoHome);
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
+    this.workspaceTrace = new WorkspaceTrace({
+      paseoHome,
+      serverId,
+      agentManager,
+      agentStorage,
+      logger: this.logger,
+      artifacts: () => board?.artifacts,
+      schedules: requireWebSocketServices({ scheduleService, checkoutDiffManager }).scheduleService,
+      hasPending: (agentId) => this.agentMessages.hasPending(agentId),
+    });
     this.agentMessages = createAgentMessageDelivery({
+      trace: {
+        queued: (message, messageId) => this.workspaceTrace.queued(message, messageId),
+        dispatched: (batchId, request, disposition, replaced) =>
+          this.workspaceTrace.dispatched(batchId, request, disposition, replaced),
+        failed: (batchId, request) => this.workspaceTrace.failed(batchId, request),
+      },
       dispatch: async (batch) => {
         const { disposition } = await sendPreparedPromptToAgent({
           agentManager,
@@ -1728,6 +1748,8 @@ export class VoiceAssistantWebSocketServer {
         workspaceRuntimeStore: this.workspaceRuntimeStore,
         workspaceSetupObservation: this.workspaceSetupObservation,
         buildScripts: (workspace, project) => workspaceScripts.buildSnapshot(workspace, project),
+        describeExecutionLocation: (workspace) =>
+          this.sshWorkspaces?.describeLocation(workspace) ?? null,
       },
       createWorktree: (input, options) =>
         createPaseoWorktreeWorkflow(
@@ -1826,6 +1848,8 @@ export class VoiceAssistantWebSocketServer {
       agentStorage: this.agentStorage,
       messageReceipts: this.messageReceipts,
       agentMessages: this.agentMessages,
+      workspaceTrace: this.workspaceTrace,
+      sshWorkspaces: this.sshWorkspaces,
       creationService: this.creationService,
       workspaceCreation: this.workspaceCreation,
       startBoardTask: (input) => this.startBoardTask(input),
@@ -2203,6 +2227,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.board ? { boardTasks: true } : {}),
         // COMPAT(artifacts): added in v0.15.0, remove gate after 2027-11-04.
         ...(this.board ? { artifacts: true } : {}),
+        workspaceTrace: true,
+        ...(this.sshWorkspaces ? { sshWorkspaces: true } : {}),
         terminalCollection: true,
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
         workspaceSetupRun: true,

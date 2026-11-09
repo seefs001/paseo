@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useGoalArtifacts } from "@/artifacts/store";
 import { openArtifactViewer } from "@/artifacts/viewer-state";
-import { closeDeskGoalSheet } from "@/board/goal-sheet";
+import { closeDeskGoalSheet, useDeskGoalSheet } from "@/board/goal-sheet";
 import { ArtifactRow } from "./row";
 
 /**
@@ -20,12 +20,13 @@ export function GoalArtifacts({
 }): ReactElement | null {
   const { t } = useTranslation();
   const list = useGoalArtifacts(serverId, goalId);
+  const openCount = useDeskGoalSheet((sheet) => sheet.openCount);
   const open = useCallback(
     (artifactId: string) => {
-      closeDeskGoalSheet();
+      closeDeskGoalSheet(openCount);
       openArtifactViewer(serverId, artifactId);
     },
-    [serverId],
+    [openCount, serverId],
   );
   if (list.length === 0) return null;
   return (

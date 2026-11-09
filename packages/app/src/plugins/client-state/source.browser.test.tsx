@@ -274,9 +274,11 @@ it("shows a restored child in the nested example while its cached parent remains
     archivedAt: parent.archivedAt,
   };
   const store = useSessionStore.getState();
+  const projectId = workspace.projectId;
+  if (projectId === null) throw new Error("Expected workspace fixture to have a project");
   store.setProjects("host-1", [
     {
-      projectId: workspace.projectId,
+      projectId,
       projectDisplayName: "Project",
       projectCustomName: null,
       projectRootPath: workspace.projectRootPath,

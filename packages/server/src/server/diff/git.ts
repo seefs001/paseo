@@ -10,6 +10,7 @@ import {
   snapshotComparisonIndex,
   resolveCheckoutDiffBase,
   type CheckoutDiffCompare,
+  type CheckoutShortstat,
 } from "../../utils/checkout-git.js";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import type { BigIntStats } from "node:fs";
@@ -133,6 +134,26 @@ function parseStats(
   }
   return stats;
 }
+export async function getUncommittedDiffStat(cwd: string): Promise<CheckoutShortstat> {
+  const comparison = await listComparison({
+    cwd: await worktreeRoot(cwd),
+    base: { kind: "rev", rev: "HEAD" },
+    head: { kind: "worktree" },
+  });
+  try {
+    // Share the panel's file inventory without materializing patches or highlights.
+    return comparison.files.reduce(
+      (total, { entry }) => ({
+        additions: total.additions + entry.additions,
+        deletions: total.deletions + entry.deletions,
+      }),
+      { additions: 0, deletions: 0 },
+    );
+  } finally {
+    await comparison.close();
+  }
+}
+
 export async function listComparison(compare: Compare): Promise<Comparison> {
   if (compare.checkoutBase) {
     const selected = await resolveCheckoutDiffBase(compare.cwd, compare.checkoutBase.compare, {

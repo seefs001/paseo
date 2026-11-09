@@ -26,12 +26,16 @@ export function openDeskGoalSheet(target: DeskGoalSheetTarget): void {
 }
 
 /** Starts the close animation; the sheet unmounts on dismiss. */
-export function closeDeskGoalSheet(): void {
-  useDeskGoalSheet.setState((previous) =>
-    previous.status === "open" ? { ...previous, visible: false } : previous,
-  );
+export function closeDeskGoalSheet(openCount: number): void {
+  useDeskGoalSheet.setState((previous) => {
+    if (previous.status !== "open" || previous.openCount !== openCount) return previous;
+    return { ...previous, visible: false };
+  });
 }
 
-export function dismissDeskGoalSheet(): void {
-  useDeskGoalSheet.setState((previous) => ({ status: "closed", openCount: previous.openCount }));
+export function dismissDeskGoalSheet(openCount: number): void {
+  useDeskGoalSheet.setState((previous) => {
+    if (previous.status !== "open" || previous.openCount !== openCount) return previous;
+    return { status: "closed", openCount };
+  });
 }

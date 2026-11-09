@@ -82,6 +82,15 @@ import {
   type PiExtensionEventOutput,
 } from "./extensions/index.js";
 import { resolveResumeProcessCwd } from "../resume-process-cwd.js";
+import {
+  isSshSessionDirectory,
+  readSshExecutionBinding,
+  sshBindingFileForSessionDirectory,
+} from "../../../ssh-workspaces/binding.js";
+import {
+  createPiSshExtensionFile,
+  PI_SSH_MARKER_COMMAND,
+} from "../../../ssh-workspaces/pi-extension.js";
 import { revertPiConversation } from "./rewind.js";
 import {
   copyPiSessionFileWithCwd,
@@ -644,6 +653,7 @@ function buildResumeStartInput(input: {
   launchContext: AgentLaunchContext | undefined;
   mcpConfigFile: PiTempFile | null;
   paseoExtension: PiTempFile | null;
+  extraExtensions?: PiTempFile[];
 }): PiStartSessionInput {
   return {
     cwd: input.processCwd,
@@ -651,8 +661,70 @@ function buildResumeStartInput(input: {
     session: input.sessionFile,
     thinkingOptionId: normalizePiThinkingOption(input.resumeConfig.thinkingOptionId) ?? undefined,
     mcpConfigPath: input.mcpConfigFile?.path,
-    extensionPaths: input.paseoExtension ? [input.paseoExtension.path] : undefined,
+    extensionPaths:
+      input.paseoExtension || input.extraExtensions?.length
+        ? [
+            ...(input.paseoExtension ? [input.paseoExtension.path] : []),
+            ...(input.extraExtensions ?? []).map((file) => file.path),
+          ]
+        : undefined,
+    ...sshPiArgs(input.processCwd),
   };
+}
+
+// SSH sessions disable Pi's built-in MCP before any extension loads; the routing extension
+// loads the filtered replacement. If that extension fails to load, no MCP starts.
+function sshPiArgs(cwd: string): { extraArgs?: string[] } {
+  return isSshSessionDirectory(cwd) ? { extraArgs: ["--no-mcp"] } : {};
+}
+
+// SSH workspaces run Pi in an owner-side session directory. Their binding decides where
+// tools execute; a missing or invalid binding refuses the launch instead of running locally.
+async function createPiSshExtensionForCwd(cwd: string): Promise<PiTempFile[]> {
+  if (!isSshSessionDirectory(cwd)) return [];
+  await readSshExecutionBinding(cwd);
+  return [
+    await createPiSshExtensionFile({
+      bindingFile: sshBindingFileForSessionDirectory(cwd),
+      ownerCwd: cwd,
+    }),
+  ];
+}
+
+// Pi keeps running when an extension fails to load. Without the routing extension its
+// built-in tools would act on the owner computer, so the session is refused instead.
+async function assertPiSshRoutingActive(
+  runtimeSession: PiRuntimeSession,
+  sshExtensions: PiTempFile[],
+): Promise<void> {
+  const extension = sshExtensions[0];
+  if (!extension) return;
+  const commands = await runtimeSession.getCommands();
+  const fromExtension = (name: string) =>
+    commands.some(
+      (command) => command.name === name && command.sourceInfo?.path === extension.path,
+    );
+  if (!fromExtension(PI_SSH_MARKER_COMMAND)) {
+    throw new Error(
+      "The SSH routing extension did not load in Pi, so tools would run on this computer. The agent was not started.",
+    );
+  }
+  if (!fromExtension("mcp")) {
+    throw new Error(
+      "Another extension provides /mcp (for example pi-mcp-adapter), so Paseo cannot keep unselected MCP servers from starting for this SSH workspace. The agent was not started.",
+    );
+  }
+}
+
+// A resumed SSH session must start in its own session directory; any fallback cwd
+// would put the owner computer in place of the machine.
+async function createPiSshResumeExtension(cwd: string, processCwd: string): Promise<PiTempFile[]> {
+  const extensions = await createPiSshExtensionForCwd(cwd);
+  if (extensions.length > 0 && processCwd !== cwd) {
+    for (const file of extensions) file.cleanup();
+    throw new Error("SSH workspace session directory is unavailable; the agent was not resumed");
+  }
+  return extensions;
 }
 
 function toPiMcpConfig(config: McpServerConfig): PiMcpServerConfig {
@@ -3123,7 +3195,12 @@ export class PiRpcAgentClient implements AgentClient {
       mcpServers: mcp?.kind === "builtin" ? mcp.servers : undefined,
     });
     let runtimeSession: PiRuntimeSession;
+    const extensions: PiTempFile[] = [paseoExtension];
+    const cleanupExtensions = () => {
+      for (const file of extensions) file.cleanup();
+    };
     try {
+      extensions.push(...(await createPiSshExtensionForCwd(config.cwd)));
       runtimeSession = await runtime.startSession({
         cwd: config.cwd,
         model: config.model,
@@ -3131,20 +3208,22 @@ export class PiRpcAgentClient implements AgentClient {
         noSession: config.internal === true,
         env: launchContext?.env,
         mcpConfigPath: mcpConfigFile?.path,
-        extensionPaths: [paseoExtension.path],
+        extensionPaths: extensions.map((file) => file.path),
+        ...sshPiArgs(config.cwd),
       });
     } catch (error) {
       mcpConfigFile?.cleanup();
-      paseoExtension?.cleanup();
+      cleanupExtensions();
       throw error;
     }
     try {
+      await assertPiSshRoutingActive(runtimeSession, extensions.slice(1));
       return new PiRpcAgentSession({
         runtimeSession,
         config,
         initialState: await runtimeSession.getState(),
         capabilities: capabilitiesForSession(mcp !== null),
-        cleanup: combineCleanup([mcpConfigFile?.cleanup, paseoExtension?.cleanup]),
+        cleanup: combineCleanup([mcpConfigFile?.cleanup, cleanupExtensions]),
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
@@ -3153,7 +3232,7 @@ export class PiRpcAgentClient implements AgentClient {
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
       mcpConfigFile?.cleanup();
-      paseoExtension?.cleanup();
+      cleanupExtensions();
       throw error;
     }
   }
@@ -3203,7 +3282,10 @@ export class PiRpcAgentClient implements AgentClient {
     };
     let sessionCopy: PiTempFile | null = null;
     let runtimeSession: PiRuntimeSession;
+    let sshExtensions: PiTempFile[] = [];
     try {
+      sshExtensions = await createPiSshResumeExtension(resumeConfig.cwd, processCwd);
+      tempFiles.push(...sshExtensions);
       if (processCwd !== resumeConfig.cwd) {
         sessionCopy = await createPiSessionCopy(sessionFile, processCwd);
         tempFiles.push(sessionCopy);
@@ -3216,6 +3298,7 @@ export class PiRpcAgentClient implements AgentClient {
           launchContext,
           mcpConfigFile,
           paseoExtension,
+          extraExtensions: sshExtensions,
         }),
       );
     } catch (error) {
@@ -3223,6 +3306,7 @@ export class PiRpcAgentClient implements AgentClient {
       throw error;
     }
     try {
+      await assertPiSshRoutingActive(runtimeSession, sshExtensions);
       const initialState = await this.applyResumeModel(runtimeSession, resumeConfig.model);
       return new PiRpcAgentSession({
         runtimeSession,
@@ -3296,6 +3380,10 @@ export class PiRpcAgentClient implements AgentClient {
         runtimeSession = await runtime.startSession({
           cwd: options.scope === "global" ? homedir() : options.cwd,
           signal: context?.signal,
+          // A catalog probe in an SSH session directory starts no MCP and no extensions.
+          ...(options.scope !== "global" && options.cwd && isSshSessionDirectory(options.cwd)
+            ? { extraArgs: ["--no-mcp", "--no-extensions"] }
+            : {}),
         });
         if (context?.signal.aborted) await closeSession();
       });
@@ -3329,10 +3417,13 @@ export class PiRpcAgentClient implements AgentClient {
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
     const options = PiProviderOptionsSchema.parse(config.providerOptions ?? {});
     // Resolve the selected model's actual API, including custom Pi providers, without saving a session.
+    // Feature listing never runs tools. In an SSH session directory it starts no MCP servers
+    // and loads no extensions, so a replacement such as pi-mcp-adapter cannot start any.
     const session = await this.resolveRuntime(options.rpcTimeoutMs).startSession({
       cwd: config.cwd,
       model: config.model,
       noSession: true,
+      ...(isSshSessionDirectory(config.cwd) ? { extraArgs: ["--no-mcp", "--no-extensions"] } : {}),
     });
     try {
       return buildPiFeatures(await session.getState(), config);
@@ -3420,7 +3511,11 @@ export class PiRpcAgentClient implements AgentClient {
     if (!servers || Object.keys(servers).length === 0) {
       return null;
     }
-    const mcpSupport = await this.detectMcpSupport(cwd, env, runtime);
+    // SSH sessions load Paseo's MCP replacement, which filters servers before they start. The
+    // detection probe would start an unrouted Pi in the session directory, so it is skipped.
+    const mcpSupport = isSshSessionDirectory(cwd)
+      ? "builtin"
+      : await this.detectMcpSupport(cwd, env, runtime);
     if (toolPolicy && mcpSupport !== "builtin") {
       throw new ToolPolicyUnsupportedError(
         "pi",

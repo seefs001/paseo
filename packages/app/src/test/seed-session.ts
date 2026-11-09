@@ -6,7 +6,8 @@ import {
   type WorkspaceDescriptor,
 } from "@/stores/session-store";
 
-function projectFromWorkspace(workspace: WorkspaceDescriptor): ProjectDescriptor {
+function projectFromWorkspace(workspace: WorkspaceDescriptor): ProjectDescriptor | null {
+  if (workspace.projectId === null) return null;
   return {
     projectId: workspace.projectId,
     // A daemon always derives a key for every project, so fixtures carry one too.
@@ -20,10 +21,8 @@ function projectFromWorkspace(workspace: WorkspaceDescriptor): ProjectDescriptor
 }
 
 /**
- * Seeds a session the way a daemon populates it: every workspace's project is
- * published on the project channel, so the store never holds a workspace whose
- * project is unknown. Tests that seed workspaces alone model a state the daemon
- * cannot produce, and nothing renders.
+ * Seeds the project channel for assigned workspaces and publishes every workspace,
+ * including those with no project.
  */
 export function seedSessionWorkspaces(
   serverId: string,
@@ -33,8 +32,9 @@ export function seedSessionWorkspaces(
   const byProjectId = new Map<string, ProjectDescriptor>();
   for (const project of projects ?? []) byProjectId.set(project.projectId, project);
   for (const workspace of workspaces.values()) {
-    if (!byProjectId.has(workspace.projectId)) {
-      byProjectId.set(workspace.projectId, projectFromWorkspace(workspace));
+    const project = projectFromWorkspace(workspace);
+    if (project !== null && !byProjectId.has(project.projectId)) {
+      byProjectId.set(project.projectId, project);
     }
   }
   const store = useSessionStore.getState();
@@ -66,7 +66,8 @@ export function seedRuntimeWorkspaces(
     if (!workspaces.has(id)) runtime.removeWorkspaceSnapshot(serverId, id);
   }
   for (const workspace of workspaces.values()) {
-    runtime.acceptProjectSnapshot(serverId, projectFromWorkspace(workspace));
+    const project = projectFromWorkspace(workspace);
+    if (project !== null) runtime.acceptProjectSnapshot(serverId, project);
   }
   runtime.acceptWorkspaceSnapshots(serverId, [...workspaces.values()]);
 }

@@ -1,3 +1,8 @@
 {
-  "extends": "./tsconfig.base.json"
+  "extends": "./tsconfig.base.json",
+  // This root config has no include list, so emitting from it writes .js next to every .ts in the
+  // repo. Those stale files shadow sources in tests. Package builds emit to their own outDir.
+  "compilerOptions": {
+    "noEmit": true
+  }
 }

@@ -110,6 +110,18 @@ const PersistedWorkspaceRecordSchema = z.object({
   untrustedSource: UntrustedWorkspaceSourceSchema.optional(),
   // Public discovery visibility. Contents retain their ordinary lifecycle.
   background: z.boolean().optional().default(false),
+  // Absent means the workspace executes on the owner computer. For SSH workspaces,
+  // cwd is the owner-side Pi session directory and directory is the remote one;
+  // the location never changes for the life of the workspace.
+  executionLocation: z
+    .object({
+      kind: z.literal("ssh"),
+      machineId: z.string(),
+      directory: z.string(),
+      // Git as observed on the machine when the workspace was created.
+      gitObservation: z.enum(["unobserved", "git", "not_git", "failed"]).optional(),
+    })
+    .optional(),
 });
 
 export type PersistedProjectRecord = z.infer<typeof PersistedProjectRecordSchema>;
@@ -721,6 +733,7 @@ export function createPersistedWorkspaceRecord(input: {
   labels?: string[];
   untrustedSource?: UntrustedWorkspaceSource;
   background?: boolean;
+  executionLocation?: PersistedWorkspaceRecord["executionLocation"];
 }): PersistedWorkspaceRecord {
   const { background, ...rest } = input;
   return PersistedWorkspaceRecordSchema.parse({

@@ -331,6 +331,17 @@ function isMentionAutocompleteMode(mode: AutocompleteMode): boolean {
   return mode === "file" || mode === "chat" || mode === "all";
 }
 
+// Owner-side file suggestions would list the wrong computer in an SSH workspace, so they
+// get no cwd there.
+function useLocalFileSuggestionCwd(serverId: string, agentId: string, cwd: string): string {
+  const isSshAgent = useSessionStore((state) => {
+    const agentWorkspaceId = state.sessions[serverId]?.agents?.get(agentId)?.workspaceId;
+    if (!agentWorkspaceId) return false;
+    return Boolean(state.sessions[serverId]?.workspaces.get(agentWorkspaceId)?.executionLocation);
+  });
+  return isSshAgent || cwd.startsWith("ssh://") ? "" : cwd;
+}
+
 function resolveFileSuggestionsEnabled(input: {
   mode: AutocompleteMode;
   serverId: string;
@@ -718,14 +729,14 @@ function resolveAutocompleteIsVisible(args: {
   canLoadCommands: boolean;
   customCommandCount: number;
   serverId: string;
-  autocompleteCwd: string;
+  fileSuggestionCwd: string;
 }): boolean {
   if (args.mode === "command") {
     if (args.customCommandCount > 0) return true;
     return args.canLoadCommands;
   }
   if (args.mode === "file") {
-    return Boolean(args.serverId) && args.autocompleteCwd.length > 0;
+    return Boolean(args.serverId) && args.fileSuggestionCwd.length > 0;
   }
   if (isMentionAutocompleteMode(args.mode)) {
     return Boolean(args.serverId);
@@ -796,14 +807,13 @@ function resolveCommandMenu(input: {
 
 function resolveFileMenu(input: {
   options: () => AgentAutocompleteOption[];
-  isPending: boolean;
   isLoading: boolean;
   error: unknown;
   emptyText: string;
   t: TFunction;
 }): AutocompleteMenu {
   const options = input.options();
-  if (input.isPending || (input.isLoading && options.length === 0)) {
+  if (input.isLoading && options.length === 0) {
     return {
       options: [],
       status: { kind: "loading", message: input.t("agentAutocomplete.searchingWorkspace") },
@@ -986,6 +996,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     () => resolveAutocompleteCwd(isDraftContext, queryDraftConfig?.cwd, agentCwd),
     [agentCwd, isDraftContext, queryDraftConfig],
   );
+  const fileSuggestionCwd = useLocalFileSuggestionCwd(serverId, agentId, autocompleteCwd);
 
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
@@ -1010,7 +1021,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     canLoadCommands,
     customCommandCount: customCommands.length,
     serverId,
-    autocompleteCwd,
+    fileSuggestionCwd,
   });
   const commandsState = resolveCommandsState({
     canListCommands,
@@ -1048,7 +1059,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     queryKey: [
       "directorySuggestions",
       serverId,
-      autocompleteCwd,
+      fileSuggestionCwd,
       debouncedFileFilterQuery,
       true,
       true,
@@ -1056,14 +1067,14 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     queryFn: () =>
       fetchDirectorySuggestionEntries({
         client,
-        cwd: autocompleteCwd,
+        cwd: fileSuggestionCwd,
         query: debouncedFileFilterQuery,
         unavailableMessage: t("common.errors.daemonClientUnavailable"),
       }),
     enabled: resolveFileSuggestionsEnabled({
       mode,
       serverId,
-      cwd: autocompleteCwd,
+      cwd: fileSuggestionCwd,
       client,
       isConnected,
     }),
@@ -1091,13 +1102,13 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         customCommands,
         pluginNames,
         activeSlashCommand,
-        fileSuggestions: fileSuggestionsQuery.data ?? [],
+        fileSuggestions: fileSuggestionCwd ? (fileSuggestionsQuery.data ?? []) : [],
         sessionCandidates,
         isDraftContext,
         mode,
         t,
       });
-    if (mode === "chat") {
+    if (mode === "chat" || (mode === "all" && !fileSuggestionCwd)) {
       return withEmptyStatus(buildOptions(), commandsEmptyText);
     }
     if (wantsFileSuggestions(mode)) {
@@ -1108,7 +1119,6 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       return resolveFileMenu({
         options: () => mentionOptions,
         emptyText: commandsEmptyText,
-        isPending: fileSuggestionsQuery.isPending,
         isLoading: fileSuggestionsQuery.isLoading,
         error: fileSuggestionsQuery.error,
         t,
@@ -1134,10 +1144,10 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     commandsQuery.commands,
     commandsQuery.error,
     commandsState,
+    fileSuggestionCwd,
     fileSuggestionsQuery.data,
     fileSuggestionsQuery.error,
     fileSuggestionsQuery.isLoading,
-    fileSuggestionsQuery.isPending,
     isDraftContext,
     isVisible,
     mode,

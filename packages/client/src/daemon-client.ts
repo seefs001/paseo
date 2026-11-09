@@ -1,4 +1,21 @@
 import type { ScheduleTarget } from "@getpaseo/protocol/schedule/types";
+import type { WorkspaceTracePage, WorkspaceTraceQuery } from "@getpaseo/protocol/workspace-trace";
+import type {
+  SshInboundMessage,
+  SshMachine,
+  SshMachineTarget,
+  SshOutboundMessage,
+  SshRemoteEntry,
+} from "@getpaseo/protocol/ssh-workspaces";
+
+type SshPayloadByType = { [M in SshOutboundMessage as M["type"]]: M["payload"] };
+type SshRequestBody = DistributiveOmit<SshInboundMessage, "requestId">;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+function requireSshMachine(machine: SshMachine | null): SshMachine {
+  if (!machine) throw new Error("SSH machine response was empty");
+  return machine;
+}
 import type { SessionTitleProposal } from "@getpaseo/protocol/session-titles";
 import { submittedSkillPaths } from "@getpaseo/protocol/skills";
 import {
@@ -6694,6 +6711,199 @@ export class DaemonClient {
       responseType: "plugin.directory.install.response",
     });
     return payload.plugin;
+  }
+
+  // ---- SSH machines and SSH workspaces ----
+
+  private requireSshWorkspaces(): void {
+    if (this.getLastServerInfoMessage()?.features?.sshWorkspaces !== true) {
+      throw new Error("Update the host to use SSH machines.");
+    }
+  }
+
+  private async sendSshRequest<TResponseType extends SshOutboundMessage["type"]>(
+    message: SshRequestBody,
+    responseType: TResponseType,
+    timeout?: number,
+  ): Promise<SshPayloadByType[TResponseType]> {
+    this.requireSshWorkspaces();
+    const requestId = this.createRequestId();
+    const payload: unknown = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { ...message, requestId },
+      responseType: responseType as never,
+      timeout,
+    });
+    const typed = payload as SshPayloadByType[TResponseType];
+    if (typed.error) throw new Error(typed.error);
+    return typed;
+  }
+
+  async listSshMachines(): Promise<SshMachine[]> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.machine.list.request" },
+      "ssh.machine.list.response",
+    );
+    return payload.machines;
+  }
+
+  async saveSshMachine(input: {
+    machineId?: string;
+    expectedRevision?: number;
+    displayName: string;
+    target: SshMachineTarget;
+    disabled?: boolean;
+  }): Promise<SshMachine> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.machine.save.request", ...input },
+      "ssh.machine.save.response",
+    );
+    return requireSshMachine(payload.machine);
+  }
+
+  async removeSshMachine(machineId: string): Promise<void> {
+    await this.sendSshRequest(
+      { type: "ssh.machine.remove.request", machineId },
+      "ssh.machine.remove.response",
+    );
+  }
+
+  // Runs from the daemon computer: resolves the OpenSSH target, checks the host key and probes the shell.
+  async checkSshMachine(machineId: string): Promise<SshMachine> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.machine.check.request", machineId },
+      "ssh.machine.check.response",
+      90_000,
+    );
+    return requireSshMachine(payload.machine);
+  }
+
+  async trustSshMachineHostKey(input: {
+    machineId: string;
+    revision: number;
+    candidateId: string;
+  }): Promise<SshMachine> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.machine.trust.request", ...input },
+      "ssh.machine.trust.response",
+      90_000,
+    );
+    return requireSshMachine(payload.machine);
+  }
+
+  async setSshMachinePolicy(input: {
+    machineId: string;
+    expectedRevision: number;
+    localTools: string[];
+    disabledTools: string[];
+    localSkills: boolean;
+    localMcpServers?: string[];
+  }): Promise<SshMachine> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.machine.policy.set.request", ...input },
+      "ssh.machine.policy.set.response",
+    );
+    return requireSshMachine(payload.machine);
+  }
+
+  async createSshWorkspace(input: {
+    machineId: string;
+    directory: string;
+    title?: string;
+  }): Promise<{ workspaceId: string; directory: string }> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.workspace.create.request", ...input },
+      "ssh.workspace.create.response",
+      90_000,
+    );
+    if (!payload.workspaceId || !payload.directory)
+      throw new Error("SSH workspace was not created");
+    return { workspaceId: payload.workspaceId, directory: payload.directory };
+  }
+
+  async listSshWorkspaceFiles(input: {
+    workspaceId: string;
+    path: string;
+  }): Promise<{ machineId: string | null; path: string | null; entries: SshRemoteEntry[] }> {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.workspace.files.list.request", ...input },
+      "ssh.workspace.files.list.response",
+      90_000,
+    );
+    return { machineId: payload.machineId, path: payload.path, entries: payload.entries };
+  }
+
+  async getSshWorkspaceRouting(workspaceId: string) {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.workspace.routing.get.request", workspaceId },
+      "ssh.workspace.routing.get.response",
+    );
+    return { override: payload.override, effective: payload.effective };
+  }
+
+  // Null fields keep the machine default.
+  async setSshWorkspaceRouting(input: {
+    workspaceId: string;
+    expectedRevision: number;
+    localTools: string[] | null;
+    disabledTools: string[] | null;
+    localSkills: boolean | null;
+    localMcpServers?: string[] | null;
+  }) {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.workspace.routing.set.request", ...input },
+      "ssh.workspace.routing.set.response",
+    );
+    return { override: payload.override, effective: payload.effective };
+  }
+
+  async listSshWorkspaceOperations(workspaceId: string) {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.workspace.operations.list.request", workspaceId },
+      "ssh.workspace.operations.list.response",
+    );
+    return payload.operations;
+  }
+
+  // Confirms unknown outcomes a person reviewed; `at` is the state time they saw.
+  async acknowledgeSshWorkspaceOperations(input: {
+    workspaceId: string;
+    operations: Array<{ operationId: string; at: string }>;
+  }) {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.workspace.operations.acknowledge.request", ...input },
+      "ssh.workspace.operations.acknowledge.response",
+    );
+    return { acknowledged: payload.acknowledged, stale: payload.stale };
+  }
+
+  async readSshWorkspaceFile(input: { workspaceId: string; path: string }) {
+    const payload = await this.sendSshRequest(
+      { type: "ssh.workspace.files.read.request", ...input },
+      "ssh.workspace.files.read.response",
+      90_000,
+    );
+    return {
+      machineId: payload.machineId,
+      path: payload.path,
+      text: payload.text,
+      binary: payload.binary,
+      size: payload.size,
+      truncated: payload.truncated,
+    };
+  }
+
+  async getWorkspaceTrace(query: WorkspaceTraceQuery): Promise<WorkspaceTracePage> {
+    if (this.getLastServerInfoMessage()?.features?.workspaceTrace !== true) {
+      throw new Error("Update the host to view Workspace Trace.");
+    }
+    const requestId = this.createRequestId();
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "workspace.trace.get.request", requestId, ...query },
+      responseType: "workspace.trace.get.response",
+    });
+    return payload.trace;
   }
 
   async installPluginSource(input: {

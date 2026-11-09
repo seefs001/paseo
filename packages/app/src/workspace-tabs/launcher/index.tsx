@@ -43,6 +43,8 @@ export interface NewTabLauncher {
   showPullRequest: boolean;
   showBrowser: boolean;
   terminalDisabled: boolean;
+  // Shown on the disabled terminal entries, such as in SSH workspaces.
+  terminalDisabledReason?: string;
   launch: (selection: NewTabSelection, destination: WorkspaceTabLaunchDestination) => void;
 }
 
@@ -53,6 +55,7 @@ export interface WorkspaceTabLaunchItem {
   terminalIconKey?: string;
   shortcutActionId?: string;
   disabled: boolean;
+  disabledReason?: string;
   panelKind: WorkspaceTabTarget["kind"];
   launch: (destination: WorkspaceTabLaunchDestination) => void;
 }
@@ -85,6 +88,7 @@ const BUILT_IN_SELECTIONS = {
   diff: { kind: "target", target: { kind: "working_diff" } },
   files: { kind: "target", target: { kind: "files" } },
   artifacts: { kind: "target", target: { kind: "artifacts" } },
+  trace: { kind: "target", target: { kind: "trace" } },
   browser: { kind: "browser" },
   pullRequest: { kind: "target", target: { kind: "pull_request" } },
 } satisfies Record<BuiltInLaunchItemId, NewTabSelection>;
@@ -128,6 +132,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
     const filesPresentation = getLaunchPresentation("files");
     const artifactsPresentation = getLaunchPresentation("artifacts");
     const pullRequestPresentation = getLaunchPresentation("pull_request");
+    const tracePresentation = getLaunchPresentation("trace");
     const builtIns: Record<BuiltInLaunchItemId, WorkspaceTabLaunchItem & { hidden?: boolean }> = {
       agent: {
         id: "agent",
@@ -144,6 +149,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
         Icon: SquareTerminal,
         shortcutActionId: "workspace-terminal-new",
         disabled: launcher.terminalDisabled,
+        disabledReason: launcher.terminalDisabledReason,
         panelKind: "terminal",
         launch: launchSelection(BUILT_IN_SELECTIONS.terminal),
       },
@@ -183,6 +189,14 @@ export function useWorkspaceTabLaunchCatalog(input: {
         disabled: false,
         panelKind: "artifacts",
         launch: launchSelection(BUILT_IN_SELECTIONS.artifacts),
+      },
+      trace: {
+        id: "trace",
+        label: tracePresentation.label(t),
+        Icon: tracePresentation.icon,
+        disabled: false,
+        panelKind: "trace",
+        launch: launchSelection(BUILT_IN_SELECTIONS.trace),
       },
       browser: {
         id: "browser",
@@ -247,6 +261,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
           label: profile.name,
           terminalIconKey: getTerminalProfileIcon(profile),
           disabled: launcher.terminalDisabled,
+          disabledReason: launcher.terminalDisabledReason,
           panelKind: "terminal",
           launch: launchSelection({ kind: "terminal", profile }),
         })),

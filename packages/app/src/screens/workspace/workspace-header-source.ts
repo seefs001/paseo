@@ -45,6 +45,12 @@ export function resolveWorkspaceHeader(input: { workspace: WorkspaceDescriptor }
   title: string;
   subtitle: string;
 } {
+  const location = input.workspace.executionLocation;
+  if (location) {
+    // SSH workspaces name the machine and the remote directory, never an owner path.
+    const machine = location.machineDisplayName ?? location.machineId;
+    return { title: input.workspace.name, subtitle: `${machine}:${location.directory}` };
+  }
   return {
     title: input.workspace.name,
     subtitle: input.workspace.projectDisplayName,

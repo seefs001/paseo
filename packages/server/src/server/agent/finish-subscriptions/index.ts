@@ -20,6 +20,8 @@ export interface FinishSubscription {
   serverId?: string;
   /** Creation subscriptions stop reporting after the child is detached. */
   requireParentOwnership?: boolean;
+  triggerMessageId?: string;
+  triggerCreation?: boolean;
 }
 export interface FinishSubscriptionStore {
   list(): Promise<FinishSubscription[]>;
@@ -172,6 +174,7 @@ export function createFinishSubscriptions(deps: Dependencies): FinishSubscriptio
     result: FinishObservationResult,
     permissions: Set<string>,
     signal: AbortSignal,
+    subscriptions: FinishSubscription[],
   ): Promise<boolean> {
     const requests = result.final?.pendingPermissions ?? [];
     const reason = reasonFor(result);
@@ -198,6 +201,15 @@ export function createFinishSubscriptions(deps: Dependencies): FinishSubscriptio
           serverId: record.serverId ?? deps.serverId,
           title,
           event: finishNotificationEvents[reason],
+        },
+        trace: {
+          subscriptionIds: subscriptions.map((subscription) => subscription.id),
+          triggerMessageIds: subscriptions.flatMap((subscription) =>
+            subscription.triggerMessageId ? [subscription.triggerMessageId] : [],
+          ),
+          triggerCreationAgentIds: subscriptions
+            .filter((subscription) => subscription.triggerCreation)
+            .map((subscription) => subscription.childAgentId),
         },
         activeTurnBehavior: "steer",
         unarchive: false,
@@ -274,7 +286,8 @@ export function createFinishSubscriptions(deps: Dependencies): FinishSubscriptio
             stop(watch, group);
             return;
           }
-          if (!acknowledged) acknowledged = await deliver(record, pending, permissions, signal);
+          if (!acknowledged)
+            acknowledged = await deliver(record, pending, permissions, signal, watch.records);
           if (acknowledged) {
             // A removal failure retries only the commit, never the already accepted callback.
             await remove(watch);

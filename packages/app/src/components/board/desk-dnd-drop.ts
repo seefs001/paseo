@@ -127,9 +127,7 @@ function stageDropUpdate(
     rank: rankForSlot({ tasks, task, stage: target.stage, beforeTaskId: target.beforeTaskId }),
   };
   if (target.stage !== task.stage) update.stage = target.stage;
-  // Ahead groups by goal only under goal grouping; other groupings say nothing about the goal.
-  const groupsByGoal = host?.status === "ready" && host.settings.grouping === "goal";
-  if (groupsByGoal && target.goalId !== task.goalId) update.goalId = target.goalId;
+  if (target.goalId !== task.goalId) update.goalId = target.goalId;
   return update;
 }
 

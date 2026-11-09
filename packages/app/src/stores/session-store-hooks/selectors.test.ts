@@ -31,9 +31,13 @@ function equivalenceViewKey(projectKey: string): string {
   return createProjectViewKey({ kind: "equivalence", projectKey });
 }
 
+interface ProjectWorkspaceFixture extends WorkspaceDescriptor {
+  projectId: string;
+}
+
 function createWorkspace(
-  input: Partial<WorkspaceDescriptor> & Pick<WorkspaceDescriptor, "id">,
-): WorkspaceDescriptor {
+  input: Partial<ProjectWorkspaceFixture> & Pick<ProjectWorkspaceFixture, "id">,
+): ProjectWorkspaceFixture {
   return {
     createdAt: null,
     lastUserMessageAt: null,
@@ -53,7 +57,7 @@ function createWorkspace(
   };
 }
 
-function projectDescriptorFromTestWorkspace(workspace: WorkspaceDescriptor): ProjectDescriptor {
+function projectDescriptorFromTestWorkspace(workspace: ProjectWorkspaceFixture): ProjectDescriptor {
   return {
     projectId: workspace.projectId,
     projectKey: workspace.projectId,
@@ -65,7 +69,7 @@ function projectDescriptorFromTestWorkspace(workspace: WorkspaceDescriptor): Pro
   };
 }
 
-function initializeWorkspaces(workspaces: WorkspaceDescriptor[]): void {
+function initializeWorkspaces(workspaces: ProjectWorkspaceFixture[]): void {
   useSessionStore.getState().initializeSession(SERVER_ID, null as unknown as DaemonClient);
   useSessionStore
     .getState()
@@ -75,10 +79,9 @@ function initializeWorkspaces(workspaces: WorkspaceDescriptor[]): void {
     .setProjects(
       SERVER_ID,
       new Map(
-        workspaces.map((workspace) => [
-          workspace.projectId,
-          projectDescriptorFromTestWorkspace(workspace),
-        ]),
+        workspaces
+          .map(projectDescriptorFromTestWorkspace)
+          .map((project) => [project.projectId, project]),
       ).values(),
     );
 }
@@ -166,15 +169,7 @@ describe("workspace replica authority", () => {
       .setWorkspaces(SERVER_ID, new Map([[authoritativeWorkspace.id, authoritativeWorkspace]]));
     useSessionStore
       .getState()
-      .setProjects(
-        SERVER_ID,
-        new Map([
-          [
-            authoritativeWorkspace.projectId,
-            projectDescriptorFromTestWorkspace(authoritativeWorkspace),
-          ],
-        ]).values(),
-      );
+      .setProjects(SERVER_ID, [projectDescriptorFromTestWorkspace(authoritativeWorkspace)]);
     useSessionStore.getState().setHasHydratedWorkspaces(SERVER_ID, true);
     const hydratedServerIds = selectHydratedWorkspaceServerIds(useSessionStore.getState(), [
       SERVER_ID,
@@ -199,20 +194,18 @@ describe("workspace replica authority", () => {
       id: "hydrated-workspace",
       projectId: "hydrated-project",
     });
+    const loadingProject = projectDescriptorFromTestWorkspace(loadingWorkspace);
+    const hydratedProject = projectDescriptorFromTestWorkspace(hydratedWorkspace);
     const state = {
       sessions: {
         [loadingServerId]: {
           hasHydratedWorkspaces: false,
-          projects: new Map([
-            [loadingWorkspace.projectId, projectDescriptorFromTestWorkspace(loadingWorkspace)],
-          ]),
+          projects: new Map([[loadingProject.projectId, loadingProject]]),
           workspaces: new Map([[loadingWorkspace.id, loadingWorkspace]]),
         },
         [hydratedServerId]: {
           hasHydratedWorkspaces: true,
-          projects: new Map([
-            [hydratedWorkspace.projectId, projectDescriptorFromTestWorkspace(hydratedWorkspace)],
-          ]),
+          projects: new Map([[hydratedProject.projectId, hydratedProject]]),
           workspaces: new Map([[hydratedWorkspace.id, hydratedWorkspace]]),
         },
       },
@@ -339,9 +332,8 @@ describe("workspace structure composition", () => {
   it("reuses structure when unrelated session state changes", () => {
     const workspace = createWorkspace({ id: "workspace-a" });
     const workspaces = new Map([[workspace.id, workspace]]);
-    const projects = new Map([
-      [workspace.projectId, projectDescriptorFromTestWorkspace(workspace)],
-    ]);
+    const project = projectDescriptorFromTestWorkspace(workspace);
+    const projects = new Map([[project.projectId, project]]);
     const selectProjects = createWorkspaceStructureProjectsSelector([SERVER_ID]);
     const before = selectProjects({ sessions: { [SERVER_ID]: { workspaces, projects } } });
     const after = selectProjects({
@@ -623,7 +615,9 @@ it("a prompt changes only its project's structure and output preserves both proj
   const a = { ...createWorkspace({ id: "a", projectId: "p" }), createdAt: new Date("2026-01-01") };
   const b = { ...createWorkspace({ id: "b", projectId: "p" }), createdAt: new Date("2026-02-01") };
   const c = { ...createWorkspace({ id: "c", projectId: "q" }), createdAt: new Date("2026-02-01") };
-  const projects = new Map([a, c].map((w) => [w.projectId, projectDescriptorFromTestWorkspace(w)]));
+  const projects = new Map(
+    [a, c].map(projectDescriptorFromTestWorkspace).map((project) => [project.projectId, project]),
+  );
   const select = createWorkspaceStructureProjectsSelector([SERVER_ID], "lastPrompt");
   const state = (workspaces: WorkspaceDescriptor[]) => ({
     sessions: { [SERVER_ID]: { projects, workspaces: new Map(workspaces.map((w) => [w.id, w])) } },

@@ -18,6 +18,7 @@ export { MobileWorkspaceTabSwitcher } from "./tab-switcher";
 
 interface CompactWorkspaceHeaderProps {
   projectAssigned?: boolean;
+  subtitleKind?: "project" | "location";
   serverId: string;
   isLoading: boolean;
   title: string;
@@ -36,6 +37,7 @@ interface CompactWorkspaceHeaderProps {
 /** The compact header with the workspace's project row and controls. */
 export function CompactWorkspaceHeader({
   projectAssigned,
+  subtitleKind,
   isLoading,
   title,
   subtitle,
@@ -58,9 +60,10 @@ export function CompactWorkspaceHeader({
         subtitle={subtitle}
         isSubtitleDistinct={isSubtitleDistinct}
         serverId={serverId}
+        subtitleKind={subtitleKind}
       />
     ),
-    [subtitle, isSubtitleDistinct, serverId, projectAssigned],
+    [subtitle, isSubtitleDistinct, serverId, projectAssigned, subtitleKind],
   );
   const symbols = {
     "tab-count": tabSwitcher,

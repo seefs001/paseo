@@ -2,6 +2,122 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  sshMachines: {
+    title: "SSH マシン",
+    info: "このホストが自身の OpenSSH 設定と鍵で接続するマシンです。Pi はこのホストのモデルと設定で動作し、SSH ワークスペースのファイルとコマンドはマシン上で実行されます。スマートフォンなどのクライアントに SSH 鍵は不要です。",
+    updateHost: "SSH マシンを使うにはこのホストを更新してください。",
+    add: "追加",
+    empty: "SSH マシンはまだありません。",
+    hostLabel: "OpenSSH エイリアスまたはホスト",
+    hostHint:
+      "このホストの ~/.ssh/config、鍵、SSH エージェントを使います。パスワードと MFA プロンプトには対応していません。",
+    nameLabel: "名前",
+    userLabel: "ユーザー",
+    portLabel: "ポート",
+    invalidPort: "ポートは 1〜65535 の数値で指定してください。",
+    cancel: "キャンセル",
+    saveAndCheck: "保存して確認",
+    saveFailed: "マシンを保存できませんでした",
+    check: "確認",
+    trust: "ホスト鍵を信頼",
+    trustTitle: "このホスト鍵を信頼しますか？",
+    trustFailed: "ホスト鍵を信頼できませんでした",
+    toolRouting: "ツールルーティング",
+    newWorkspace: "新しいワークスペース",
+    remove: "削除",
+    removeTitle: "SSH マシンを削除しますか？",
+    removeMessage:
+      "マシン上のファイルは変更されません。使用中のワークスペースは先にアーカイブしてください。",
+    removeMessageInUse:
+      "{{count}} 件のワークスペースがまだこのマシンを使っています。削除する前にアーカイブしてください。マシン上のファイルは変更されません。",
+    removeFailed: "マシンを削除できませんでした",
+    targetHidden: "接続情報は非表示です",
+    summaryOnly:
+      "このマシンでワークスペースを開けます。接続やツールルーティングの変更にはホスト管理権限が必要です。",
+    state: {
+      not_checked: "未確認",
+      checking: "確認中",
+      needs_trust: "ホスト鍵の確認が必要",
+      ready: "準備完了",
+      needs_attention: "対応が必要",
+      disabled: "無効",
+    },
+    policyHint:
+      "ツールは既定でマシン上で実行されます。SSH 実装のないツールは、ここでローカルに指定しない限り使えません。ローカルツールはマシンではなくこのホストで実行されます。",
+    localSkills: "このホストからスキルを読む",
+    localSkillsHint:
+      "読み込まれた Pi スキルと参照ファイルはここから読み取り専用で読まれます。スキル内のコマンドはマシン上で実行されます。",
+    localTools: "ローカルツール",
+    localToolsHint:
+      "カンマ区切りのツール名（例: メモリやブラウザーのツール）。ファイル、検索、bash ツールは常にマシン上で実行されます。",
+    disabledTools: "無効なツール",
+    policyRevision: "リビジョン {{revision}}",
+    savePolicy: "ルーティングを保存",
+    policySaveFailed: "ツールルーティングを保存できませんでした",
+    directoryLabel: "マシン上のディレクトリ",
+    directoryHint: "既存のディレクトリ。Paseo はマシン上でディレクトリを作成・削除しません。",
+    createWorkspace: "ワークスペースを作成",
+    createWorkspaceFailed: "ワークスペースを作成できませんでした",
+    errors: {
+      hostRequired: "OpenSSH エイリアスまたはホストを入力してください。",
+      hostInvalid: "空白を含まず、先頭がダッシュでないエイリアスまたはホスト名を使ってください。",
+      userInvalid: "ユーザー名に空白を含めたり、ダッシュで始めたりできません。",
+      toolNameInvalid:
+        "ツール名には英数字、ドット、ダッシュ、コロン、アンダースコアを使ってください。",
+      remoteBuiltinLocal:
+        "ファイル、検索、bash ツールは常にマシン上で実行され、ローカルにはできません。",
+      directoryRequired: "マシン上のディレクトリを入力してください。",
+    },
+    routing: {
+      workspaceHint:
+        "このワークスペースだけの設定です。上書きしない項目はマシンの既定値を使います。変更は次のツール呼び出しから適用されます。",
+      localMcpServers: "ローカル MCP サーバー",
+      localMcpServersHint:
+        "このワークスペースで起動する、このホストの Pi 設定の MCP サーバー。その他は起動しません。",
+      disabledToolsHint: "ここで Pi が呼び出せないツール名。ユーザーシェルも含みます。",
+      reload: "再読み込み",
+      useMachineDefault: "マシンの既定値を使う",
+      readOnly: "ツールルーティングの変更にはホスト管理権限が必要です。",
+      machineMissing: "このワークスペースのマシンは利用できません。",
+    },
+    operations: {
+      title: "操作",
+      empty: "まだマシンに変更は送信されていません。",
+      unknownNotice:
+        "結果が不明な操作があります。Paseo はマシンへの自動変更を停止しました。マシンを確認してから下で確定してください。確定しても何も再実行されません。",
+      confirm: "結果を確定",
+      confirmTitle: "不明な結果を確定しますか？",
+      confirmMessage:
+        "結果が不明な {{count}} 件の操作についてマシンを確認しました。確定するとエージェントは再びマシンを変更できます。何も再実行されません。",
+      stale:
+        "一覧の読み込み後に {{count}} 件の操作が変わったため確定されていません。更新して再確認してください。",
+      state: {
+        admitted: "許可済み",
+        sent: "送信済み",
+        completed: "完了",
+        not_sent: "未送信",
+        unknown: "結果不明",
+        acknowledged: "結果不明（確認済み）",
+      },
+    },
+    workspace: {
+      terminalUnavailable: "SSH ワークスペースではまだターミナルを使えません。",
+      panelUnavailable:
+        "このパネルはオーナーのコンピューター上で動作するため、SSH ワークスペースでは使えません。マシンには「ファイル」を使ってください。",
+    },
+    files: {
+      title: "ファイル",
+      location: "{{machine}} 上",
+      up: "上へ",
+      refresh: "更新",
+      close: "閉じる",
+      loading: "読み込み中…",
+      empty: "空のディレクトリ",
+      binary: "バイナリファイルのためプレビューできません。",
+      truncated: "先頭 1 MB を表示しています。",
+      disconnected: "ホストが切断されています。",
+    },
+  },
   scheduleTargets: {
     workspace: "ワークスペース（任意）",
     conversation: "会話（任意）",
@@ -1258,11 +1374,118 @@ export const ja: TranslationResources = {
       },
     },
   },
+  workspaceTrace: {
+    title: "Trace",
+    unsupported: "Trace を表示するにはこのホストの更新が必要です。",
+    loading: "Trace を読み込み中…",
+    loadFailed: "Trace を読み込めませんでした",
+    retry: "再試行",
+    recent: "最近のアクティビティ",
+    focusedOn: "{{title}} にフォーカス",
+    clearFocus: "すべて表示",
+    count: "イベント {{count}}",
+    refresh: "更新",
+    refreshing: "更新中…",
+    empty: "エージェント間のアクティビティはまだ記録されていません",
+    loadMore: "以前を読み込む",
+    loadingMore: "読み込み中…",
+    focusHere: "ここにフォーカス",
+    openArtifact: "Artifact を開く",
+    showSource: "ソースを表示",
+    openConversation: "会話を開く",
+    sourceItemNotAddressable:
+      "このイベントには位置を特定できるソース項目がありません。会話は現在の位置で開きます。",
+    sourceUnavailable: "ここではソースを表示できません",
+    gapForAgent: "{{gap}}（{{agent}}）",
+    lane: {
+      unknown: "不明なエージェント",
+    },
+    kind: {
+      delegation: "委任",
+      agent_created: "エージェント作成",
+      message: "メッセージ",
+      notification: "完了通知",
+      dispatch: "配信",
+      artifact: "Artifact",
+      schedule: "スケジュール実行",
+    },
+    status: {
+      queued: "キュー中",
+      dispatched: "配信済み",
+      failed: "失敗",
+      unknown: "不明",
+      recorded: "記録済み",
+    },
+    statusDetail: {
+      recorded: "発生時に記録",
+      queued: "キュー中、未配信",
+      dispatched: "エージェントに配信済み。作業の完了を意味しません",
+      failed: "配信に失敗",
+      unknown: "配信状態は不明",
+    },
+    evidence: {
+      existing: "履歴から",
+    },
+    evidenceDetail: {
+      recorded: "発生時にデーモンが記録",
+      existing: "既存の履歴から再構築。不完全な場合があります",
+    },
+    availability: {
+      local: "ローカル",
+      archived: "アーカイブ済み",
+      missing: "削除済みまたは不明",
+      external: "別のワークスペースまたはホスト",
+    },
+    gap: {
+      history: "一部の履歴を利用できません",
+      retention: "古い記録は削除されました",
+      pending: "一部の配信は保留中です",
+      recording: "一部の因果記録が欠落しています",
+      focus_unavailable: "フォーカスしたイベントは利用できなくなりました",
+      window: "アクティビティの一部のみ読み込まれています",
+    },
+    behavior: {
+      started: "ターンを開始",
+      steered: "実行中のターンを誘導",
+      interrupted: "実行中のターンを中断",
+      out_of_band: "ターン外で配信",
+    },
+    requested: {
+      steer: "誘導を要求",
+      interrupt: "中断を要求",
+    },
+    notification: {
+      finished: "エージェントが終了",
+      errored: "エージェントでエラー",
+      "permission-required": "エージェントが権限を要求",
+      closed: "エージェントが終了（クローズ）",
+    },
+    edge: {
+      delegation: "委任",
+      message: "メッセージ",
+      notification: "通知",
+    },
+    detail: {
+      kind: "種類",
+      agent: "エージェント",
+      availability: "利用可否",
+      time: "時刻",
+      evidence: "根拠",
+      status: "状態",
+      behavior: "配信",
+      notification: "通知",
+      batch: "バッチ",
+      batchCount: "{{count}} 件のメッセージをまとめて配信",
+      incoming: "送信元",
+      outgoing: "送信先",
+      outsideWindow: "読み込み範囲外",
+    },
+  },
   artifacts: {
     collection: {
-      empty: "登録された成果物はありません",
-      search: "成果物を検索...",
-      unsupported: "成果物を使うにはこのホストを更新してください。",
+      empty: "登録された Artifact はありません",
+      search: "Artifact を検索...",
+      unsupported: "Artifact を使うにはこのホストを更新してください。",
     },
     interaction: {
       details: "詳細",
@@ -1274,8 +1497,8 @@ export const ja: TranslationResources = {
       noChat: "引用を追加するには会話タブを開いてください。",
       added: "会話の下書きに引用を追加しました。",
     },
-    pill: "成果物 {{count}}",
-    title: "成果物",
+    pill: "Artifacts {{count}}",
+    title: "Artifacts",
     filter: { sessionOnly: "このセッションのみ（{{count}}）", showAll: "すべて表示（{{count}}）" },
     row: { meta: "{{kind}} · 版 {{revision}} · {{time}}", revision: "版 {{revision}}" },
     kinds: {
@@ -1290,26 +1513,27 @@ export const ja: TranslationResources = {
     },
     viewer: {
       loading: "読み込み中…",
-      missing: "この成果物はコレクションにありません。",
+      linksUnsupported: "リンクされたタスクと目標を表示するには、このホストを更新してください。",
+      missing: "この Artifact はコレクションにありません。",
       openSource: "元のセッションを開く",
       sourceGone: "元のセッションは利用できません",
       goalGone: "ゴールは削除されました",
       taskGone: "タスクは削除されました",
-      remove: "成果物から削除",
-      removeTitle: "この成果物を削除しますか？",
-      removeMessage: "成果物コレクションから外れます。ワークスペースのファイルは残ります。",
+      remove: "Artifacts から削除",
+      removeTitle: "この Artifact を削除しますか？",
+      removeMessage: "Artifacts コレクションから外れます。ワークスペースのファイルは残ります。",
     },
     errors: { offline: "ホストはオフラインです。" },
   },
   desk: {
     title: "Desk",
-    tasksAndGoals: "タスクとゴール",
+    tasksAndGoals: "Tasks & Goals",
     attentionCount: "対応が必要：{{count}}",
     attentionCountPartial: "対応が必要：{{count}} 件以上",
     section: {
       needsYou: "対応が必要",
       active: "アクティブなセッション",
-      recent: "最近の返信と成果物",
+      recent: "最近の返信と Artifact",
       recentNote: "ターンの終了は作業の完了ではありません",
       incomplete: "一部のホストは読み込みが完了していません",
       unknownCount: "状態不明：{{count}}",
@@ -1318,7 +1542,7 @@ export const ja: TranslationResources = {
     empty: {
       needsYou: "対応待ちはありません。",
       active: "アクティブなセッションはありません。",
-      recent: "新しい返信や成果物はありません。",
+      recent: "新しい返信や Artifact はありません。",
     },
     request: {
       kind: {
@@ -1342,6 +1566,9 @@ export const ja: TranslationResources = {
       untitled: "無題のセッション",
       return: "会話に戻る",
       returnLabel: "この会話を開く",
+      markAllRead: "すべて既読にする",
+      markingAllRead: "既読にしています...",
+      markAllReadFailed: "すべての返信を既読にできませんでした: {{message}}",
       unknown: "状態不明",
       openDecision: "判断待ちあり",
       newReply: "新しい返信",
@@ -1379,7 +1606,7 @@ export const ja: TranslationResources = {
       source: {
         sessions: "セッション",
         decisions: "判断",
-        artifacts: "成果物",
+        artifacts: "Artifacts",
       },
     },
   },
@@ -1438,11 +1665,11 @@ export const ja: TranslationResources = {
         delete: "ゴールを削除",
         deleteTitle: "ゴールを削除しますか？",
         deleteMessage:
-          "「{{title}}」は削除されます。タスクはゴールなしの作業としてデスクに残ります。",
+          "「{{title}}」は削除されます。タスクはゴールなしの作業として Tasks & Goals に残ります。",
       },
       settings: {
-        title: "デスク設定",
-        hostSection: "デスクの動き",
+        title: "Tasks & Goals の設定",
+        hostSection: "Tasks & Goals の動き",
         hostHint: "このホストに保存され、すべてのデバイスに適用されます",
         decideKinds: "判断待ちに表示",
         decideKindsHint: "それ以外のチェックポイントは進行中の作業に残ります",
@@ -1451,7 +1678,7 @@ export const ja: TranslationResources = {
         notifyKinds: "プッシュ通知",
         notifyKindsHint: "スマートフォンに通知するチェックポイント",
         save: "保存",
-        unavailable: "このホストがオフラインの間はデスク設定を使えません",
+        unavailable: "このホストがオフラインの間は Tasks & Goals の設定を使えません",
       },
       kinds: {
         permission: "権限リクエスト",
@@ -1562,10 +1789,15 @@ export const ja: TranslationResources = {
         saving: "保存中…",
         saved: "「{{title}}」を保存しました",
         failed: "保存できません：{{message}}",
+        failedHeld:
+          "「{{title}}」は保存されていない可能性があります：{{message}}。もう一度追加する前にボードを確認してください。",
+        failedHeldWait: "入力欄を空にすると「{{title}}」を復元できます。",
+        draftOtherHost:
+          "この下書きは {{host}} のものです。元のホストに戻ると追加できます。ここで始めるには入力欄を空にしてください。",
       },
-      searchPlaceholder: "デスクを検索...",
+      searchPlaceholder: "タスクを検索...",
       newGoal: "新しいゴール",
-      settings: "デスクの設定",
+      settings: "Tasks & Goals の設定",
       zoneTab: "{{zone}}、{{count}} 件",
       zones: {
         decide: "判断待ち",
@@ -1612,7 +1844,7 @@ export const ja: TranslationResources = {
         label: "後で、{{count}} 件を後回し中",
       },
       empty: {
-        title: "デスクは片付いています",
+        title: "Tasks & Goals は片付いています",
         description: "ゴール、アイデア、エージェントが進める作業がここに表示されます。",
         decide: "あなたの判断を待つものはありません",
         flight: "進行中の作業はありません",
@@ -1638,7 +1870,7 @@ export const ja: TranslationResources = {
         flight: "進行中: {{count}}",
       },
       command: {
-        open: "デスクを開く",
+        open: "Desk を開く",
       },
     },
     detail: {
@@ -1688,7 +1920,7 @@ export const ja: TranslationResources = {
         planning: "計画",
         projects: "プロジェクト",
         save: "ビューを保存",
-        saveHint: "先にボードを絞り込むか列を選んでください",
+        saveHint: "先にタスクを絞り込むか列を選んでください",
         name: "ビュー名",
         namePlaceholder: "このビューに名前を付ける",
         remove: "ビュー {{name}} を削除",
@@ -1701,7 +1933,7 @@ export const ja: TranslationResources = {
       collapse: "折りたたむ",
       expandColumn: "{{column}}を展開、{{count}} 件",
       columnTab: "{{column}}、{{count}} 件",
-      searchPlaceholder: "ボードを検索...",
+      searchPlaceholder: "タスクを検索...",
       clearSearch: "検索をクリア",
       showViews: "ビューを表示",
       hideViews: "ビューを非表示",
@@ -1725,7 +1957,7 @@ export const ja: TranslationResources = {
         remove: "フィルター {{filter}} を削除",
       },
       empty: {
-        title: "ボードにはまだ何もありません",
+        title: "まだタスクはありません",
         description: "実行中のエージェントと計画中のタスクがここに表示されます。",
       },
       sidebar: {
@@ -1852,11 +2084,11 @@ export const ja: TranslationResources = {
       },
     },
     capture: {
-      slashCommand: "ボードにタスクを追加",
+      slashCommand: "Tasks & Goals にタスクを追加",
       added: "タスクをバックログに追加しました",
-      openBoard: "ボードを開く",
+      openBoard: "Desk を開く",
       addFailed: "タスクを追加できませんでした: {{message}}",
-      addToBoard: "ボードに追加",
+      addToBoard: "Tasks & Goals に追加",
       attachments: "添付",
       attachIssue: "Issue を添付",
       attachNeedsProject: "Issue を添付するにはプロジェクトを選択してください",
@@ -1897,7 +2129,7 @@ export const ja: TranslationResources = {
         starting: "開始中...",
       },
     },
-    title: "デスク",
+    title: "Desk",
     newTask: "新しいタスク",
     columns: {
       backlog: "バックログ",
@@ -1912,8 +2144,8 @@ export const ja: TranslationResources = {
       title: "タスクはまだありません",
       description: "ここで作業を計画し、新しいワークスペースで開始します。",
     },
-    unavailable: "ボードを使うにはホストを更新してください",
-    hostUnsupported: "ボードを使うには {{host}} を更新してください",
+    unavailable: "Tasks & Goals を使うにはホストを更新してください",
+    hostUnsupported: "Tasks & Goals を使うには {{host}} を更新してください",
     hostLoadFailed: "{{host}}: タスクを読み込めませんでした",
     workspaceUnavailable: "ワークスペースを利用できません",
     actions: {
@@ -1947,7 +2179,7 @@ export const ja: TranslationResources = {
     },
     confirmDelete: {
       title: "タスクを削除しますか？",
-      message: "「{{title}}」をボードから削除します。ワークスペースには影響しません。",
+      message: "「{{title}}」を Tasks & Goals から削除します。ワークスペースには影響しません。",
       confirm: "削除",
     },
     errors: {
@@ -2155,7 +2387,7 @@ export const ja: TranslationResources = {
       search: "検索",
       schedules: "スケジュール",
       mcpCalls: "MCP 呼び出し",
-      board: "デスク",
+      board: "Desk",
     },
     worktreeSetup: {
       title: "ワークツリースクリプトを設定",
@@ -4055,6 +4287,8 @@ export const ja: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "エージェントプロファイル",
+        appliedPreferenceSaveFailed:
+          "プロファイルは適用されましたが、デフォルトとして保存できませんでした：{{error}}",
         unavailable: "エージェントプロファイルを管理するにはこのホストに接続してください",
         unsupported: "このホストで動作するデーモンはまだエージェントプロファイルに対応していません",
         emptyState:

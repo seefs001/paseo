@@ -8,6 +8,7 @@ import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { DeskArtifactRow } from "@/components/desk/artifact";
 import { DeskHostNotices } from "@/components/desk/host-notices";
+import { DeskMarkAllRead } from "@/components/desk/mark-all-read";
 import { DeskRequestRow } from "@/components/desk/request-row";
 import { DeskRowDivider, DeskSection } from "@/components/desk/section";
 import {
@@ -94,6 +95,10 @@ function buildLayers(desk: DeskModel): DeskLayers {
 function DeskContent({ desk }: { desk: DeskModel }): ReactElement {
   const { t } = useTranslation();
   const layers = useMemo(() => buildLayers(desk), [desk]);
+  const markAllReadAction = useMemo(
+    () => <DeskMarkAllRead sessions={desk.recentReplies} />,
+    [desk.recentReplies],
+  );
   const { counts } = desk;
   const unrespondable = desk.requests.length - counts.needsYou;
   const needsNote = needsYouNote({ unrespondable, isComplete: counts.isComplete, t });
@@ -141,6 +146,7 @@ function DeskContent({ desk }: { desk: DeskModel }): ReactElement {
           count={recentCount}
           rowCount={recentRows}
           note={t("desk.section.recentNote")}
+          action={markAllReadAction}
           empty={t("desk.empty.recent")}
           testID="desk-recent"
         >

@@ -3,6 +3,10 @@ import {
   skipToken,
   useQueries,
   useQuery,
+  useInfiniteQuery,
+  type InfiniteData,
+  type UseInfiniteQueryOptions,
+  type UseInfiniteQueryResult,
   type QueryKey,
   type QueryClient,
   type UseQueryOptions,
@@ -58,6 +62,64 @@ export function useFetchQuery<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> {
   return useQuery(fetchQueryOptions(input), queryClient);
+}
+
+type FetchInfiniteQueryInput<
+  TQueryFnData,
+  TError,
+  TData,
+  TQueryKey extends QueryKey,
+  TPageParam,
+> = Omit<
+  UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>,
+  "initialData" | "placeholderData" | "queryFn" | "staleTime"
+> & {
+  dataShape: "list" | "value";
+  staleTimeMs: number;
+  queryFn: NonNullable<
+    UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>["queryFn"]
+  >;
+};
+
+export function useFetchInfiniteQuery<
+  TQueryFnData,
+  TError = Error,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  input: FetchInfiniteQueryInput<TQueryFnData, TError, TData, TQueryKey, TPageParam>,
+  queryClient?: QueryClient,
+): UseInfiniteQueryResult<TData, TError> {
+  return useInfiniteQuery(fetchInfiniteQueryOptions(input), queryClient);
+}
+
+export function fetchInfiniteQueryOptions<
+  TQueryFnData,
+  TError = Error,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  input: FetchInfiniteQueryInput<TQueryFnData, TError, TData, TQueryKey, TPageParam>,
+): UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam> {
+  if (!Number.isFinite(input.staleTimeMs)) {
+    throw new Error("Fetch queries must declare a finite staleTimeMs.");
+  }
+  const { dataShape, meta, staleTimeMs, ...options } = input;
+  return {
+    ...options,
+    ...(dataShape === "list" ? { placeholderData: keepPreviousData } : {}),
+    meta: {
+      ...meta,
+      serverDataPolicy: {
+        class: "fetch",
+        dataShape,
+      },
+    },
+    refetchOnMount: options.refetchOnMount ?? "always",
+    staleTime: staleTimeMs,
+  };
 }
 
 export function useFetchQueries<TData>(

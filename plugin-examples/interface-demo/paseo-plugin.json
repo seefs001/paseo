@@ -1,0 +1,8 @@
+{
+  "id": "interface-demo",
+  "name": "界面 Demo",
+  "description": "带左侧入口和交互计数器的客户端演示页面。",
+  "requirements": {
+    "paseo": ">=0.15.3"
+  }
+}

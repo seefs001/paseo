@@ -25,7 +25,7 @@ export type AgentRunController = Pick<
 
 export interface StartAgentRunOptions {
   /** Called after selecting the run, before consuming its events. */
-  onDispatch?: (disposition: PromptDispatchDisposition) => void;
+  onDispatch?: (disposition: PromptDispatchDisposition, details?: { replaced: boolean }) => void;
   replaceRunning?: boolean;
   activeTurnBehavior?: ActiveTurnBehavior;
   runOptions?: AgentRunOptions;
@@ -138,7 +138,7 @@ async function startAgentRunInner(
   const snapshot = agentManager.getAgent(agentId);
   const steered = await steerOrReplaceActiveRun(agentManager, agentId, prompt, options);
   if (steered?.disposition === "steered") {
-    options?.onDispatch?.("steered");
+    options?.onDispatch?.("steered", { replaced: false });
     return steered;
   }
   const { iterator, replaced } = steered
@@ -153,7 +153,7 @@ async function startAgentRunInner(
     },
     "agent.session.start_stream.iterator_returned",
   );
-  options?.onDispatch?.("turn_started");
+  options?.onDispatch?.("turn_started", { replaced });
   void (async () => {
     try {
       try {

@@ -80,6 +80,7 @@ describe("sidebar entity snapshots", () => {
     const second = createPluginWorkspaceSnapshot(workspace, "host-2");
     expect(first.ref).not.toBe(second.ref);
     expect(first.ref.hostId).toBe("host-1");
+    if (first.project === null) throw new Error("Expected workspace fixture to have a project");
     expect(first.project.id).toBe(workspace.projectId);
     expect(Object.isFrozen(first.labels)).toBe(true);
     expect(createPluginWorkspaceSnapshot(workspace, "host-1")).toBe(first);

@@ -133,11 +133,14 @@ export interface WorkspaceDescriptor {
   statusEnteredAt: Date | null;
   archivingAt: string | null;
   diffStat: { additions: number; deletions: number } | null;
+  uncommittedDiffStat?: WorkspaceDescriptorPayload["uncommittedDiffStat"];
   scripts: WorkspaceDescriptorPayload["scripts"];
   gitRuntime?: WorkspaceDescriptorPayload["gitRuntime"];
   githubRuntime?: WorkspaceDescriptorPayload["githubRuntime"];
   forge?: WorkspaceDescriptorPayload["forge"];
   project?: ProjectPlacementPayload;
+  /** Present when tools and files live on an SSH machine; workspaceDirectory is then owner-side. */
+  executionLocation?: WorkspaceDescriptorPayload["executionLocation"];
 }
 
 export function normalizeWorkspaceDescriptor(
@@ -179,11 +182,13 @@ export function normalizeWorkspaceDescriptor(
     statusEnteredAt,
     archivingAt: payload.archivingAt ?? null,
     diffStat: payload.diffStat ?? null,
+    uncommittedDiffStat: payload.uncommittedDiffStat,
     scripts: (payload.scripts ?? []).map((s) => Object.assign({}, s)),
     gitRuntime: payload.gitRuntime,
     githubRuntime: payload.githubRuntime,
     forge: payload.forge,
     project: payload.project,
+    ...(payload.executionLocation ? { executionLocation: payload.executionLocation } : {}),
   };
 }
 
@@ -288,6 +293,8 @@ export interface DaemonServerInfo {
   desktopManaged?: boolean;
   capabilities?: ServerCapabilities;
   features?: ServerInfoStatusPayload["features"];
+  // Semantic permissions of this connection; absent from daemons that predate them.
+  permissions?: NonNullable<ServerInfoStatusPayload["permissions"]>;
 }
 
 export function toDaemonServerInfo(serverInfo: ServerInfoStatusPayload): DaemonServerInfo {
@@ -300,6 +307,7 @@ export function toDaemonServerInfo(serverInfo: ServerInfoStatusPayload): DaemonS
       : {}),
     ...(serverInfo.capabilities ? { capabilities: serverInfo.capabilities } : {}),
     ...(serverInfo.features ? { features: serverInfo.features } : {}),
+    ...(serverInfo.permissions ? { permissions: serverInfo.permissions } : {}),
   };
 }
 
@@ -715,6 +723,7 @@ function isSessionServerInfoUnchanged(input: {
   nextDesktopManaged: boolean | undefined;
   nextCapabilities: ServerCapabilities | undefined;
   nextFeatures: ServerInfoStatusPayload["features"] | undefined;
+  nextPermissions?: DaemonServerInfo["permissions"];
   nextServerId: string;
 }): boolean {
   const {
@@ -733,7 +742,8 @@ function isSessionServerInfoUnchanged(input: {
     prevVersion === nextVersion &&
     currentServerInfo?.desktopManaged === nextDesktopManaged &&
     areServerCapabilitiesEqual(currentServerInfo?.capabilities, nextCapabilities) &&
-    areServerInfoFeaturesEqual(currentServerInfo?.features, nextFeatures)
+    areServerInfoFeaturesEqual(currentServerInfo?.features, nextFeatures) &&
+    (currentServerInfo?.permissions ?? []).join(",") === (input.nextPermissions ?? []).join(",")
   );
 }
 
@@ -880,6 +890,7 @@ export const useSessionStore = create<SessionStore>()(
               nextDesktopManaged,
               nextCapabilities,
               nextFeatures,
+              nextPermissions: info.permissions,
               nextServerId: info.serverId,
             })
           ) {
@@ -901,6 +912,7 @@ export const useSessionStore = create<SessionStore>()(
                     : {}),
                   ...(nextCapabilities ? { capabilities: nextCapabilities } : {}),
                   ...(nextFeatures ? { features: nextFeatures } : {}),
+                  ...(info.permissions ? { permissions: info.permissions } : {}),
                 },
               },
             },

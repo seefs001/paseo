@@ -68,6 +68,7 @@ import {
 import { SplitContainer } from "@/components/split-container";
 import { RetainedPanel } from "@/components/retained-panel";
 import { WorkspaceActions } from "@/git/workspace-actions";
+import { useSshExplorerTabs } from "@/ssh-machines";
 import { WorkspaceOpenInEditorButton } from "@/workspace/open-in-editor/button";
 import { WorkspaceScriptsButton, useWorkspaceScriptActions } from "@/screens/workspace/scripts";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
@@ -483,6 +484,7 @@ function useCloseTabs(): UseCloseTabsResult {
 
 interface WorkspaceHeaderTitleBarProps {
   projectAssigned: boolean;
+  subtitleKind: "project" | "location";
   normalizedWorkspaceId: string;
   isLoading: boolean;
   title: string;
@@ -501,6 +503,7 @@ interface WorkspaceHeaderTitleBarProps {
 
 function WorkspaceHeaderTitleBar({
   projectAssigned,
+  subtitleKind,
   normalizedWorkspaceId,
   isLoading,
   title,
@@ -531,6 +534,7 @@ function WorkspaceHeaderTitleBar({
             subtitle={subtitle}
             isSubtitleDistinct={isSubtitleDistinct}
             serverId={normalizedServerId}
+            subtitleKind={subtitleKind}
           />
         </View>
       )}
@@ -669,6 +673,24 @@ function buildWorkspaceHeaderCheckoutState(input: {
       currentBranch: input.data.currentBranch,
     },
   };
+}
+
+// SSH workspaces run tools on the machine; owner-side Git, terminals, scripts and editors
+// would act on the wrong computer, so those entries stay off.
+function isSshExecution(workspace: WorkspaceDescriptor | null): boolean {
+  return Boolean(workspace?.executionLocation);
+}
+
+function isLocalGitCheckout(isGitCheckout: boolean, isSshWorkspace: boolean): boolean {
+  return isGitCheckout && !isSshWorkspace;
+}
+
+// The SSH directory key is not a local directory: no checkout, terminals or scripts.
+function resolveLocalCheckoutDirectory(
+  workspace: WorkspaceDescriptor | null,
+  workspaceDirectory: string | null,
+): string | null {
+  return isSshExecution(workspace) ? null : workspaceDirectory;
 }
 
 function deriveWorkspaceHeaderFields(input: {
@@ -1204,8 +1226,10 @@ function WorkspaceScreenContent({
     },
     toast,
   });
+  const isSshWorkspace = isSshExecution(workspaceDescriptor);
   const queryClient = useQueryClient();
   const {
+    unavailableReason: terminalUnavailableReason,
     createMutation: createTerminalMutation,
     createTerminal,
     handleScriptTerminalStarted,
@@ -1225,7 +1249,9 @@ function WorkspaceScreenContent({
     isRouteFocused,
     normalizedServerId,
     normalizedWorkspaceId,
-    workspaceDirectory,
+    // SSH workspaces have no owner-side terminals; no terminal list or subscription is sent.
+    workspaceDirectory: resolveLocalCheckoutDirectory(workspaceDescriptor, workspaceDirectory),
+    isSshWorkspace,
     workspaceScripts,
     hasHydratedWorkspaces,
     isMissingWorkspaceDirectory,
@@ -1250,7 +1276,7 @@ function WorkspaceScreenContent({
     isRouteFocused,
     normalizedServerId,
     normalizedWorkspaceId,
-    workspaceDirectory,
+    workspaceDirectory: resolveLocalCheckoutDirectory(workspaceDescriptor, workspaceDirectory),
   });
   const hasHydratedAgents = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.hasHydratedAgents ?? false,
@@ -1284,6 +1310,7 @@ function WorkspaceScreenContent({
     checkoutState: workspaceHeaderCheckoutState,
   });
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
+  useSshExplorerTabs(persistenceKey, isSshWorkspace);
 
   const isExplorerSidebarShowing = useIsExplorerSidebarOpen({
     isCompact: isMobile,
@@ -1294,7 +1321,7 @@ function WorkspaceScreenContent({
     serverId: normalizedServerId,
     cwd: workspaceDirectory,
     workspaceActive: isRouteFocused,
-    isGit: isGitCheckout,
+    isGit: isLocalGitCheckout(isGitCheckout, isSshWorkspace),
     layoutMode,
     explorerOpen: isExplorerSidebarShowing,
   });
@@ -3234,7 +3261,7 @@ function WorkspaceScreenContent({
     () => (
       <View style={styles.headerRight}>
         <PluginHeaderButtons serverId={normalizedServerId} workspaceId={normalizedWorkspaceId} />
-        {workspaceDescriptor && workspaceDescriptor.scripts.length > 0 ? (
+        {workspaceDescriptor && !isSshWorkspace && workspaceDescriptor.scripts.length > 0 ? (
           <WorkspaceScriptsButton
             actions={scriptActions}
             scripts={workspaceDescriptor.scripts}
@@ -3244,7 +3271,7 @@ function WorkspaceScreenContent({
             hideLabels
           />
         ) : null}
-        {workspaceDirectory ? (
+        {workspaceDirectory && !isSshWorkspace ? (
           <WorkspaceOpenInEditorButton
             serverId={normalizedServerId}
             cwd={workspaceDirectory}
@@ -3255,7 +3282,9 @@ function WorkspaceScreenContent({
         ) : null}
         {workspaceDirectory ? (
           <>
-            <WorkspaceActions serverId={normalizedServerId} cwd={workspaceDirectory} />
+            {isSshWorkspace ? null : (
+              <WorkspaceActions serverId={normalizedServerId} cwd={workspaceDirectory} />
+            )}
             {workspaceActionsInBar ? null : (
               <WorkspaceHeaderExplorerToggle
                 owner={explorerToggleOwner}
@@ -3286,6 +3315,7 @@ function WorkspaceScreenContent({
       explorerSidebarToggleAccessibilityState,
       explorerToggleOwner,
       workspaceActionsInBar,
+      isSshWorkspace,
       t,
     ],
   );
@@ -3314,21 +3344,27 @@ function WorkspaceScreenContent({
     ],
   );
   const createTerminalDisabled = useMemo(
-    () => createTerminalMutation.isPending || pendingTerminalCreateInput !== null,
-    [createTerminalMutation.isPending, pendingTerminalCreateInput],
+    () =>
+      terminalUnavailableReason !== null ||
+      createTerminalMutation.isPending ||
+      pendingTerminalCreateInput !== null,
+    [terminalUnavailableReason, createTerminalMutation.isPending, pendingTerminalCreateInput],
   );
   const showCreateBrowserTab = getIsElectron();
   const newTabLauncher = useMemo<NewTabLauncher>(
     () => ({
-      showChanges: isGitCheckout,
-      showPullRequest: hasPullRequest,
+      showChanges: isGitCheckout && !isSshWorkspace,
+      showPullRequest: hasPullRequest && !isSshWorkspace,
       showBrowser: showCreateBrowserTab,
       terminalDisabled: createTerminalDisabled,
+      terminalDisabledReason: terminalUnavailableReason ?? undefined,
       launch: launchWorkspaceTab,
     }),
     [
       createTerminalDisabled,
+      terminalUnavailableReason,
       hasPullRequest,
+      isSshWorkspace,
       isGitCheckout,
       launchWorkspaceTab,
       showCreateBrowserTab,
@@ -3350,6 +3386,7 @@ function WorkspaceScreenContent({
               <SidebarMenuToggle />
               <WorkspaceHeaderTitleBar
                 projectAssigned={isWorkspaceProjectAssigned}
+                subtitleKind={isSshWorkspace ? "location" : "project"}
                 normalizedWorkspaceId={normalizedWorkspaceId}
                 isLoading={isWorkspaceHeaderLoading}
                 title={workspaceHeaderTitle}
@@ -3379,6 +3416,7 @@ function WorkspaceScreenContent({
       headerRight,
       isWorkspaceHeaderLoading,
       isWorkspaceProjectAssigned,
+      isSshWorkspace,
       normalizedServerId,
       normalizedWorkspaceId,
       openImportSheet,
@@ -3421,6 +3459,7 @@ function WorkspaceScreenContent({
           normalizedWorkspaceId={normalizedWorkspaceId}
           onSelectSwitcherTab={handleSelectSwitcherTab}
           createTerminalDisabled={createTerminalDisabled}
+          terminalUnavailableReason={terminalUnavailableReason ?? undefined}
           onCreateDraftTab={handleCreateDraftTab}
           onCreateTerminal={handleCreateTerminal}
           onCopyResumeCommand={handleCopyResumeCommand}
@@ -3441,6 +3480,7 @@ function WorkspaceScreenContent({
       normalizedWorkspaceId,
       handleSelectSwitcherTab,
       createTerminalDisabled,
+      terminalUnavailableReason,
       handleCreateDraftTab,
       handleCreateTerminal,
       handleCopyResumeCommand,
@@ -3460,6 +3500,7 @@ function WorkspaceScreenContent({
       return (
         <CompactWorkspaceHeader
           projectAssigned={isWorkspaceProjectAssigned}
+          subtitleKind={isSshWorkspace ? "location" : "project"}
           headerVariant={actionsOnly ? "full" : "compact"}
           actionsActive={isRouteFocused && (!isMobile || workspacePanelActive)}
           tabSwitcher={tabSwitcher}
@@ -3487,6 +3528,7 @@ function WorkspaceScreenContent({
             showWorkspaceSetup={showWorkspaceSetup}
             showCreateBrowserTab={showCreateBrowserTab}
             createTerminalDisabled={createTerminalDisabled}
+            terminalUnavailableReason={terminalUnavailableReason ?? undefined}
             importAgentDisabled={!canOpenImportSheet}
             copyPathDisabled={!workspaceDirectory}
             onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
@@ -3506,6 +3548,7 @@ function WorkspaceScreenContent({
       canOpenImportSheet,
       compactHeaderScripts,
       createTerminalDisabled,
+      terminalUnavailableReason,
       currentBranchName,
       explorerSidebarToggleAccessibilityState,
       explorerSidebarToggleLabel,
@@ -3519,6 +3562,7 @@ function WorkspaceScreenContent({
       isRouteFocused,
       isWorkspaceHeaderLoading,
       isWorkspaceProjectAssigned,
+      isSshWorkspace,
       isWorkspaceHeaderSubtitleDistinct,
       normalizedServerId,
       normalizedWorkspaceId,

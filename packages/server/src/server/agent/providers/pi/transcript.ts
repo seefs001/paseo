@@ -1,9 +1,13 @@
 import { z } from "zod";
-import { getUserMessageText, type PiCapturedUserMessageEntry } from "./history-mapper.js";
-import type { PiAgentMessage } from "./rpc-types.js";
+import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
+import {
+  getUserMessageText,
+  type PiCapturedUserMessageEntry,
+  type PiHistoryMessage,
+} from "./history-mapper.js";
 
 export interface PiTranscript {
-  messages: PiAgentMessage[];
+  messages: PiHistoryMessage[];
   userEntries: PiCapturedUserMessageEntry[];
 }
 
@@ -100,7 +104,9 @@ export function readPiTranscript(contents: string): PiTranscript {
       parsed.role === "compactionSummary"
     )
       continue;
-    result.messages.push(parsed);
+    // Pi records the entry after completion; message.timestamp marks generation start.
+    const replayTimestamp = normalizeProviderReplayTimestamp(entry.timestamp);
+    result.messages.push(replayTimestamp ? { ...parsed, replayTimestamp } : parsed);
     if (parsed.role === "user" && entry.id)
       result.userEntries.push({
         id: entry.id,

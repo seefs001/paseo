@@ -166,6 +166,14 @@ const manifests = {
     compactSheet: null,
     resourceKey: () => "artifacts",
   },
+  trace: {
+    kind: "trace",
+    supportedHosts: ["main", "explorer"],
+    showCloseButton: true,
+    singleton: true,
+    compactSheet: null,
+    resourceKey: () => "trace",
+  },
   artifact: {
     kind: "artifact",
     supportedHosts: ["main", "explorer"],

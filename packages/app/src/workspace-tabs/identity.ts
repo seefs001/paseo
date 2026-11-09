@@ -60,6 +60,7 @@ function normalizeSimpleWorkspaceTabTarget(value: WorkspaceTabTarget): Workspace
     case "changes_tree":
     case "files":
     case "artifacts":
+    case "trace":
     case "pull_request":
       return { kind: value.kind };
     case "setup": {
@@ -152,6 +153,7 @@ function secondaryWorkspaceTabTargetsEqual(
   }
   switch (left.kind) {
     case "artifacts":
+    case "trace":
     case "files":
     case "changes_tree":
     case "pull_request":
@@ -239,6 +241,7 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
     target.kind === "changes_tree" ||
     target.kind === "files" ||
     target.kind === "artifacts" ||
+    target.kind === "trace" ||
     target.kind === "pull_request"
   ) {
     return target.kind;

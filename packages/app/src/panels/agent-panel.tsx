@@ -1217,6 +1217,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
             !showHistorySyncError
           }
           revealInitialHistory={hasCachedHistory || showHistorySyncError}
+          isHistoryCatchingUp={showHistorySyncOverlay}
           hasActiveComposer={hasActiveComposer}
           toast={toastApi}
           onOpenWorkspaceFile={onOpenWorkspaceFile}
@@ -1382,6 +1383,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   hasAppliedAuthoritativeHistory,
   isInitialHistoryLoading,
   revealInitialHistory,
+  isHistoryCatchingUp,
   hasActiveComposer,
   toast,
   onOpenWorkspaceFile,
@@ -1395,6 +1397,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   hasAppliedAuthoritativeHistory: boolean;
   isInitialHistoryLoading: boolean;
   revealInitialHistory: boolean;
+  isHistoryCatchingUp: boolean;
   hasActiveComposer: boolean;
   toast: ReturnType<typeof useToastHost>["api"];
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
@@ -1487,6 +1490,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
       isAuthoritativeHistoryReady={hasAppliedAuthoritativeHistory}
       isInitialHistoryLoading={isInitialHistoryLoading}
       revealInitialHistory={revealInitialHistory}
+      isHistoryCatchingUp={isHistoryCatchingUp}
       bottomOverlayTailClearance={bottomOverlayTailClearance}
       bottomOverlayControlClearance={bottomOverlayControlClearance}
       toast={toast}

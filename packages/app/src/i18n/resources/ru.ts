@@ -2,6 +2,123 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  sshMachines: {
+    title: "SSH-машины",
+    info: "Машины, к которым этот хост подключается со своими настройками и ключами OpenSSH. Pi работает на этом хосте с его моделями и настройками; файлы и команды SSH-пространства выполняются на машине. Телефонам и другим клиентам SSH-ключи не нужны.",
+    updateHost: "Обновите этот хост, чтобы использовать SSH-машины.",
+    add: "Добавить",
+    empty: "SSH-машин пока нет.",
+    hostLabel: "Псевдоним или хост OpenSSH",
+    hostHint:
+      "Использует ~/.ssh/config, ключи и SSH-агент этого хоста. Пароли и запросы MFA не поддерживаются.",
+    nameLabel: "Название",
+    userLabel: "Пользователь",
+    portLabel: "Порт",
+    invalidPort: "Порт должен быть числом от 1 до 65535.",
+    cancel: "Отмена",
+    saveAndCheck: "Сохранить и проверить",
+    saveFailed: "Не удалось сохранить машину",
+    check: "Проверить",
+    trust: "Доверять ключу хоста",
+    trustTitle: "Доверять этому ключу хоста?",
+    trustFailed: "Не удалось доверить ключ хоста",
+    toolRouting: "Маршрутизация инструментов",
+    newWorkspace: "Новое пространство",
+    remove: "Удалить",
+    removeTitle: "Удалить SSH-машину?",
+    removeMessage:
+      "Файлы на машине не меняются. Пространства, которые её используют, нужно сначала архивировать.",
+    removeMessageInUse:
+      "Пространств, которые ещё используют эту машину: {{count}}. Архивируйте их перед удалением; файлы на машине не меняются.",
+    removeFailed: "Не удалось удалить машину",
+    targetHidden: "Данные подключения скрыты",
+    summaryOnly:
+      "Вы можете открывать пространства на этой машине. Для изменения подключения или маршрутизации инструментов нужен доступ к управлению хостом.",
+    state: {
+      not_checked: "Не проверена",
+      checking: "Проверка",
+      needs_trust: "Нужно подтвердить ключ хоста",
+      ready: "Готова",
+      needs_attention: "Требует внимания",
+      disabled: "Отключена",
+    },
+    policyHint:
+      "По умолчанию инструменты выполняются на машине. Инструменты без SSH-реализации недоступны, если не указаны здесь как локальные. Локальные инструменты выполняются на этом хосте, а не на машине.",
+    localSkills: "Читать skills с этого хоста",
+    localSkillsHint:
+      "Загруженные skills Pi и их справочные файлы читаются здесь только для чтения. Команды из skill по-прежнему выполняются на машине.",
+    localTools: "Локальные инструменты",
+    localToolsHint:
+      "Имена инструментов через запятую, например инструмент памяти или браузера. Инструменты файлов, поиска и bash всегда выполняются на машине.",
+    disabledTools: "Отключённые инструменты",
+    policyRevision: "Ревизия {{revision}}",
+    savePolicy: "Сохранить маршрутизацию",
+    policySaveFailed: "Не удалось сохранить маршрутизацию инструментов",
+    directoryLabel: "Каталог на машине",
+    directoryHint: "Существующий каталог. Paseo не создаёт и не удаляет каталоги на машине.",
+    createWorkspace: "Создать пространство",
+    createWorkspaceFailed: "Не удалось создать пространство",
+    errors: {
+      hostRequired: "Введите псевдоним или хост OpenSSH.",
+      hostInvalid: "Используйте псевдоним или имя хоста без пробелов и без дефиса в начале.",
+      userInvalid: "Имя пользователя не может содержать пробелы или начинаться с дефиса.",
+      toolNameInvalid:
+        "Имена инструментов могут содержать буквы, цифры, точки, дефисы, двоеточия и подчёркивания.",
+      remoteBuiltinLocal:
+        "Инструменты файлов, поиска и bash всегда выполняются на машине и не могут быть локальными.",
+      directoryRequired: "Введите каталог на машине.",
+    },
+    routing: {
+      workspaceHint:
+        "Настройки только для этого пространства. Каждая настройка берётся с машины, если вы её не переопределите. Изменения действуют со следующего вызова инструмента.",
+      localMcpServers: "Локальные MCP-серверы",
+      localMcpServersHint:
+        "MCP-серверы из конфигурации Pi этого хоста, которые запускаются для этого пространства. Остальные не запускаются.",
+      disabledToolsHint:
+        "Имена инструментов, которые Pi не может вызывать здесь, включая пользовательскую оболочку.",
+      reload: "Перезагрузить",
+      useMachineDefault: "Как на машине",
+      readOnly: "Для изменения маршрутизации инструментов нужен доступ к управлению хостом.",
+      machineMissing: "Машина этого пространства недоступна.",
+    },
+    operations: {
+      title: "Операции",
+      empty: "Изменения на машину ещё не отправлялись.",
+      unknownNotice:
+        "Результат одной из операций неизвестен. Paseo остановил автоматические изменения на машине. Проверьте машину и подтвердите ниже; подтверждение ничего не запускает повторно.",
+      confirm: "Подтвердить результаты",
+      confirmTitle: "Подтвердить неизвестные результаты?",
+      confirmMessage:
+        "Вы проверили машину для операций с неизвестным результатом: {{count}}. После подтверждения агенты снова смогут менять машину. Ничего не запускается повторно.",
+      stale:
+        "Операций, изменившихся после загрузки списка и не подтверждённых: {{count}}. Обновите и проверьте снова.",
+      state: {
+        admitted: "Допущена",
+        sent: "Отправлена",
+        completed: "Завершена",
+        not_sent: "Не отправлена",
+        unknown: "Результат неизвестен",
+        acknowledged: "Неизвестно, подтверждено",
+      },
+    },
+    workspace: {
+      terminalUnavailable: "Терминалы пока недоступны в SSH-пространствах.",
+      panelUnavailable:
+        "Эта панель работает с компьютером владельца и недоступна в SSH-пространствах. Для машины используйте «Файлы».",
+    },
+    files: {
+      title: "Файлы",
+      location: "На {{machine}}",
+      up: "Вверх",
+      refresh: "Обновить",
+      close: "Закрыть",
+      loading: "Загрузка…",
+      empty: "Пустой каталог",
+      binary: "Двоичный файл; предпросмотр недоступен.",
+      truncated: "Показан первый 1 МБ.",
+      disconnected: "Хост отключён.",
+    },
+  },
   scheduleTargets: {
     workspace: "Рабочая область (необязательно)",
     conversation: "Диалог (необязательно)",
@@ -212,7 +329,7 @@ export const ru: TranslationResources = {
       collapseQuote: "Свернуть цитату",
       editQuoteComment: "Изменить комментарий",
       artifactQuoteSource: "{{title}} · ред. {{revision}}",
-      openArtifactQuoteSource: "Открыть артефакт",
+      openArtifactQuoteSource: "Открыть Artifact",
       addImage: "Добавить изображение",
       pasteImage: "Вставить изображение",
       addFile: "Загрузить файл",
@@ -1260,6 +1377,113 @@ export const ru: TranslationResources = {
       },
     },
   },
+  workspaceTrace: {
+    title: "Trace",
+    unsupported: "Чтобы показать Trace, обновите этот хост.",
+    loading: "Загрузка трассировки…",
+    loadFailed: "Не удалось загрузить трассировку",
+    retry: "Повторить",
+    recent: "Недавняя активность",
+    focusedOn: "Фокус: {{title}}",
+    clearFocus: "Показать всё",
+    count: "События: {{count}}",
+    refresh: "Обновить",
+    refreshing: "Обновление…",
+    empty: "Активности между агентами пока нет",
+    loadMore: "Загрузить ранние",
+    loadingMore: "Загрузка…",
+    focusHere: "Сфокусироваться",
+    openArtifact: "Открыть Artifact",
+    showSource: "Показать источник",
+    openConversation: "Открыть беседу",
+    sourceItemNotAddressable:
+      "У события нет адресуемого исходного элемента; беседа откроется на текущей позиции.",
+    sourceUnavailable: "Источник здесь недоступен",
+    gapForAgent: "{{gap}} ({{agent}})",
+    lane: {
+      unknown: "Неизвестный агент",
+    },
+    kind: {
+      delegation: "Делегирование",
+      agent_created: "Агент создан",
+      message: "Сообщение",
+      notification: "Уведомление о завершении",
+      dispatch: "Доставка",
+      artifact: "Artifact",
+      schedule: "Запуск по расписанию",
+    },
+    status: {
+      queued: "В очереди",
+      dispatched: "Доставлено",
+      failed: "Ошибка",
+      unknown: "Неизвестно",
+      recorded: "Записано",
+    },
+    statusDetail: {
+      recorded: "Записано в момент события",
+      queued: "В очереди, ещё не доставлено",
+      dispatched: "Доставлено агенту; не означает, что работа завершена",
+      failed: "Доставка не удалась",
+      unknown: "Состояние доставки неизвестно",
+    },
+    evidence: {
+      existing: "Из истории",
+    },
+    evidenceDetail: {
+      recorded: "Записано демоном в момент события",
+      existing: "Восстановлено из существующей истории; может быть неполным",
+    },
+    availability: {
+      local: "Локальный",
+      archived: "В архиве",
+      missing: "Удалён или отсутствует",
+      external: "Другое рабочее пространство или хост",
+    },
+    gap: {
+      history: "Часть истории недоступна",
+      retention: "Старые записи удалены",
+      pending: "Часть доставок ещё ожидает",
+      recording: "Часть причинных записей отсутствует",
+      focus_unavailable: "Событие в фокусе больше недоступно",
+      window: "Загружена только часть активности",
+    },
+    behavior: {
+      started: "Начал ход",
+      steered: "Скорректировал текущий ход",
+      interrupted: "Прервал текущий ход",
+      out_of_band: "Доставлено вне хода",
+    },
+    requested: {
+      steer: "Запрошена корректировка",
+      interrupt: "Запрошено прерывание",
+    },
+    notification: {
+      finished: "Агент завершил работу",
+      errored: "У агента ошибка",
+      "permission-required": "Агенту нужно разрешение",
+      closed: "Агент закрыт",
+    },
+    edge: {
+      delegation: "Делегирование",
+      message: "Сообщение",
+      notification: "Уведомление",
+    },
+    detail: {
+      kind: "Тип",
+      agent: "Агент",
+      availability: "Доступность",
+      time: "Время",
+      evidence: "Доказательство",
+      status: "Статус",
+      behavior: "Доставка",
+      notification: "Уведомление",
+      batch: "Пакет",
+      batchCount: "{{count}} сообщ. доставлено вместе",
+      incoming: "От",
+      outgoing: "Кому",
+      outsideWindow: "Вне загруженного диапазона",
+    },
+  },
   artifacts: {
     collection: {
       empty: "Нет зарегистрированных результатов",
@@ -1276,8 +1500,8 @@ export const ru: TranslationResources = {
       noChat: "Откройте вкладку разговора, чтобы добавить цитату.",
       added: "Цитата добавлена в черновик разговора.",
     },
-    pill: "Артефакты {{count}}",
-    title: "Артефакты",
+    pill: "Artifacts {{count}}",
+    title: "Artifacts",
     filter: { sessionOnly: "Только эта сессия ({{count}})", showAll: "Показать все ({{count}})" },
     row: { meta: "{{kind}} · версия {{revision}} · {{time}}", revision: "версия {{revision}}" },
     kinds: {
@@ -1292,26 +1516,27 @@ export const ru: TranslationResources = {
     },
     viewer: {
       loading: "Загрузка…",
-      missing: "Этого артефакта больше нет в коллекции.",
+      linksUnsupported: "Обновите этот хост, чтобы видеть связанные задачи и цели.",
+      missing: "Этого Artifact больше нет в коллекции.",
       openSource: "Открыть исходную сессию",
       sourceGone: "Исходная сессия больше недоступна",
       goalGone: "Цель удалена",
       taskGone: "Задача удалена",
-      remove: "Убрать из артефактов",
-      removeTitle: "Убрать этот артефакт?",
-      removeMessage: "Он уйдёт из коллекции артефактов. Файлы в рабочей области останутся.",
+      remove: "Убрать из Artifacts",
+      removeTitle: "Убрать этот Artifact?",
+      removeMessage: "Он уйдёт из коллекции Artifacts. Файлы в рабочей области останутся.",
     },
     errors: { offline: "Хост не в сети." },
   },
   desk: {
     title: "Desk",
-    tasksAndGoals: "Задачи и цели",
+    tasksAndGoals: "Tasks & Goals",
     attentionCount: "Ждут вас: {{count}}",
     attentionCountPartial: "Ждут вас: не меньше {{count}}",
     section: {
       needsYou: "Ждут вас",
       active: "Активные сессии",
-      recent: "Недавние ответы и артефакты",
+      recent: "Недавние ответы и Artifacts",
       recentNote: "Завершённый ход — не завершённая работа",
       incomplete: "Некоторые хосты загружены не полностью",
       unknownCount: "Статус неизвестен: {{count}}",
@@ -1320,7 +1545,7 @@ export const ru: TranslationResources = {
     empty: {
       needsYou: "Вас ничего не ждёт.",
       active: "Нет активных сессий.",
-      recent: "Нет новых ответов или артефактов.",
+      recent: "Нет новых ответов или Artifacts.",
     },
     request: {
       kind: {
@@ -1344,6 +1569,9 @@ export const ru: TranslationResources = {
       untitled: "Сессия без названия",
       return: "Вернуться к разговору",
       returnLabel: "Открыть этот разговор",
+      markAllRead: "Отметить всё как прочитанное",
+      markingAllRead: "Отмечаем как прочитанное...",
+      markAllReadFailed: "Не удалось отметить все ответы как прочитанные: {{message}}",
       unknown: "Статус неизвестен",
       openDecision: "Есть ожидающее решение",
       newReply: "Новый ответ",
@@ -1382,7 +1610,7 @@ export const ru: TranslationResources = {
       source: {
         sessions: "сессии",
         decisions: "решения",
-        artifacts: "артефакты",
+        artifacts: "Artifacts",
       },
     },
   },
@@ -1440,11 +1668,11 @@ export const ru: TranslationResources = {
         delete: "Удалить цель",
         deleteTitle: "Удалить цель?",
         deleteMessage:
-          "«{{title}}» будет удалена. Её задачи останутся на столе как работа без цели.",
+          "«{{title}}» будет удалена. Её задачи останутся в Tasks & Goals как работа без цели.",
       },
       settings: {
-        title: "Настройки стола",
-        hostSection: "Как работает стол",
+        title: "Настройки Tasks & Goals",
+        hostSection: "Как работает Tasks & Goals",
         hostHint: "Хранится на этом хосте; все устройства следуют им",
         decideKinds: "В «Решить»",
         decideKindsHint: "Остальные контрольные точки остаются с работой в «В полёте»",
@@ -1453,7 +1681,7 @@ export const ru: TranslationResources = {
         notifyKinds: "Push-уведомления",
         notifyKindsHint: "Контрольные точки, о которых сообщает телефон",
         save: "Сохранить",
-        unavailable: "Настройки стола недоступны, пока этот хост офлайн",
+        unavailable: "Настройки Tasks & Goals недоступны, пока этот хост офлайн",
       },
       kinds: {
         permission: "Запросы разрешений",
@@ -1564,10 +1792,15 @@ export const ru: TranslationResources = {
         saving: "Сохранение…",
         saved: "«{{title}}» сохранена",
         failed: "Не удалось сохранить: {{message}}",
+        failedHeld:
+          "«{{title}}», возможно, не сохранена: {{message}}. Проверьте доску, прежде чем добавлять её снова.",
+        failedHeldWait: "Очистите строку, чтобы восстановить «{{title}}».",
+        draftOtherHost:
+          "Этот черновик относится к {{host}}. Вернитесь к нему, чтобы добавить, или очистите строку, чтобы начать здесь.",
       },
-      searchPlaceholder: "Поиск на рабочем месте...",
+      searchPlaceholder: "Поиск задач...",
       newGoal: "Новая цель",
-      settings: "Настройки рабочего места",
+      settings: "Настройки Tasks & Goals",
       zoneTab: "{{zone}}, элементов: {{count}}",
       zones: {
         decide: "Решить",
@@ -1614,7 +1847,7 @@ export const ru: TranslationResources = {
         label: "Позже, отложено: {{count}}",
       },
       empty: {
-        title: "На рабочем месте пусто",
+        title: "В Tasks & Goals пусто",
         description: "Здесь появляются цели, идеи и работа, которую ведут агенты.",
         decide: "Ничто не ждёт вашего решения",
         flight: "Ничего не в работе",
@@ -1640,7 +1873,7 @@ export const ru: TranslationResources = {
         flight: "В работе: {{count}}",
       },
       command: {
-        open: "Открыть рабочее место",
+        open: "Открыть Desk",
       },
     },
     detail: {
@@ -1690,7 +1923,7 @@ export const ru: TranslationResources = {
         planning: "Планирование",
         projects: "Проекты",
         save: "Сохранить представление",
-        saveHint: "Сначала отфильтруйте доску или выберите колонки",
+        saveHint: "Сначала отфильтруйте задачи или выберите колонки",
         name: "Название представления",
         namePlaceholder: "Назовите это представление",
         remove: "Удалить представление {{name}}",
@@ -1703,7 +1936,7 @@ export const ru: TranslationResources = {
       collapse: "Свернуть",
       expandColumn: "Развернуть «{{column}}», элементов: {{count}}",
       columnTab: "{{column}}, элементов: {{count}}",
-      searchPlaceholder: "Поиск по доске...",
+      searchPlaceholder: "Поиск задач...",
       clearSearch: "Очистить поиск",
       showViews: "Показать представления",
       hideViews: "Скрыть представления",
@@ -1727,7 +1960,7 @@ export const ru: TranslationResources = {
         remove: "Убрать фильтр {{filter}}",
       },
       empty: {
-        title: "На доске пока ничего нет",
+        title: "Задач пока нет",
         description: "Здесь появятся работающие агенты и запланированные задачи.",
       },
       sidebar: {
@@ -1854,11 +2087,11 @@ export const ru: TranslationResources = {
       },
     },
     capture: {
-      slashCommand: "Добавить задачу на доску",
+      slashCommand: "Добавить задачу в Tasks & Goals",
       added: "Задача добавлена в бэклог",
-      openBoard: "Открыть доску",
+      openBoard: "Открыть Desk",
       addFailed: "Не удалось добавить задачу: {{message}}",
-      addToBoard: "Добавить на доску",
+      addToBoard: "Добавить в Tasks & Goals",
       attachments: "Вложения",
       attachIssue: "Прикрепить issue",
       attachNeedsProject: "Выберите проект, чтобы прикрепить его issue",
@@ -1899,7 +2132,7 @@ export const ru: TranslationResources = {
         starting: "Запуск...",
       },
     },
-    title: "Рабочее место",
+    title: "Desk",
     newTask: "Новая задача",
     columns: {
       backlog: "Бэклог",
@@ -1914,8 +2147,8 @@ export const ru: TranslationResources = {
       title: "Задач пока нет",
       description: "Планируйте работу здесь, а затем запускайте её в новом рабочем пространстве.",
     },
-    unavailable: "Обновите хост, чтобы пользоваться Доской",
-    hostUnsupported: "Обновите {{host}}, чтобы пользоваться Доской",
+    unavailable: "Обновите хост, чтобы пользоваться Tasks & Goals",
+    hostUnsupported: "Обновите {{host}}, чтобы пользоваться Tasks & Goals",
     hostLoadFailed: "{{host}}: не удалось загрузить задачи",
     workspaceUnavailable: "Рабочее пространство недоступно",
     actions: {
@@ -1949,7 +2182,7 @@ export const ru: TranslationResources = {
     },
     confirmDelete: {
       title: "Удалить задачу?",
-      message: "«{{title}}» будет удалена с Доски. Её рабочее пространство не изменится.",
+      message: "«{{title}}» будет удалена из Tasks & Goals. Её рабочее пространство не изменится.",
       confirm: "Удалить",
     },
     errors: {
@@ -2158,7 +2391,7 @@ export const ru: TranslationResources = {
       search: "Поиск",
       schedules: "Расписания",
       mcpCalls: "Вызовы MCP",
-      board: "Рабочее место",
+      board: "Desk",
     },
     worktreeSetup: {
       title: "Настроить скрипты worktree",
@@ -4075,6 +4308,8 @@ export const ru: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "Профили агентов",
+        appliedPreferenceSaveFailed:
+          "Профиль применён, но не удалось сохранить его как профиль по умолчанию: {{error}}",
         unavailable: "Подключитесь к этому хосту, чтобы управлять профилями агентов",
         unsupported: "На этом хосте запущен демон, который пока не поддерживает профили агентов",
         emptyState:

@@ -11,6 +11,7 @@ import { Field, FormTextInput } from "@/components/ui/form-field";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useAppSettings } from "@/hooks/use-settings";
+import { useStableEvent } from "@/hooks/use-stable-event";
 import { openRenameForm, canEditRenameRow, type RenameForm, type RenameRow } from "./rename-model";
 
 const CheckedIcon = withUnistyles(CheckSquare);
@@ -77,6 +78,7 @@ export function SessionRenameSheet({
 }) {
   const { t } = useTranslation();
   const client = useHostRuntimeClient(serverId);
+  const getClient = useStableEvent(() => client);
   const connected = useHostRuntimeIsConnected(serverId);
   const compact = useIsCompactFormFactor();
   const { settings, updateSettings } = useAppSettings();
@@ -85,12 +87,14 @@ export function SessionRenameSheet({
       prompt: settings.sessionTitlePrompt || t("sessionPicker.defaultPrompt"),
       savePrompt: (prompt) => updateSettings({ sessionTitlePrompt: prompt }),
       preview: async (prompt) => {
-        if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
-        return client.previewSessionTitles(workspaceId, agentIds, prompt);
+        const currentClient = getClient();
+        if (!currentClient) throw new Error(t("workspace.terminal.hostDisconnected"));
+        return currentClient.previewSessionTitles(workspaceId, agentIds, prompt);
       },
       apply: async (proposals) => {
-        if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
-        return client.applySessionTitles(workspaceId, proposals);
+        const currentClient = getClient();
+        if (!currentClient) throw new Error(t("workspace.terminal.hostDisconnected"));
+        return currentClient.applySessionTitles(workspaceId, proposals);
       },
       invalidPrompt: t("sessionPicker.invalidPrompt"),
       invalidTitle: t("sessionPicker.invalidTitle"),

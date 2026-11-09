@@ -1639,7 +1639,8 @@ it("fills every cached workspace beneath live updates received during the SQLite
       payload: {
         kind: "upsert",
         workspace: {
-          ...workspaces[0],
+          ...createWorkspaceEntry(workspaces[0].id),
+          ...project,
           createdAt: undefined,
           lastUserMessageAt: null,
           name: "Live",

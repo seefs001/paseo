@@ -150,6 +150,9 @@ Users can also detach an existing subagent from the subagents track. Detach is d
 
 `notifyOnFinish` defaults to `true` for agent-scoped creation and prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` for explicit reporting or no completion callback.
 
+[Workspace Trace](data-model.md#workspace-trace) retains bounded causal metadata independently of
+these current ownership labels and the provider transcript.
+
 Agent-originated messages and automatic notifications share a recipient-daemon delivery module. A queued receipt acknowledges admission before provider dispatch, allowing a child to report and finish in the same two-second quiet window. Human prompts dispatch directly. Conflicting explicit interruption or session-mode choices retain separate ordered dispatches.
 
 The pending message window is in memory. Clean shutdown flushes it before closing agents; an abrupt

@@ -69,6 +69,7 @@ function WorkspaceNewTabMenuItem({
       leading={leading}
       trailing={trailing}
       disabled={item.disabled}
+      description={item.disabled ? item.disabledReason : undefined}
       onSelect={handleSelect}
     >
       {item.label}

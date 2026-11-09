@@ -2,6 +2,122 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  sshMachines: {
+    title: "SSH 머신",
+    info: "이 호스트가 자체 OpenSSH 설정과 키로 접속하는 머신입니다. Pi는 이 호스트의 모델과 설정으로 실행되고, SSH 워크스페이스의 파일과 명령은 머신에서 실행됩니다. 휴대폰 등 다른 클라이언트에는 SSH 키가 필요 없습니다.",
+    updateHost: "SSH 머신을 사용하려면 이 호스트를 업데이트하세요.",
+    add: "추가",
+    empty: "아직 SSH 머신이 없습니다.",
+    hostLabel: "OpenSSH 별칭 또는 호스트",
+    hostHint:
+      "이 호스트의 ~/.ssh/config, 키, SSH 에이전트를 사용합니다. 비밀번호와 MFA 프롬프트는 지원하지 않습니다.",
+    nameLabel: "이름",
+    userLabel: "사용자",
+    portLabel: "포트",
+    invalidPort: "포트는 1에서 65535 사이의 숫자여야 합니다.",
+    cancel: "취소",
+    saveAndCheck: "저장 후 확인",
+    saveFailed: "머신을 저장할 수 없습니다",
+    check: "확인",
+    trust: "호스트 키 신뢰",
+    trustTitle: "이 호스트 키를 신뢰할까요?",
+    trustFailed: "호스트 키를 신뢰할 수 없습니다",
+    toolRouting: "도구 라우팅",
+    newWorkspace: "새 워크스페이스",
+    remove: "제거",
+    removeTitle: "SSH 머신을 제거할까요?",
+    removeMessage:
+      "머신의 파일은 변경되지 않습니다. 이 머신을 쓰는 워크스페이스를 먼저 보관해야 합니다.",
+    removeMessageInUse:
+      "워크스페이스 {{count}}개가 아직 이 머신을 사용합니다. 제거하기 전에 보관하세요. 머신의 파일은 변경되지 않습니다.",
+    removeFailed: "머신을 제거할 수 없습니다",
+    targetHidden: "연결 정보 숨김",
+    summaryOnly:
+      "이 머신에서 워크스페이스를 열 수 있습니다. 연결이나 도구 라우팅을 바꾸려면 호스트 관리 권한이 필요합니다.",
+    state: {
+      not_checked: "확인 안 됨",
+      checking: "확인 중",
+      needs_trust: "호스트 키 확인 필요",
+      ready: "준비됨",
+      needs_attention: "조치 필요",
+      disabled: "비활성화됨",
+    },
+    policyHint:
+      "도구는 기본적으로 머신에서 실행됩니다. SSH 구현이 없는 도구는 여기서 로컬로 지정하지 않으면 사용할 수 없습니다. 로컬 도구는 머신이 아니라 이 호스트에서 실행됩니다.",
+    localSkills: "이 호스트에서 스킬 읽기",
+    localSkillsHint:
+      "로드된 Pi 스킬과 참고 파일을 여기서 읽기 전용으로 읽습니다. 스킬의 명령은 여전히 머신에서 실행됩니다.",
+    localTools: "로컬 도구",
+    localToolsHint:
+      "쉼표로 구분한 도구 이름(예: 메모리 또는 브라우저 도구). 파일, 검색, bash 도구는 항상 머신에서 실행됩니다.",
+    disabledTools: "비활성화된 도구",
+    policyRevision: "리비전 {{revision}}",
+    savePolicy: "라우팅 저장",
+    policySaveFailed: "도구 라우팅을 저장할 수 없습니다",
+    directoryLabel: "머신의 디렉터리",
+    directoryHint:
+      "이미 있는 디렉터리입니다. Paseo는 머신에서 디렉터리를 만들거나 삭제하지 않습니다.",
+    createWorkspace: "워크스페이스 만들기",
+    createWorkspaceFailed: "워크스페이스를 만들 수 없습니다",
+    errors: {
+      hostRequired: "OpenSSH 별칭 또는 호스트를 입력하세요.",
+      hostInvalid: "공백이 없고 대시로 시작하지 않는 별칭 또는 호스트 이름을 사용하세요.",
+      userInvalid: "사용자 이름에는 공백을 넣거나 대시로 시작할 수 없습니다.",
+      toolNameInvalid: "도구 이름에는 영문자, 숫자, 점, 대시, 콜론, 밑줄만 사용하세요.",
+      remoteBuiltinLocal:
+        "파일, 검색, bash 도구는 항상 머신에서 실행되며 로컬로 지정할 수 없습니다.",
+      directoryRequired: "머신의 디렉터리를 입력하세요.",
+    },
+    routing: {
+      workspaceHint:
+        "이 워크스페이스에만 적용됩니다. 덮어쓰지 않은 항목은 머신 기본값을 사용합니다. 변경 사항은 다음 도구 호출부터 적용됩니다.",
+      localMcpServers: "로컬 MCP 서버",
+      localMcpServersHint:
+        "이 워크스페이스에서 시작할, 이 호스트 Pi 설정의 MCP 서버입니다. 나머지는 꺼진 상태로 둡니다.",
+      disabledToolsHint: "여기서 Pi가 호출할 수 없는 도구 이름이며 사용자 셸도 포함됩니다.",
+      reload: "다시 불러오기",
+      useMachineDefault: "머신 기본값 사용",
+      readOnly: "도구 라우팅을 바꾸려면 호스트 관리 권한이 필요합니다.",
+      machineMissing: "이 워크스페이스의 머신을 사용할 수 없습니다.",
+    },
+    operations: {
+      title: "작업",
+      empty: "아직 머신에 보낸 변경이 없습니다.",
+      unknownNotice:
+        "결과를 알 수 없는 작업이 있습니다. Paseo가 머신의 자동 변경을 멈췄습니다. 머신을 확인한 뒤 아래에서 확인하세요. 확인해도 아무것도 다시 실행되지 않습니다.",
+      confirm: "결과 확인",
+      confirmTitle: "알 수 없는 결과를 확인할까요?",
+      confirmMessage:
+        "결과를 알 수 없는 작업 {{count}}개에 대해 머신을 확인했습니다. 확인하면 에이전트가 다시 머신을 변경할 수 있습니다. 아무것도 다시 실행되지 않습니다.",
+      stale:
+        "목록을 불러온 뒤 작업 {{count}}개가 바뀌어 확인되지 않았습니다. 새로고침 후 다시 확인하세요.",
+      state: {
+        admitted: "허용됨",
+        sent: "보냄",
+        completed: "완료",
+        not_sent: "보내지 않음",
+        unknown: "결과 알 수 없음",
+        acknowledged: "결과 알 수 없음(확인함)",
+      },
+    },
+    workspace: {
+      terminalUnavailable: "SSH 워크스페이스에서는 아직 터미널을 사용할 수 없습니다.",
+      panelUnavailable:
+        "이 패널은 소유자 컴퓨터에서 동작하므로 SSH 워크스페이스에서는 사용할 수 없습니다. 머신은 「파일」에서 확인하세요.",
+    },
+    files: {
+      title: "파일",
+      location: "{{machine}}에서",
+      up: "위로",
+      refresh: "새로고침",
+      close: "닫기",
+      loading: "불러오는 중…",
+      empty: "빈 디렉터리",
+      binary: "바이너리 파일이라 미리 볼 수 없습니다.",
+      truncated: "처음 1MB만 표시합니다.",
+      disconnected: "호스트 연결이 끊겼습니다.",
+    },
+  },
   scheduleTargets: {
     workspace: "작업 공간(선택 사항)",
     conversation: "대화(선택 사항)",
@@ -1251,6 +1367,113 @@ export const ko: TranslationResources = {
       },
     },
   },
+  workspaceTrace: {
+    title: "Trace",
+    unsupported: "Trace를 표시하려면 이 호스트를 업데이트해야 합니다.",
+    loading: "Trace 불러오는 중…",
+    loadFailed: "Trace를 불러올 수 없습니다",
+    retry: "다시 시도",
+    recent: "최근 활동",
+    focusedOn: "{{title}}에 초점",
+    clearFocus: "모두 보기",
+    count: "이벤트 {{count}}",
+    refresh: "새로고침",
+    refreshing: "새로고침 중…",
+    empty: "아직 기록된 에이전트 간 활동이 없습니다",
+    loadMore: "이전 항목 불러오기",
+    loadingMore: "불러오는 중…",
+    focusHere: "여기에 초점",
+    openArtifact: "Artifact 열기",
+    showSource: "출처 보기",
+    openConversation: "대화 열기",
+    sourceItemNotAddressable:
+      "이 이벤트에는 위치를 지정할 수 있는 출처 항목이 없어 대화가 현재 위치에서 열립니다.",
+    sourceUnavailable: "여기서는 출처를 볼 수 없습니다",
+    gapForAgent: "{{gap}} ({{agent}})",
+    lane: {
+      unknown: "알 수 없는 에이전트",
+    },
+    kind: {
+      delegation: "위임",
+      agent_created: "에이전트 생성",
+      message: "메시지",
+      notification: "완료 알림",
+      dispatch: "전달",
+      artifact: "Artifact",
+      schedule: "예약 실행",
+    },
+    status: {
+      queued: "대기 중",
+      dispatched: "전달됨",
+      failed: "실패",
+      unknown: "알 수 없음",
+      recorded: "기록됨",
+    },
+    statusDetail: {
+      recorded: "발생 시 기록됨",
+      queued: "대기 중, 아직 전달되지 않음",
+      dispatched: "에이전트에 전달됨. 작업 완료를 의미하지 않음",
+      failed: "전달 실패",
+      unknown: "전달 상태 알 수 없음",
+    },
+    evidence: {
+      existing: "기록에서 가져옴",
+    },
+    evidenceDetail: {
+      recorded: "발생 시 데몬이 기록함",
+      existing: "기존 기록에서 재구성됨. 불완전할 수 있음",
+    },
+    availability: {
+      local: "로컬",
+      archived: "보관됨",
+      missing: "삭제되었거나 없음",
+      external: "다른 작업 공간 또는 호스트",
+    },
+    gap: {
+      history: "일부 기록을 사용할 수 없습니다",
+      retention: "오래된 기록이 정리되었습니다",
+      pending: "일부 전달이 아직 대기 중입니다",
+      recording: "일부 인과 기록이 누락되었습니다",
+      focus_unavailable: "초점 이벤트를 더 이상 사용할 수 없습니다",
+      window: "활동의 일부만 불러왔습니다",
+    },
+    behavior: {
+      started: "턴 시작",
+      steered: "실행 중인 턴을 조정함",
+      interrupted: "실행 중인 턴을 중단함",
+      out_of_band: "턴 밖에서 전달됨",
+    },
+    requested: {
+      steer: "조정 요청",
+      interrupt: "중단 요청",
+    },
+    notification: {
+      finished: "에이전트 완료",
+      errored: "에이전트 오류",
+      "permission-required": "에이전트 권한 필요",
+      closed: "에이전트 종료됨",
+    },
+    edge: {
+      delegation: "위임",
+      message: "메시지",
+      notification: "알림",
+    },
+    detail: {
+      kind: "종류",
+      agent: "에이전트",
+      availability: "가용성",
+      time: "시간",
+      evidence: "근거",
+      status: "상태",
+      behavior: "전달",
+      notification: "알림",
+      batch: "묶음",
+      batchCount: "메시지 {{count}}개를 함께 전달",
+      incoming: "보낸 쪽",
+      outgoing: "받는 쪽",
+      outsideWindow: "불러온 범위 밖",
+    },
+  },
   artifacts: {
     collection: {
       empty: "등록된 결과물 없음",
@@ -1267,8 +1490,8 @@ export const ko: TranslationResources = {
       noChat: "인용을 추가하려면 대화 탭을 여세요.",
       added: "대화 초안에 인용을 추가했습니다.",
     },
-    pill: "산출물 {{count}}",
-    title: "산출물",
+    pill: "Artifacts {{count}}",
+    title: "Artifacts",
     filter: { sessionOnly: "이 세션만 ({{count}})", showAll: "모두 보기 ({{count}})" },
     row: { meta: "{{kind}} · 버전 {{revision}} · {{time}}", revision: "버전 {{revision}}" },
     kinds: {
@@ -1283,26 +1506,27 @@ export const ko: TranslationResources = {
     },
     viewer: {
       loading: "불러오는 중…",
-      missing: "이 산출물은 더 이상 컬렉션에 없습니다.",
+      linksUnsupported: "연결된 작업과 목표를 보려면 이 호스트를 업데이트하세요.",
+      missing: "이 Artifact는 더 이상 컬렉션에 없습니다.",
       openSource: "원본 세션 열기",
       sourceGone: "원본 세션을 더 이상 사용할 수 없습니다",
       goalGone: "목표가 삭제되었습니다",
       taskGone: "작업이 삭제되었습니다",
-      remove: "산출물에서 제거",
-      removeTitle: "이 산출물을 제거할까요?",
-      removeMessage: "산출물 컬렉션에서 빠집니다. 워크스페이스의 파일은 남습니다.",
+      remove: "Artifacts에서 제거",
+      removeTitle: "이 Artifact를 제거할까요?",
+      removeMessage: "Artifacts 컬렉션에서 빠집니다. 워크스페이스의 파일은 남습니다.",
     },
     errors: { offline: "호스트가 오프라인입니다." },
   },
   desk: {
     title: "Desk",
-    tasksAndGoals: "작업 및 목표",
+    tasksAndGoals: "Tasks & Goals",
     attentionCount: "내 확인 필요: {{count}}",
     attentionCountPartial: "내 확인 필요: {{count}}개 이상",
     section: {
       needsYou: "내 확인 필요",
       active: "활성 세션",
-      recent: "최근 응답과 산출물",
+      recent: "최근 응답과 Artifact",
       recentNote: "턴 종료는 작업 완료가 아닙니다",
       incomplete: "일부 호스트가 아직 모두 로드되지 않았습니다",
       unknownCount: "상태 알 수 없음: {{count}}",
@@ -1311,7 +1535,7 @@ export const ko: TranslationResources = {
     empty: {
       needsYou: "기다리는 요청이 없습니다.",
       active: "활성 세션이 없습니다.",
-      recent: "새 응답이나 산출물이 없습니다.",
+      recent: "새 응답이나 Artifact가 없습니다.",
     },
     request: {
       kind: {
@@ -1335,6 +1559,9 @@ export const ko: TranslationResources = {
       untitled: "제목 없는 세션",
       return: "대화로 돌아가기",
       returnLabel: "이 대화 열기",
+      markAllRead: "모두 읽음으로 표시",
+      markingAllRead: "읽음으로 표시 중...",
+      markAllReadFailed: "모든 답변을 읽음으로 표시하지 못했습니다: {{message}}",
       unknown: "상태 알 수 없음",
       openDecision: "대기 중인 결정 있음",
       newReply: "새 응답",
@@ -1373,7 +1600,7 @@ export const ko: TranslationResources = {
       source: {
         sessions: "세션",
         decisions: "결정",
-        artifacts: "산출물",
+        artifacts: "Artifacts",
       },
     },
   },
@@ -1430,11 +1657,12 @@ export const ko: TranslationResources = {
         reopen: "목표 다시 열기",
         delete: "목표 삭제",
         deleteTitle: "목표를 삭제할까요?",
-        deleteMessage: '"{{title}}"이(가) 삭제됩니다. 작업은 목표 없는 작업으로 데스크에 남습니다.',
+        deleteMessage:
+          '"{{title}}"이(가) 삭제됩니다. 작업은 목표 없는 작업으로 Tasks & Goals에 남습니다.',
       },
       settings: {
-        title: "데스크 설정",
-        hostSection: "데스크 동작 방식",
+        title: "Tasks & Goals 설정",
+        hostSection: "Tasks & Goals 작동 방식",
         hostHint: "이 호스트에 저장되며 모든 기기에 적용됩니다",
         decideKinds: "결정 대기에 표시",
         decideKindsHint: "다른 체크포인트는 진행 중인 작업에 남습니다",
@@ -1443,7 +1671,7 @@ export const ko: TranslationResources = {
         notifyKinds: "푸시 알림",
         notifyKindsHint: "휴대폰에 알리는 체크포인트",
         save: "저장",
-        unavailable: "이 호스트가 오프라인일 때는 데스크 설정을 사용할 수 없습니다",
+        unavailable: "이 호스트가 오프라인이면 Tasks & Goals 설정을 사용할 수 없습니다",
       },
       kinds: {
         permission: "권한 요청",
@@ -1554,10 +1782,15 @@ export const ko: TranslationResources = {
         saving: "저장 중…",
         saved: "“{{title}}” 저장됨",
         failed: "저장할 수 없습니다: {{message}}",
+        failedHeld:
+          "“{{title}}”이(가) 저장되지 않았을 수 있습니다: {{message}}. 다시 추가하기 전에 보드를 확인하세요.",
+        failedHeldWait: "입력란을 비우면 “{{title}}”을(를) 복원할 수 있습니다.",
+        draftOtherHost:
+          "이 초안은 {{host}}에 속합니다. 해당 호스트로 돌아가서 추가하거나, 입력란을 비우고 여기서 새로 시작하세요.",
       },
-      searchPlaceholder: "작업대 검색...",
+      searchPlaceholder: "작업 검색...",
       newGoal: "새 목표",
-      settings: "작업대 설정",
+      settings: "Tasks & Goals 설정",
       zoneTab: "{{zone}}, {{count}}개 항목",
       zones: {
         decide: "결정 대기",
@@ -1604,7 +1837,7 @@ export const ko: TranslationResources = {
         label: "나중에, {{count}}개 미룸",
       },
       empty: {
-        title: "작업대가 비어 있습니다",
+        title: "Tasks & Goals가 비어 있습니다",
         description: "목표, 아이디어, 에이전트가 진행하는 작업이 여기에 표시됩니다.",
         decide: "결정을 기다리는 항목 없음",
         flight: "진행 중인 작업 없음",
@@ -1630,7 +1863,7 @@ export const ko: TranslationResources = {
         flight: "진행 중: {{count}}",
       },
       command: {
-        open: "작업대 열기",
+        open: "Desk 열기",
       },
     },
     detail: {
@@ -1680,7 +1913,7 @@ export const ko: TranslationResources = {
         planning: "계획",
         projects: "프로젝트",
         save: "보기 저장",
-        saveHint: "먼저 보드를 필터링하거나 열을 선택하세요",
+        saveHint: "먼저 작업을 필터링하거나 열을 선택하세요",
         name: "보기 이름",
         namePlaceholder: "이 보기의 이름 입력",
         remove: "{{name}} 보기 삭제",
@@ -1693,7 +1926,7 @@ export const ko: TranslationResources = {
       collapse: "접기",
       expandColumn: "{{column}} 펼치기, {{count}}개 항목",
       columnTab: "{{column}}, {{count}}개 항목",
-      searchPlaceholder: "보드 검색...",
+      searchPlaceholder: "작업 검색...",
       clearSearch: "검색 지우기",
       showViews: "보기 표시",
       hideViews: "보기 숨기기",
@@ -1717,7 +1950,7 @@ export const ko: TranslationResources = {
         remove: "필터 {{filter}} 제거",
       },
       empty: {
-        title: "보드에 아직 아무것도 없습니다",
+        title: "아직 작업이 없습니다",
         description: "실행 중인 에이전트와 계획된 작업이 여기에 표시됩니다.",
       },
       sidebar: {
@@ -1844,11 +2077,11 @@ export const ko: TranslationResources = {
       },
     },
     capture: {
-      slashCommand: "보드에 작업 추가",
+      slashCommand: "Tasks & Goals에 작업 추가",
       added: "작업을 백로그에 추가했습니다",
-      openBoard: "보드 열기",
+      openBoard: "Desk 열기",
       addFailed: "작업을 추가할 수 없습니다: {{message}}",
-      addToBoard: "보드에 추가",
+      addToBoard: "Tasks & Goals에 추가",
       attachments: "첨부",
       attachIssue: "이슈 첨부",
       attachNeedsProject: "이슈를 첨부하려면 프로젝트를 선택하세요",
@@ -1889,7 +2122,7 @@ export const ko: TranslationResources = {
         starting: "시작하는 중...",
       },
     },
-    title: "작업대",
+    title: "Desk",
     newTask: "새 작업",
     columns: {
       backlog: "백로그",
@@ -1904,8 +2137,8 @@ export const ko: TranslationResources = {
       title: "아직 작업이 없습니다",
       description: "여기서 작업을 계획한 다음 새 워크스페이스에서 시작하세요.",
     },
-    unavailable: "보드를 사용하려면 호스트를 업데이트하세요",
-    hostUnsupported: "보드를 사용하려면 {{host}}을(를) 업데이트하세요",
+    unavailable: "Tasks & Goals를 사용하려면 호스트를 업데이트하세요",
+    hostUnsupported: "Tasks & Goals를 사용하려면 {{host}}을(를) 업데이트하세요",
     hostLoadFailed: "{{host}}: 작업을 불러올 수 없습니다",
     workspaceUnavailable: "워크스페이스를 사용할 수 없음",
     actions: {
@@ -1939,7 +2172,8 @@ export const ko: TranslationResources = {
     },
     confirmDelete: {
       title: "작업을 삭제할까요?",
-      message: '"{{title}}"이(가) 보드에서 제거됩니다. 워크스페이스는 영향을 받지 않습니다.',
+      message:
+        '"{{title}}"이(가) Tasks & Goals에서 제거됩니다. 워크스페이스는 영향을 받지 않습니다.',
       confirm: "삭제",
     },
     errors: {
@@ -2146,7 +2380,7 @@ export const ko: TranslationResources = {
       search: "검색",
       schedules: "일정",
       mcpCalls: "MCP 호출",
-      board: "작업대",
+      board: "Desk",
     },
     worktreeSetup: {
       title: "워크트리 스크립트 설정",
@@ -4037,6 +4271,8 @@ export const ko: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "에이전트 프로필",
+        appliedPreferenceSaveFailed:
+          "프로필이 적용되었지만 기본값으로 저장하지 못했습니다: {{error}}",
         unavailable: "에이전트 프로필을 관리하려면 이 호스트에 연결하세요",
         unsupported: "이 호스트에서 실행 중인 데몬은 아직 에이전트 프로필을 지원하지 않습니다",
         emptyState:

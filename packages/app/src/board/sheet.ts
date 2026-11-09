@@ -42,14 +42,18 @@ export function openBoardTaskSheet(target: BoardTaskSheetTarget): void {
 }
 
 /** Starts the close animation; the sheet unmounts on dismiss. */
-export function closeBoardTaskSheet(): void {
-  useBoardTaskSheet.setState((previous) =>
-    previous.status === "open" ? { ...previous, visible: false } : previous,
-  );
+export function closeBoardTaskSheet(openCount: number): void {
+  useBoardTaskSheet.setState((previous) => {
+    if (previous.status !== "open" || previous.openCount !== openCount) return previous;
+    return { ...previous, visible: false };
+  });
 }
 
-export function dismissBoardTaskSheet(): void {
-  useBoardTaskSheet.setState((previous) => ({ status: "closed", openCount: previous.openCount }));
+export function dismissBoardTaskSheet(openCount: number): void {
+  useBoardTaskSheet.setState((previous) => {
+    if (previous.status !== "open" || previous.openCount !== openCount) return previous;
+    return { status: "closed", openCount };
+  });
 }
 
 /** Quick capture files tasks under the project of the workspace the user is in. */

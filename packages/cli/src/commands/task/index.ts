@@ -8,6 +8,7 @@ import {
   resolveGoalId,
   resolveTaskId,
   taskSchema,
+  toAppliedCommandError,
   toTaskRows,
   validateAgentOptions,
   withTaskClient,
@@ -59,7 +60,9 @@ async function addTask(
       stage: options.stage,
       goalId: toGoalId(goals, options.goal),
     });
-    const [row] = await toTaskRows(client, [task]);
+    const [row] = await toTaskRows(client, [task]).catch((error: unknown) => {
+      throw toAppliedCommandError({ entity: "task", id: task.id, error });
+    });
     return { type: "single", data: row!, schema: taskSchema };
   });
 }
@@ -122,7 +125,9 @@ async function updateTask(
       goalId: toGoalId(goals, options.goal),
       completed,
     });
-    const [row] = await toTaskRows(client, [task]);
+    const [row] = await toTaskRows(client, [task]).catch((error: unknown) => {
+      throw toAppliedCommandError({ entity: "task", id: task.id, error });
+    });
     return { type: "single", data: row!, schema: taskSchema };
   });
 }

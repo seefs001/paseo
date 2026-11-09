@@ -82,6 +82,8 @@ $PASEO_HOME/
 │       └── {agentId}.json               # One file per agent
 ├── schedules/
 │   └── {scheduleId}.json                # One file per schedule
+├── workspace-trace.jsonl                # Current bounded causal-metadata segment
+├── workspace-trace.jsonl.previous       # Previous segment, replaced on rotation
 ├── artifacts/
 │   ├── index.json                       # Artifacts collection, every workspace on the host
 │   └── files/{artifactId}/{fileName}    # The daemon's copy of each artifact's content
@@ -108,6 +110,37 @@ $PASEO_HOME/
 The `agents/{sanitized-cwd}/` directory name is derived from the agent's `cwd` by stripping the filesystem root and replacing path separators with `-` (Windows drive letters become a `C-` style prefix). Persistent server stores write atomically by writing a temp file in the target directory and then renaming it into place.
 
 ---
+
+## Workspace Trace
+
+Workspace Trace records causal metadata, not transcripts or task ownership. Provider history remains
+the transcript authority. Prompt XML and tool-result text cannot establish trusted sender identity:
+users can quote envelopes, and nested tool calls need not print their receipts. The daemon records
+agent-tool admission, delegation, delivery batches and finish-watch origins at their owning boundaries.
+Client-supplied source fields do not become trusted sender records.
+
+The journal retains two segments of at most 2 MiB each. Writes are serialized asynchronously;
+Trace reads and graceful shutdown drain the writer. A crash can lose an unwritten tail or an in-memory
+message queue. Missing acknowledgment means unknown dispatch, not failure or success. Recording
+failure does not fail message delivery. The view reports history, retention, recording and pending
+coverage gaps; it never claims complete older history. No message bodies, tool arguments or exception
+text are copied into this journal.
+
+A dispatch records all admitted message IDs and the actual steer/interruption outcome. It does not
+prove the provider completed the work. Finish-watch origins associate a notification with a creation
+or send subscription, not with a particular completed turn. Recovered notifications can repeat.
+Current parent labels remain ownership metadata after detach; they never reconstruct delegation.
+
+Queries stay inside one workspace, including workspaces without a project. Cross-workspace and
+cross-host endpoints do not recursively load history or expose external titles. `workspace.read`
+authorizes the read through the ordinary direct or routed session. The result contains at most 200
+nodes; a batch that cannot fit all its source nodes retains its full message-ID list and reports a
+window gap. Focus views preserve multiple inputs instead of choosing a task root.
+
+The IDs of recorded events survive restart. Received-message navigation uses the deterministic
+`paseo-agent-message:<deliveryId>` call ID, not a provider message ID or a timeline cursor. With no
+exact anchor, open the conversation without claiming to locate a source. Event timestamps and
+runtime source-turn observations do not establish historical turn durations.
 
 ## 1. Agent Record
 

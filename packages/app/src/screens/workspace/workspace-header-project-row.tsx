@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { MessageSquare } from "lucide-react-native";
+import { MessageSquare, Server } from "lucide-react-native";
 import { DensityIcon } from "@/components/ui/density-icon";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -21,8 +21,12 @@ export function WorkspaceHeaderProjectRow({
   subtitle,
   isSubtitleDistinct,
   serverId,
+  subtitleKind = "project",
 }: {
   projectAssigned?: boolean;
+  // "location" renders the subtitle as where the workspace runs (an SSH machine and its
+  // directory) instead of a project, so a projectless SSH workspace never reads "No project".
+  subtitleKind?: "project" | "location";
   subtitle: string;
   isSubtitleDistinct: boolean;
   serverId: string;
@@ -30,6 +34,18 @@ export function WorkspaceHeaderProjectRow({
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const hostBadge = useHostBadges({ enabled: isCompact }).get(serverId) ?? null;
+  if (subtitleKind === "location") {
+    return (
+      <View style={styles.row}>
+        <DensityIcon icon={Server} size="sm" color="foregroundMuted" />
+        <Text testID="workspace-header-location" style={styles.project} numberOfLines={1}>
+          {subtitle}
+        </Text>
+        {hostBadge ? <Text style={styles.separator}>·</Text> : null}
+        {hostBadge ? <HostBadge badge={hostBadge} /> : null}
+      </View>
+    );
+  }
   const showProject = !projectAssigned || isSubtitleDistinct || isCompact;
   if (!showProject && !hostBadge) {
     return null;

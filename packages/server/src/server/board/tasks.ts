@@ -284,6 +284,12 @@ export class BoardTaskService {
           "Move the task to Ready before an agent claims it",
         );
       }
+      if (current.readyFor !== "agent") {
+        throw new BoardTaskError(
+          "task_not_ready",
+          "This task is ready for a human, so agents can't claim it",
+        );
+      }
       const task = { ...current, claimedBy: agentId, updatedAt: this.now().toISOString() };
       return { result: task, changes: [{ kind: "upsert", task }] };
     });

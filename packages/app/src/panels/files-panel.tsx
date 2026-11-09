@@ -9,6 +9,7 @@ import { usePaneContext } from "@/panels/pane-context";
 import { definePanel, type PanelPresentation } from "@/panels/panel-registry";
 import { useAddFileToChat } from "@/panels/use-add-file-to-chat";
 import { useWorkspaceDirectory } from "@/stores/session-store-hooks";
+import { SshFileBrowser, useWorkspaceExecutionLocation } from "@/ssh-machines";
 
 const ThemedFiles = withUnistyles(Files);
 const filesPanelPresentation = {
@@ -22,6 +23,7 @@ function FilesPanel() {
   const { t } = useTranslation();
   const { serverId, workspaceId, target, openPreferredTarget, openTargetToSide } = usePaneContext();
   const workspaceRoot = useWorkspaceDirectory(serverId, workspaceId);
+  const executionLocation = useWorkspaceExecutionLocation(serverId, workspaceId);
   const { addFile, canAddToChat } = useAddFileToChat({ serverId, workspaceId });
   invariant(target.kind === "files", "FilesPanel requires files target");
   const onOpenFile = useCallback(
@@ -32,6 +34,11 @@ function FilesPanel() {
     (path: string) => openTargetToSide?.({ kind: "file", path }),
     [openTargetToSide],
   );
+  if (executionLocation) {
+    return (
+      <SshFileBrowser serverId={serverId} workspaceId={workspaceId} location={executionLocation} />
+    );
+  }
   if (!workspaceRoot) {
     return (
       <View style={styles.centerState}>

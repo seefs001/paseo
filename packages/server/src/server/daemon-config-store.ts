@@ -12,6 +12,7 @@ import {
 import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
 import type { SpeechSettingsPatch } from "@getpaseo/protocol/speech/rpc-schemas";
 import { normalizeHostnameAllowlist } from "./hostnames.js";
+import { saveDaemonPassword } from "./daemon-password.js";
 import { mergeSpeechSettingsPatch, type SpeechSettingsOwner } from "./speech/speech-settings.js";
 
 export type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
@@ -424,6 +425,13 @@ export class DaemonConfigStore {
         ),
       ),
     );
+  }
+
+  public savePassword(password: string): Promise<void> {
+    return this.enqueue(async () => {
+      saveDaemonPassword(this.paseoHome, password);
+      this.setPasswordConfigured(true);
+    });
   }
 
   public setPasswordConfigured(passwordSet: boolean): MutableDaemonConfig {

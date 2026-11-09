@@ -4,7 +4,12 @@ import type {
   DaemonClient,
 } from "@getpaseo/client/internal/daemon-client";
 import type { BoardGoal, BoardTask, WorkspaceDescriptorPayload } from "@getpaseo/protocol/messages";
-import type { CommandError, CommandOptions, OutputSchema } from "../../output/index.js";
+import {
+  toCommandError,
+  type CommandError,
+  type CommandOptions,
+  type OutputSchema,
+} from "../../output/index.js";
 import { connectToDaemon, buildDaemonConnectionCommandError } from "../../utils/client.js";
 import { resolveProviderAndModel } from "../../utils/provider-model.js";
 import { toScheduleCommandError } from "../schedule/shared.js";
@@ -85,6 +90,32 @@ export async function withTaskClient<T>(
   } finally {
     await client.close().catch(() => undefined);
   }
+}
+
+interface AppliedCommandErrorOptions {
+  entity: "task" | "goal";
+  id: string;
+  error: unknown;
+}
+
+export function toAppliedCommandError({
+  entity,
+  id,
+  error,
+}: AppliedCommandErrorOptions): CommandError {
+  const commandError = toCommandError(
+    toScheduleCommandError("TASK_COMMAND_FAILED", "manage Board tasks", error),
+  );
+  const idField = entity === "task" ? "taskId" : "goalId";
+  return {
+    ...commandError,
+    message: `Applied changes to ${entity} ${id}, but could not load its details: ${commandError.message}`,
+    details: {
+      applied: true,
+      [idField]: id,
+      cause: commandError,
+    },
+  };
 }
 
 /** Resolves a task ID or `T-<number>` reference against the host's tasks. */

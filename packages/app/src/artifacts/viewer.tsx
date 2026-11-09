@@ -17,7 +17,7 @@ import { useArtifactActions } from "./use-artifact-actions";
 import type { ArtifactQuoteInput } from "./quote";
 import { openDeskGoalSheet } from "@/board/goal-sheet";
 import { openBoardTaskSheet } from "@/board/sheet";
-import { useBoardTasks } from "@/board/tasks";
+import { useBoardTasks, type BoardHostTasks } from "@/board/tasks";
 import { useFetchQuery } from "@/data/query";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
@@ -323,7 +323,10 @@ function ArtifactLinks({
   const tasks =
     host?.status === "ready"
       ? artifact.taskIds.map((id) => ({ id, task: host.tasks.get(id) ?? null }))
-      : artifact.taskIds.map((id) => ({ id, task: null }));
+      : [];
+  const hasBoardLinks = artifact.goalId !== null || artifact.taskIds.length > 0;
+  const showBoardLinkStatus = hasBoardLinks && host?.status !== "ready";
+  const showGoal = host?.status === "ready" && artifact.goalId !== null;
 
   const openAgent = useCallback(() => {
     if (!artifact.sourceAgentId) return;
@@ -346,7 +349,8 @@ function ArtifactLinks({
           testID="artifact-open-source"
         />
       ) : null}
-      {artifact.goalId ? (
+      {showBoardLinkStatus ? <ArtifactBoardLinkStatus host={host} /> : null}
+      {showGoal ? (
         <ArtifactLink
           label={goal ? `G-${goal.number} ${goal.title}` : null}
           gone={t("artifacts.viewer.goalGone")}
@@ -364,6 +368,27 @@ function ArtifactLinks({
       ) : null}
     </View>
   );
+}
+
+function ArtifactBoardLinkStatus({
+  host,
+}: {
+  host: BoardHostTasks | undefined;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  switch (host?.status) {
+    case undefined:
+    case "loading":
+      return <Text style={styles.muted}>{t("artifacts.viewer.loading")}</Text>;
+    case "offline":
+      return <Text style={styles.muted}>{t("board.errors.offline")}</Text>;
+    case "unsupported":
+      return <Text style={styles.muted}>{t("artifacts.viewer.linksUnsupported")}</Text>;
+    case "error":
+      return <Text style={styles.error}>{host.message}</Text>;
+    case "ready":
+      return null;
+  }
 }
 
 /** A link to a record, or a plain note that the record is gone. */

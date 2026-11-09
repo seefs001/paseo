@@ -12,6 +12,7 @@ export function DeskSection({
   count,
   rowCount,
   note,
+  action,
   empty,
   children,
   testID,
@@ -20,6 +21,7 @@ export function DeskSection({
   count: number;
   rowCount: number;
   note: string | null;
+  action?: ReactNode;
   empty: string;
   children: ReactNode;
   testID: string;
@@ -29,8 +31,9 @@ export function DeskSection({
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.count}>{count}</Text>
+        {action ? <View style={styles.action}>{action}</View> : null}
         {note ? (
-          <Text style={styles.note} numberOfLines={1}>
+          <Text style={[styles.note, action ? styles.noteWithAction : null]} numberOfLines={1}>
             {note}
           </Text>
         ) : null}
@@ -53,6 +56,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   header: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "baseline",
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[1],
@@ -72,6 +76,14 @@ const styles = StyleSheet.create((theme) => ({
     textAlign: "right",
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  action: {
+    marginLeft: "auto",
+    alignSelf: "center",
+  },
+  noteWithAction: {
+    flexBasis: "100%",
+    textAlign: "left",
   },
   empty: {
     color: theme.colors.foregroundMuted,

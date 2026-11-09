@@ -242,7 +242,8 @@ function highlightStyle(part: HighlightedInputTextProps["part"]) {
 
 function HighlightedInputText({ part, onHighlightPress }: HighlightedInputTextProps) {
   const handlePress = useCallback(() => {
-    onHighlightPress?.(part.start);
+    // Report a caret after the first character, matching web's (start, end] press range.
+    onHighlightPress?.(part.start + 1);
   }, [onHighlightPress, part.start]);
   return (
     <Text

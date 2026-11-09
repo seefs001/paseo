@@ -35,6 +35,8 @@ export class AgentDirectory {
       projectLive(agent: ManagedAgent): Promise<AgentSnapshotPayload>;
       projectStored(record: StoredAgentRecord): AgentSnapshotPayload;
       isProviderVisible(provider: string): boolean;
+      // False for workspaces the client cannot represent, such as SSH workspaces for old apps.
+      isWorkspaceVisible?(workspaceId: string | null | undefined): boolean;
       isStoredProviderAvailable(record: StoredAgentRecord): boolean;
     },
   ) {}
@@ -64,6 +66,9 @@ export class AgentDirectory {
     agent: DiscoverableAgent,
     visibility: BackgroundVisibility = false,
   ): Promise<boolean> {
+    if (this.deps.isWorkspaceVisible && !this.deps.isWorkspaceVisible(agent.workspaceId)) {
+      return false;
+    }
     const workspace = agent.workspaceId ? await this.deps.workspaces.get(agent.workspaceId) : null;
     return admits(agent, workspace?.background === true, visibility);
   }
@@ -151,7 +156,8 @@ export class AgentDirectory {
     );
     return [...active, ...stored]
       .filter(matches)
-      .filter((agent) => this.deps.isProviderVisible(agent.provider));
+      .filter((agent) => this.deps.isProviderVisible(agent.provider))
+      .filter((agent) => this.deps.isWorkspaceVisible?.(agent.workspaceId) ?? true);
   }
 }
 

@@ -1,3 +1,4 @@
+import { SshWorkspaceService } from "./ssh-workspaces/service.js";
 import { createRestartRecovery } from "./agent/restart-recovery/index.js";
 import { createFinishWebhooks } from "./agent/finish-webhooks.js";
 import { sendPromptToAgent } from "./agent/agent-prompt.js";
@@ -1110,8 +1111,13 @@ export async function createPaseoDaemon(
       enabled: daemonConfigStore.get().resumeOnStartup === true,
       prompt: daemonConfigStore.get().resumePrompt ?? "Resume working.",
     }),
-    eligible: async (record) =>
-      !record.workspaceId || !(await workspaceRegistry?.get(record.workspaceId))?.archivedAt,
+    // SSH workspaces never auto-resume: an interrupted remote command has an unknown
+    // outcome and "Resume working." would let the agent repeat it.
+    eligible: async (record) => {
+      if (!record.workspaceId) return true;
+      const workspace = await workspaceRegistry?.get(record.workspaceId);
+      return !workspace?.archivedAt && !workspace?.executionLocation;
+    },
     dispatch: (agentId, prompt) =>
       sendPromptToAgent({ agentId, prompt, agentManager, agentStorage, logger, unarchive: false }),
     report: (agentId, err) => logger.error({ agentId, err }, "Agent restart recovery failed"),
@@ -1128,6 +1134,16 @@ export async function createPaseoDaemon(
     logger,
   });
   await workspaceLabelService.initialize();
+  // Restores SSH session directories and bindings before any agent resumes. SSH workspaces
+  // need a Unix socket bridge, so P1 supports macOS and Linux owners only; on Windows the
+  // service is not built, the feature is not advertised and nothing else changes.
+  const sshWorkspaces = createSshWorkspaceService({
+    paseoHome: config.paseoHome,
+    serverId,
+    workspaceRegistry,
+    logger,
+  });
+  await initializeSshWorkspaces(sshWorkspaces);
   await initializeBoardServices(board);
   const unsubscribeBoardTaskHooks = subscribeBoardTaskHooks(boardTaskService, pluginRuntime);
   const unsubscribeBoardDecisionPush = board.decisions.subscribe((change) => {
@@ -1626,6 +1642,10 @@ export async function createPaseoDaemon(
       if (!wsServer) throw new Error("Daemon is not accepting agent messages");
       return wsServer.agentMessages;
     },
+    workspaceTrace: () => {
+      if (!wsServer) throw new Error("Daemon is not accepting Trace events");
+      return wsServer.workspaceTrace;
+    },
     serverId,
     hosts: () => {
       if (!wsServer) throw new Error("Daemon is not accepting host operations");
@@ -2095,6 +2115,7 @@ export async function createPaseoDaemon(
               orchestrationSkills,
               workspaceLabelService,
               board,
+              sshWorkspaces,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
@@ -2202,9 +2223,13 @@ export async function createPaseoDaemon(
     await finishSubscriptions.close();
     finishWebhooks.close();
     await wsServer?.agentMessages.close();
+    await wsServer?.workspaceTrace.flush();
     agentManager.prepareForShutdown();
     await restartRecovery.captureRunningAgents();
     await closeAllAgents(logger, agentManager);
+    await sshWorkspaces?.stop().catch((error: unknown) => {
+      logger.warn({ err: error }, "Failed to stop the SSH workspace bridge");
+    });
     await withTimeout({
       promise: pluginRuntime.drainEvents(),
       timeoutMs: AGENT_CLOSE_TIMEOUT_MS,
@@ -2300,4 +2325,16 @@ export function connectIdleRuntimeCleanupConfig(
 ): () => void {
   cleanup.setEnabled(store.get().idleRuntimeCleanup !== false);
   return store.onFieldChange("idleRuntimeCleanup", (value) => cleanup.setEnabled(value !== false));
+}
+
+// SSH workspaces need a Unix socket bridge, so P1 supports macOS and Linux owners only. On
+// Windows the service is not built and the feature is not advertised.
+function createSshWorkspaceService(
+  options: ConstructorParameters<typeof SshWorkspaceService>[0],
+): SshWorkspaceService | undefined {
+  return process.platform === "win32" ? undefined : new SshWorkspaceService(options);
+}
+
+async function initializeSshWorkspaces(service: SshWorkspaceService | undefined): Promise<void> {
+  if (service) await service.initialize();
 }

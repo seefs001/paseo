@@ -195,12 +195,14 @@ export function WorkspaceHeaderMenuDesktop(
 interface HeaderMenuProfileItemProps {
   profile: TerminalProfile;
   disabled: boolean;
+  terminalUnavailableReason?: string;
   onCreateTerminalWithProfile: (profile: TerminalProfile) => void;
 }
 
 function HeaderMenuProfileItem({
   profile,
   disabled,
+  terminalUnavailableReason,
   onCreateTerminalWithProfile,
 }: HeaderMenuProfileItemProps) {
   const handleSelect = useCallback(() => {
@@ -217,7 +219,12 @@ function HeaderMenuProfileItem({
   );
 
   return (
-    <DropdownMenuItem leading={leading} disabled={disabled} onSelect={handleSelect}>
+    <DropdownMenuItem
+      leading={leading}
+      disabled={disabled}
+      description={terminalUnavailableReason}
+      onSelect={handleSelect}
+    >
       {profile.name}
     </DropdownMenuItem>
   );
@@ -231,6 +238,7 @@ export interface WorkspaceHeaderMenuMobileProps extends WorkspaceHeaderWorkspace
   scripts: UseWorkspaceScriptsMenuPagesInput;
   showCreateBrowserTab: boolean;
   createTerminalDisabled: boolean;
+  terminalUnavailableReason?: string;
   onCreateTerminalWithProfile: (profile: TerminalProfile, paneId?: string) => void;
   onCreateBrowser: (input?: { paneId?: string }) => void;
 }
@@ -249,6 +257,7 @@ export function WorkspaceHeaderMenuMobile({
   scripts,
   showCreateBrowserTab,
   createTerminalDisabled,
+  terminalUnavailableReason,
   onCreateTerminalWithProfile,
   onCreateBrowser,
   pane,
@@ -354,6 +363,7 @@ export function WorkspaceHeaderMenuMobile({
             key={profile.id}
             profile={profile}
             disabled={createTerminalDisabled}
+            terminalUnavailableReason={terminalUnavailableReason}
             onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
           />
         ))}

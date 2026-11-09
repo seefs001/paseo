@@ -56,6 +56,9 @@ export const CLIENT_CAPS = {
   // update subscriptions, because older apps auto-open a tab for every replicated root agent.
   backgroundAgents: "background_agents",
   browserHost: "browser_host",
+  // Clients that understand workspace executionLocation receive SSH workspaces; older
+  // clients would treat their owner session directory as the project directory.
+  sshWorkspaces: "ssh_workspaces",
 } as const;
 
 export type ClientCapability = (typeof CLIENT_CAPS)[keyof typeof CLIENT_CAPS];

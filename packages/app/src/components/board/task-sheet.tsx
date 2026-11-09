@@ -189,13 +189,13 @@ function projectLabel(project: ProjectDescriptor): string {
   return project.projectCustomName ?? project.projectDisplayName;
 }
 
-function forgeItemOptionId(item: Pick<ForgeSearchItem, "kind" | "number">): string {
-  return `${item.kind}:${item.number}`;
+function forgeItemOptionId(item: Pick<ForgeSearchItem, "forge" | "kind" | "url">): string {
+  return JSON.stringify([item.forge ?? "github", item.kind, item.url]);
 }
 
 function attachmentOptionId(attachment: BoardTaskAttachment): string {
   const kind = attachment.type === "forge_issue" ? "issue" : "change_request";
-  return forgeItemOptionId({ kind, number: attachment.number });
+  return forgeItemOptionId({ forge: attachment.forge, kind, url: attachment.url });
 }
 
 /** Tasks keep only forge references, so other attachment kinds never reach the form. */
@@ -847,9 +847,9 @@ function BoardTaskAttachments({
       <View style={styles.attachmentsBody}>
         {attachments.length > 0 ? (
           <View style={styles.attachments}>
-            {attachments.map((attachment, index) => (
+            {attachments.map((attachment) => (
               <BoardTaskAttachmentPill
-                key={attachmentOptionId(attachment) ?? String(index)}
+                key={attachmentOptionId(attachment)}
                 attachment={attachment}
                 onRemove={removeAttachment}
               />

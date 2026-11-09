@@ -150,18 +150,28 @@ export function useAgentProfilePicker(
       if (!client) {
         return;
       }
-      void client
-        .applyAgentConfig(target.agentId, toAgentConfigApply(reconciled))
-        .then((notice) => {
+      void client.applyAgentConfig(target.agentId, toAgentConfigApply(reconciled)).then(
+        async (notice) => {
           showProviderNoticeToast(toast, notice);
-          return persistSelection(reconciled, profileId);
-        })
-        .catch((error) => {
+          try {
+            return await persistSelection(reconciled, profileId);
+          } catch (error) {
+            console.warn("[useAgentProfilePicker] persistSelection failed", error);
+            toast.error(
+              t("settings.host.agentProfiles.appliedPreferenceSaveFailed", {
+                error: toErrorMessage(error),
+              }),
+            );
+            return undefined;
+          }
+        },
+        (error) => {
           console.warn("[useAgentProfilePicker] applyAgentConfig failed", error);
           toast.error(toErrorMessage(error));
-        });
+        },
+      );
     },
-    [applicableProfiles, client, persistSelection, target, toast],
+    [applicableProfiles, client, persistSelection, t, target, toast],
   );
 
   return useMemo(

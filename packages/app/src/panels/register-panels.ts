@@ -17,6 +17,13 @@ import { pluginPanelRegistration } from "@/plugins/workspace-panels/panel";
 import { newTabPanelRegistration } from "@/panels/new-tab-panel";
 import { artifactPanelRegistration } from "@/artifacts/panel";
 import { artifactsPanelRegistration } from "@/artifacts/collection";
+import { workspaceTracePanelRegistration } from "@/workspace-trace/panel";
+import { withLocalOnlyGuard } from "@/ssh-machines";
+
+// Owner-computer panels render a notice instead in SSH workspaces.
+function localOnly<T extends { component: import("react").ComponentType }>(registration: T): T {
+  return { ...registration, component: withLocalOnlyGuard(registration.component) };
+}
 
 let panelsRegistered = false;
 
@@ -29,16 +36,17 @@ export function ensurePanelsRegistered(): void {
   registerPanel(agentPanelRegistration);
   registerPanel(providerSubagentPanelRegistration);
   registerPanel(setupPanelRegistration);
-  registerPanel(terminalPanelRegistration);
+  registerPanel(localOnly(terminalPanelRegistration));
   registerPanel(browserPanelRegistration);
-  registerPanel(filePanelRegistration);
+  registerPanel(localOnly(filePanelRegistration));
   registerPanel(filesPanelRegistration);
-  registerPanel(pullRequestPanelRegistration);
-  registerPanel(commitDiffPanelRegistration);
+  registerPanel(localOnly(pullRequestPanelRegistration));
+  registerPanel(localOnly(commitDiffPanelRegistration));
   registerPanel(artifactPanelRegistration);
   registerPanel(artifactsPanelRegistration);
-  registerPanel(workingDiffPanelRegistration);
-  registerPanel(changesTreePanelRegistration);
+  registerPanel(workspaceTracePanelRegistration);
+  registerPanel(localOnly(workingDiffPanelRegistration));
+  registerPanel(localOnly(changesTreePanelRegistration));
   registerPanel(pluginPanelRegistration);
   panelsRegistered = true;
 }

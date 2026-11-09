@@ -1,4 +1,5 @@
 import { registerPluginTools } from "./plugin-tools.js";
+import { randomUUID } from "node:crypto";
 import {
   ReadAgentContextInputSchema,
   ReadAgentHistoryInputSchema,
@@ -12,6 +13,7 @@ import {
   type FinishWebhooks,
 } from "../finish-webhooks.js";
 import type { AgentMessageDelivery } from "../agent-messages/index.js";
+import type { WorkspaceTrace, TraceSource } from "../../workspace-trace/index.js";
 import {
   createHostResolver,
   HostOperationRejectedError,
@@ -152,6 +154,7 @@ import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 
 export interface PaseoToolHostDependencies {
   agentMessages?: () => AgentMessageDelivery;
+  workspaceTrace?: () => WorkspaceTrace;
   finishSubscriptions?: () => FinishSubscriptions;
   finishWebhooks?: FinishWebhooks;
   serverId?: string;
@@ -177,7 +180,7 @@ export interface PaseoToolHostDependencies {
   listActiveWorkspaces?: ArchiveDependencies["listActiveWorkspaces"];
   archiveWorkspaceRecord?: ArchiveDependencies["archiveWorkspaceRecord"];
   emitWorkspaceUpdatesForWorkspaceIds?: ArchiveDependencies["emitWorkspaceUpdatesForWorkspaceIds"];
-  workspaceRegistry?: Pick<WorkspaceRegistry, "get" | "listActive" | "upsert">;
+  workspaceRegistry?: Pick<WorkspaceRegistry, "get" | "listActive" | "upsert" | "update">;
   projectRegistry?: Pick<ProjectRegistry, "get" | "list">;
   createDirectoryWorkspace?: (
     cwd: string,
@@ -855,6 +858,46 @@ function createToolCatalog(
       listAgents: (args, context) => localHostOperations.get("list_agents")!(args, context),
     },
   });
+  function currentTraceSource(): TraceSource | undefined {
+    return callerAgentId ? options.workspaceTrace?.().source(callerAgentId) : undefined;
+  }
+
+  function recordRemoteDispatch(input: {
+    name: string;
+    destination: string | undefined;
+    source: TraceSource | undefined;
+    response: PaseoToolResult;
+    args: unknown;
+  }): void {
+    const { destination, source, response } = input;
+    if (!destination || destination === options.serverId || !source || response.isError) return;
+    const receipt = z
+      .object({
+        agentId: z.string().optional(),
+        messageId: z.string().optional(),
+        workspaceId: z.string().optional(),
+      })
+      .safeParse(response.structuredContent);
+    if (!receipt.success) return;
+    if (input.name === "create_agent" && receipt.data.agentId) {
+      options
+        .workspaceTrace?.()
+        .delegated(source, receipt.data.agentId, destination, receipt.data.workspaceId);
+    }
+    if (input.name !== "send_agent_prompt" || !receipt.data.messageId) return;
+    const args = z
+      .object({ agentId: z.string(), activeTurnBehavior: ActiveTurnBehaviorSchema.optional() })
+      .safeParse(input.args);
+    if (!args.success) return;
+    options.workspaceTrace?.().remoteMessage({
+      source,
+      agentId: args.data.agentId,
+      serverId: destination,
+      messageId: receipt.data.messageId,
+      behavior: args.data.activeTurnBehavior ?? "steer",
+    });
+  }
+
   const registerTool = (
     name: string,
     config: PaseoToolConfig,
@@ -885,6 +928,7 @@ function createToolCatalog(
       };
       handler = async ({ serverId, ...input }, context) => {
         const destination = serverId ?? options.serverId;
+        const traceSource = currentTraceSource();
         const isAgentDispatch = ["create_agent", "send_agent_prompt"].includes(name);
         const webhook = isAgentDispatch ? finishWebhookTarget(input) : undefined;
         if (webhook && destination !== options.serverId) {
@@ -899,6 +943,7 @@ function createToolCatalog(
           );
           if (response.isError) await remoteNotification?.reject();
           else remoteNotification?.accept();
+          recordRemoteDispatch({ name, destination, source: traceSource, response, args: input });
           await registerRemoteCreation(name, destination, input, response);
           return {
             ...response,
@@ -2420,11 +2465,15 @@ function createToolCatalog(
       }
       const now = new Date().toISOString();
       const residentAt = resident ? now : null;
-      const existing = await options.workspaceRegistry.get(workspaceId);
-      if (!existing || existing.archivedAt) {
+      const updated = await options.workspaceRegistry.update(workspaceId, (existing) => {
+        if (existing.archivedAt) {
+          throw new Error(`Workspace not found: ${workspaceId}`);
+        }
+        return { ...existing, residentAt, updatedAt: now };
+      });
+      if (!updated) {
         throw new Error(`Workspace not found: ${workspaceId}`);
       }
-      await options.workspaceRegistry.upsert({ ...existing, residentAt, updatedAt: now });
       return {
         content: [],
         structuredContent: ensureValidJson({ workspaceId, residentAt }),
@@ -2494,6 +2543,7 @@ function createToolCatalog(
       },
     },
     async (args: unknown) => {
+      const traceSource = currentTraceSource();
       const resolvedArgs = await resolveCreateAgentToolArgs(args);
       const { parsedArgs } = resolvedArgs;
       const webhook = finishWebhookTarget(parsedArgs);
@@ -2542,7 +2592,10 @@ function createToolCatalog(
           },
           mode: parsedArgs.settings?.modeId,
           promptFailure: "throw",
-          onCreated: ({ agentId }) => options.finishWebhooks?.register(agentId, webhook),
+          onCreated: ({ agentId }) => {
+            options.finishWebhooks?.register(agentId, webhook);
+            if (traceSource) options.workspaceTrace?.().delegated(traceSource, agentId);
+          },
           notifyOnFinish,
           background: parsedArgs.background,
           detached: resolvedArgs.detached,
@@ -2873,6 +2926,7 @@ function createToolCatalog(
       if (callerAgentId && !agentManager.getAgent(agentId) && !(await agentStorage.get(agentId))) {
         throw new PaseoToolInputError(`Agent ${agentId} not found`);
       }
+      const messageId = randomUUID();
       const webhook = finishWebhookTarget({ onFinishWebhook, replyToAgentId });
       const notifying = Boolean(callerAgentId && notifyOnFinish);
       const notification =
@@ -2882,7 +2936,10 @@ function createToolCatalog(
                 throw new Error("Finish subscriptions are not configured");
               return options
                 .finishSubscriptions()
-                .register({ childAgentId: agentId, callerAgentId }, true);
+                .register(
+                  { childAgentId: agentId, callerAgentId, triggerMessageId: messageId },
+                  true,
+                );
             })()
           : undefined;
       function confirmDispatch(_disposition: PromptDispatchDisposition): void {
@@ -2905,11 +2962,16 @@ function createToolCatalog(
           try {
             return agentMessages().enqueue({
               recipientId: agentId,
+              messageId,
               prompt,
               source: {
                 kind: "agent-message",
                 agentId: callerAgentId,
                 title: resolveCallerAgent()?.config.title ?? undefined,
+              },
+              trace: {
+                sourceTurnId:
+                  agentManager.getAgent(callerAgentId)?.activeForegroundTurnId ?? undefined,
               },
               sessionMode,
               activeTurnBehavior,

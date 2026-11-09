@@ -7,7 +7,11 @@ export function useVisibleWorkspaceDiffStat(
   serverId: string,
   workspaceId: string,
 ): DiffStat | null {
-  const diffStat = useWorkspaceFields(serverId, workspaceId, (workspace) => workspace.diffStat);
+  const diffStat = useWorkspaceFields(
+    serverId,
+    workspaceId,
+    (workspace) => workspace.uncommittedDiffStat,
+  );
   return hasDiffStatChanges(diffStat) ? diffStat : null;
 }
 
@@ -19,6 +23,8 @@ export function useWorkspaceHasDiffStat(serverId: string, workspaceId: string): 
   );
 }
 
-function hasDiffStatChanges(diffStat: WorkspaceDescriptor["diffStat"]): diffStat is DiffStat {
+function hasDiffStatChanges(
+  diffStat: WorkspaceDescriptor["diffStat"] | undefined,
+): diffStat is DiffStat {
   return Boolean(diffStat && (diffStat.additions > 0 || diffStat.deletions > 0));
 }

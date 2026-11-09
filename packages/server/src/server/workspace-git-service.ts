@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { LRUCache } from "lru-cache";
 import { CheckoutDiffCache } from "./checkout-diff-cache.js";
+import { getUncommittedDiffStat } from "./diff/git.js";
 import pLimit from "p-limit";
 import type pino from "pino";
 import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
@@ -181,6 +182,7 @@ export interface WorkspaceGitRuntimeSnapshot {
     behindOfOrigin: number | null;
     hasRemote: boolean;
     diffStat: { additions: number; deletions: number } | null;
+    uncommittedDiffStat?: Awaited<ReturnType<typeof getUncommittedDiffStat>>;
   };
   forge: WorkspaceForgeSnapshot;
 }
@@ -376,13 +378,22 @@ type WorkspaceGitRefreshState =
       queued: WorkspaceGitRefreshRequest | null;
     };
 
+type WorkspaceCheckoutStatus = Awaited<ReturnType<typeof getCheckoutStatus>> &
+  Pick<WorkspaceGitRuntimeSnapshot["git"], "uncommittedDiffStat">;
+type WorkspaceCheckoutWorktreeState = Awaited<ReturnType<typeof getCheckoutWorktreeState>> &
+  Pick<WorkspaceGitRuntimeSnapshot["git"], "uncommittedDiffStat">;
+
 interface WorkspaceGitServiceDependencies {
   subscribe: SubscribeToFileChanges;
   getCheckoutSnapshotFacts: typeof getCheckoutSnapshotFacts;
   getCheckoutRefDerivedState: typeof getCheckoutRefDerivedState;
-  getCheckoutStatus: typeof getCheckoutStatus;
+  getCheckoutStatus: (
+    ...args: Parameters<typeof getCheckoutStatus>
+  ) => Promise<WorkspaceCheckoutStatus>;
   getCheckoutShortstat: typeof getCheckoutShortstat;
-  getCheckoutWorktreeState: typeof getCheckoutWorktreeState;
+  getCheckoutWorktreeState: (
+    ...args: Parameters<typeof getCheckoutWorktreeState>
+  ) => Promise<WorkspaceCheckoutWorktreeState>;
   getCheckoutDiff: typeof getCheckoutDiff;
   getPullRequestStatus: typeof getPullRequestStatus;
   resolveBranchCheckout: typeof resolveBranchCheckout;
@@ -578,13 +589,32 @@ interface WorkspaceForgePrStatusPollTarget {
 function buildDefaultWorkspaceGitServiceDeps(
   subscribe: SubscribeToFileChanges,
 ): WorkspaceGitServiceDependencies {
+  async function readUncommittedDiffStat(cwd: string, context?: CheckoutContext) {
+    try {
+      return await getUncommittedDiffStat(cwd);
+    } catch (error) {
+      context?.logger?.warn({ err: error, cwd }, "Failed to read uncommitted diff statistics");
+      return undefined;
+    }
+  }
   return {
     subscribe,
     getCheckoutSnapshotFacts,
     getCheckoutRefDerivedState,
-    getCheckoutStatus,
+    async getCheckoutStatus(cwd, context) {
+      const status = await getCheckoutStatus(cwd, context);
+      if (!status.isGit) return status;
+      const uncommittedDiffStat = await readUncommittedDiffStat(cwd, context);
+      return { ...status, uncommittedDiffStat };
+    },
     getCheckoutShortstat,
-    getCheckoutWorktreeState,
+    async getCheckoutWorktreeState(cwd, context) {
+      const [worktree, uncommittedDiffStat] = await Promise.all([
+        getCheckoutWorktreeState(cwd, context),
+        readUncommittedDiffStat(cwd, context),
+      ]);
+      return { ...worktree, uncommittedDiffStat };
+    },
     getCheckoutDiff,
     getPullRequestStatus,
     resolveBranchCheckout,
@@ -3676,6 +3706,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       ...latestGit,
       isDirty: worktree.isDirty,
       diffStat: worktree.diffStat,
+      uncommittedDiffStat: worktree.uncommittedDiffStat,
     };
     const loadedAtMs = this.deps.now().getTime();
     target.latestGitLoadedAtMs = loadedAtMs;
@@ -3743,6 +3774,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       behindOfOrigin: checkoutStatus.behindOfOrigin,
       hasRemote: checkoutStatus.hasRemote,
       diffStat,
+      uncommittedDiffStat: checkoutStatus.uncommittedDiffStat,
     };
     const loadedAtMs = this.deps.now().getTime();
     target.latestGitLoadedAtMs = loadedAtMs;

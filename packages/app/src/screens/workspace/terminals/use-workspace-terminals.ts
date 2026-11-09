@@ -35,6 +35,7 @@ interface UseWorkspaceTerminalsInput {
   normalizedServerId: string;
   normalizedWorkspaceId: string;
   workspaceDirectory: string | null;
+  isSshWorkspace: boolean;
   workspaceScripts: WorkspaceDescriptor["scripts"];
   hasHydratedWorkspaces: boolean;
   isMissingWorkspaceDirectory: boolean;
@@ -53,6 +54,7 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     normalizedServerId,
     normalizedWorkspaceId,
     workspaceDirectory,
+    isSshWorkspace,
     workspaceScripts,
     hasHydratedWorkspaces,
     isMissingWorkspaceDirectory,
@@ -63,13 +65,16 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     onTerminalCreateFailed,
   } = input;
   const { t } = useTranslation();
+  const unavailableReason = isSshWorkspace ? t("sshMachines.workspace.terminalUnavailable") : null;
   const queryClient = useQueryClient();
   const [pendingCreateInput, setPendingCreateInput] = useState<PendingTerminalCreateInput | null>(
     null,
   );
   const canCreateNow = useMemo(
-    () => canCreateWorkspaceTerminal({ isRouteFocused, client, isConnected, workspaceDirectory }),
-    [isRouteFocused, client, isConnected, workspaceDirectory],
+    () =>
+      unavailableReason === null &&
+      canCreateWorkspaceTerminal({ isRouteFocused, client, isConnected, workspaceDirectory }),
+    [unavailableReason, isRouteFocused, client, isConnected, workspaceDirectory],
   );
   const queryKey = useMemo(
     () =>
@@ -194,6 +199,12 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
       return;
     }
 
+    if (unavailableReason !== null) {
+      setPendingCreateInput(null);
+      onTerminalCreateFailed(unavailableReason);
+      return;
+    }
+
     if (canCreateNow && !isCreatingTerminal) {
       const pendingInput = pendingCreateInput;
       setPendingCreateInput(null);
@@ -212,11 +223,18 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     hasHydratedWorkspaces,
     isMissingWorkspaceDirectory,
     onWorkspacePathUnavailable,
+    onTerminalCreateFailed,
+    unavailableReason,
     pendingCreateInput,
   ]);
 
   const createTerminal = useCallback(
     (createInput: PendingTerminalCreateInput) => {
+      if (unavailableReason !== null) {
+        onTerminalCreateFailed(unavailableReason);
+        return;
+      }
+
       if (isCreatingTerminal || pendingCreateInput) {
         return;
       }
@@ -241,7 +259,9 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
       hasHydratedWorkspaces,
       isMissingWorkspaceDirectory,
       onTerminalCreateQueued,
+      onTerminalCreateFailed,
       onWorkspacePathUnavailable,
+      unavailableReason,
       pendingCreateInput,
     ],
   );
@@ -284,6 +304,7 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
   }, [queryClient, queryKey]);
 
   return {
+    unavailableReason,
     canCreateNow,
     createMutation,
     createTerminal,

@@ -14,6 +14,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { TerminalProfileIcon } from "@/components/terminal-profile-icon";
 import { Shortcut } from "@/components/ui/shortcut";
 import { isWeb } from "@/constants/platform";
+import { useToast } from "@/contexts/toast-context";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
@@ -97,6 +98,7 @@ function LauncherRow({ item }: { item: WorkspaceTabLaunchItem }) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={item.label}
+      accessibilityHint={item.disabled ? item.disabledReason : undefined}
       dataSet={ROW_DATA_SET}
       disabled={item.disabled}
       onPress={handlePress}
@@ -111,6 +113,11 @@ function LauncherRow({ item }: { item: WorkspaceTabLaunchItem }) {
       <Text numberOfLines={1} style={styles.rowLabel}>
         {item.label}
       </Text>
+      {item.disabled && item.disabledReason ? (
+        <Text numberOfLines={1} style={styles.rowReason}>
+          {item.disabledReason}
+        </Text>
+      ) : null}
       {item.shortcutActionId ? <LauncherShortcut actionId={item.shortcutActionId} /> : null}
     </Pressable>
   );
@@ -131,6 +138,7 @@ function useNewTabDescriptor() {
 
 const NewTabPanel = memo(function NewTabPanel(): ReactElement {
   const { host, serverId, tabId } = usePaneContext();
+  const toast = useToast();
   const { isInteractive, focusPane } = usePaneFocus();
   const containerRef = useRef<View | null>(null);
   const groups = useWorkspaceTabLaunchCatalog({
@@ -203,7 +211,12 @@ const NewTabPanel = memo(function NewTabPanel(): ReactElement {
         return true;
       }
       if (action.id === "workspace.terminal.new") {
-        itemsById.get("terminal")?.launch({ kind: "replace", tabId });
+        const terminalItem = itemsById.get("terminal");
+        if (terminalItem?.disabled) {
+          if (terminalItem.disabledReason) toast.error(terminalItem.disabledReason);
+          return true;
+        }
+        terminalItem?.launch({ kind: "replace", tabId });
         return true;
       }
       if (action.id === "workspace.browser.new" || action.id === "workspace.tab.target.browser") {
@@ -224,7 +237,7 @@ const NewTabPanel = memo(function NewTabPanel(): ReactElement {
       }
       return false;
     },
-    [itemsById, tabId],
+    [itemsById, tabId, toast],
   );
   useKeyboardActionHandler({
     handlerId: `new-tab:${tabId}`,
@@ -310,6 +323,7 @@ const styles = StyleSheet.create((theme) => ({
   rowFocused: { borderColor: theme.colors.borderAccent },
   rowPressed: { opacity: 0.85 },
   rowLabel: { flex: 1, color: theme.colors.foreground },
+  rowReason: { flexShrink: 1, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   // The section header shares the launcher rows' outer rails. The pencil's own
   // padding is subtracted so its glyph — not its hover box — lands on the right rail.
   groupHeader: {

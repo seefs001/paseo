@@ -21,7 +21,7 @@ interface AgentUpdatesSubscriptionState {
   syncEnabled: boolean;
   filter?: AgentUpdatesFilter;
   backgroundVisibility: BackgroundVisibility;
-  isProviderVisible: (provider: string) => boolean;
+  isProviderVisible: (provider: string, workspaceId?: string | null) => boolean;
   isBootstrapping: boolean;
   pendingUpdatesByAgentId: Map<string, AgentUpdatePayload>;
 }
@@ -30,7 +30,7 @@ interface AgentUpdatesSubscriptionState {
 export interface AgentUpdatesService {
   beginSubscription(input: {
     subscriptionId: string;
-    isProviderVisible?: (provider: string) => boolean;
+    isProviderVisible?: (provider: string, workspaceId?: string | null) => boolean;
     emit?: (message: SessionOutboundMessage) => void;
     filter?: AgentUpdatesFilter;
     backgroundVisibility?: BackgroundVisibility;
@@ -57,7 +57,7 @@ export interface AgentUpdatesServiceDeps {
   emit(message: SessionOutboundMessage): void;
   enrichAgentPayload(payload: AgentSnapshotPayload): Promise<AgentSnapshotPayload>;
   buildStoredAgentPayload(record: StoredAgentRecord): AgentSnapshotPayload;
-  isProviderVisibleToClient(provider: string): boolean;
+  isProviderVisibleToClient(provider: string, workspaceId?: string | null): boolean;
   buildProjectPlacementForWorkspaceId(workspaceId: string): Promise<ProjectPlacementPayload | null>;
   emitWorkspaceUpdateForWorkspaceId(workspaceId: string): Promise<void>;
   sequenceAgentUpdate<T extends AgentUpdatePayload>(
@@ -184,7 +184,10 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
 
   function bufferOrEmit(sub: AgentUpdatesSubscriptionState, payload: AgentUpdatePayload): void {
     if (subscriptions.get(sub.subscriptionId) !== sub) return;
-    if (payload.kind === "upsert" && !sub.isProviderVisible(payload.agent.provider)) {
+    if (
+      payload.kind === "upsert" &&
+      !sub.isProviderVisible(payload.agent.provider, payload.agent.workspaceId)
+    ) {
       return;
     }
     if (sub.isBootstrapping) {
@@ -197,7 +200,7 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
 
   function beginSubscription(input: {
     subscriptionId: string;
-    isProviderVisible?: (provider: string) => boolean;
+    isProviderVisible?: (provider: string, workspaceId?: string | null) => boolean;
     emit?: (message: SessionOutboundMessage) => void;
     filter?: AgentUpdatesFilter;
     backgroundVisibility?: BackgroundVisibility;
@@ -264,7 +267,7 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
       observers.some(
         (sub, index) =>
           backgroundVisible[index] &&
-          sub.isProviderVisible(payload.provider) &&
+          sub.isProviderVisible(payload.provider, payload.workspaceId) &&
           matchesAgentUpdatesFilter({ agent: payload, project, filter: sub.filter }),
       )
     );

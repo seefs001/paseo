@@ -3,10 +3,19 @@ import { randomUUID } from "node:crypto";
 import type { AgentPromptInput, AgentPromptContentBlock } from "../agent-sdk-types.js";
 import { prepareAgentMessage, type AgentPromptSource } from "./envelope.js";
 
-interface Message {
+export interface AgentMessageTraceContext {
+  sourceTurnId?: string;
+  subscriptionIds?: string[];
+  triggerMessageIds?: string[];
+  triggerCreationAgentIds?: string[];
+}
+
+export interface Message {
   recipientId: string;
   messageId?: string;
   source: AgentPromptSource;
+  /** Set only by daemon-owned agent tools or finish watches, never prompt XML or client claims. */
+  trace?: AgentMessageTraceContext;
   prompt: AgentPromptInput;
   sessionMode?: string;
   unarchive?: boolean;
@@ -25,7 +34,7 @@ interface Admitted extends Message {
   resolve(disposition: PromptDispatchDisposition): void;
   reject(error: unknown): void;
 }
-interface DispatchRequest {
+export interface DispatchRequest {
   recipientId: string;
   messageIds: readonly string[];
   prompt: AgentPromptInput;
@@ -33,11 +42,21 @@ interface DispatchRequest {
   sessionMode?: string;
   clearPendingPermissions: boolean;
   unarchive: boolean;
-  onDispatch(disposition: PromptDispatchDisposition): void;
+  onDispatch(disposition: PromptDispatchDisposition, details?: { replaced: boolean }): void;
 }
 interface Dependencies {
   dispatch(request: DispatchRequest): Promise<PromptDispatchDisposition>;
   onError(error: unknown, request: DispatchRequest): void;
+  trace?: {
+    queued(message: Message, messageId: string): void;
+    dispatched(
+      batchId: string,
+      request: DispatchRequest,
+      disposition: PromptDispatchDisposition,
+      replaced: boolean,
+    ): void;
+    failed(batchId: string, request: DispatchRequest): void;
+  };
   /** Return a cancellation function. Production uses the daemon's event loop. */
   schedule?: (delayMs: number, callback: () => void) => () => void;
 }
@@ -74,6 +93,8 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
       : prompts.flatMap((entry): AgentPromptContentBlock[] =>
           typeof entry === "string" ? [{ type: "text", text: entry }] : entry,
         );
+    const batchId = randomUUID();
+    let selected: { disposition: PromptDispatchDisposition; replaced: boolean } | undefined;
     const request: DispatchRequest = {
       recipientId,
       messageIds: messages.map((message) => message.receipt.messageId),
@@ -82,7 +103,8 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
       sessionMode: messages.find((message) => message.sessionMode)?.sessionMode,
       clearPendingPermissions: messages.some((message) => message.clearPendingPermissions),
       unarchive: messages.some((message) => message.unarchive !== false),
-      onDispatch: (disposition) => {
+      onDispatch: (disposition, details) => {
+        selected = { disposition, replaced: details?.replaced ?? false };
         for (const message of messages) {
           try {
             message.onDispatch?.(disposition);
@@ -99,9 +121,14 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
         try {
           for (const message of messages) message.beforeDispatch?.();
           const disposition = await dependencies.dispatch(request);
+          // Selecting an iterator precedes provider startup. Record only the settled receipt;
+          // an archived no-op never invokes onDispatch and must not claim delivery.
+          if (selected)
+            dependencies.trace?.dispatched(batchId, request, disposition, selected.replaced);
           for (const message of messages) message.resolve(disposition);
           return undefined;
         } catch (error) {
+          dependencies.trace?.failed(batchId, request);
           for (const message of messages) message.reject(error);
           dependencies.onError(error, request);
           throw error;
@@ -160,6 +187,7 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
       entry.messages.push({ ...message, receipt, resolve, reject });
       entry.cancel = schedule(2000, () => flush(message.recipientId));
       pending.set(message.recipientId, entry);
+      dependencies.trace?.queued(message, receipt.messageId);
       return receipt;
     },
     async waitForDispatch(recipientId, signal) {

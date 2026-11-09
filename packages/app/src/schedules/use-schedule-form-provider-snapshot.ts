@@ -6,8 +6,9 @@ export function useScheduleFormProviderSnapshot(
   model: ScheduleFormModel,
   state: ScheduleFormState,
 ) {
-  const serverId = state.providerSnapshotRequest?.serverId ?? state.selectedServerId;
-  const cwd = state.providerSnapshotRequest?.cwd ?? state.workingDir;
+  const request = state.providerSnapshotRequest;
+  const serverId = request?.serverId ?? state.selectedServerId;
+  const cwd = request?.cwd ?? state.workingDir;
   const enabled = state.targetKind === "new-agent" && Boolean(serverId && cwd.trim());
   const snapshot = useProvidersSnapshot(serverId ?? null, {
     cwd,
@@ -18,8 +19,16 @@ export function useScheduleFormProviderSnapshot(
     if (!enabled || !serverId || !snapshot.entries) {
       return;
     }
+    const current = model.getState();
+    const matchesScope =
+      current.targetKind === "new-agent" &&
+      current.selectedServerId === serverId &&
+      current.workingDir.trim() === cwd.trim();
+    if (!matchesScope || current.providerSnapshotRequest !== request) {
+      return;
+    }
     model.applyProviderSnapshot(serverId, { entries: snapshot.entries });
-  }, [enabled, model, serverId, snapshot.entries]);
+  }, [cwd, enabled, model, request, serverId, snapshot.entries]);
 
   return snapshot;
 }

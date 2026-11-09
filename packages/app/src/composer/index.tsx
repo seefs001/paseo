@@ -1723,20 +1723,17 @@ function ComposerContentImpl({
   const removeInlineQuote = useCallback(
     (quote: InlineQuote) => {
       const text = textSource.getSnapshot();
-      if (!onReplaceInput || !isValidInlineQuote(text, quote)) return;
+      if (!onReplaceInput || !attachments.includes(quote) || !isValidInlineQuote(text, quote)) {
+        return;
+      }
       const next = removeInlineQuoteText(text, quote);
       onReplaceInput({
         text: next.text,
-        attachments: attachments.flatMap((attachment) => {
-          if (attachment === quote) return [];
-          if (!isInlineQuote(attachment) || attachment.start < quote.end) return [attachment];
-          return [
-            {
-              ...attachment,
-              start: attachment.start - next.removed,
-              end: attachment.end - next.removed,
-            },
-          ];
+        attachments: updateProfileReferences({
+          previousText: text,
+          text: next.text,
+          attachments,
+          selectionBefore: { start: next.start, end: next.start + next.removed },
         }),
         selection: { start: next.start, end: next.start },
       });

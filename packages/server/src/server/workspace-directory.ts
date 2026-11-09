@@ -86,6 +86,8 @@ export interface WorkspaceDirectoryDeps {
     Array<{ cwd: string; workspaceId?: string; activity: TerminalActivity | null }>
   >;
   isProviderVisibleToClient(provider: string): boolean;
+  // Hides workspaces whose execution location the client cannot represent.
+  isWorkspaceVisibleToClient?(workspace: WorkspaceDescriptorPayload): boolean;
   buildWorkspaceDescriptor(input: {
     workspace: PersistedWorkspaceRecord;
     projectRecord?: PersistedProjectRecord | null;
@@ -643,6 +645,9 @@ export class WorkspaceDirectory {
     filter: FetchWorkspacesRequestFilter | undefined;
   }): boolean {
     const { workspace, filter } = input;
+    if (this.deps.isWorkspaceVisibleToClient && !this.deps.isWorkspaceVisibleToClient(workspace)) {
+      return false;
+    }
     if (
       workspace.background &&
       filter?.includeBackground !== true &&

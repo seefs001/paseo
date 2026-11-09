@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { clearChatQuoteJump, useChatQuoteJumpTarget } from "@/attachments/chat-quote-jump";
 import { HostRouteBootstrapBoundary } from "@/components/host-route-bootstrap-boundary";
 import { useFetchQuery } from "@/data/query";
 import { resolveAgentRoute, type AgentRouteLookup } from "@/navigation/agent-route-resolution";
@@ -30,6 +31,7 @@ function HostAgentReadyRouteContent() {
   const handledNavigationRef = useRef<string | null>(null);
   const serverId = typeof params.serverId === "string" ? params.serverId : "";
   const agentId = typeof params.agentId === "string" ? params.agentId : "";
+  const quoteJumpTarget = useChatQuoteJumpTarget(serverId, agentId);
   const hosts = useHosts();
   const runtimeSnapshot = useHostRuntimeSnapshot(serverId);
   const client = runtimeSnapshot?.client ?? null;
@@ -117,8 +119,11 @@ function HostAgentReadyRouteContent() {
       navigateToAgent({ serverId, agentId, workspaceId: resolution.workspaceId, pin: true });
       return;
     }
+    if (quoteJumpTarget) {
+      clearChatQuoteJump(quoteJumpTarget.requestId);
+    }
     router.replace(resolution.kind === "invalid" ? ("/" as Href) : buildHostRootRoute(serverId));
-  }, [agentId, resolution, router, serverId]);
+  }, [agentId, quoteJumpTarget, resolution, router, serverId]);
 
   const handleRetry = useCallback(() => {
     if (resolution.kind === "lookupError") {
@@ -135,12 +140,15 @@ function HostAgentReadyRouteContent() {
     }
   }, [router, serverId]);
   const handleBack = useCallback(() => {
+    if (quoteJumpTarget) {
+      clearChatQuoteJump(quoteJumpTarget.requestId);
+    }
     if (router.canGoBack()) {
       router.back();
       return;
     }
     router.replace(serverId ? buildHostRootRoute(serverId) : ("/" as Href));
-  }, [router, serverId]);
+  }, [quoteJumpTarget, router, serverId]);
 
   if (
     resolution.kind === "waitingForHost" ||

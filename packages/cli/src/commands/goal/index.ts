@@ -8,6 +8,7 @@ import {
   parseLimit,
   resolveAgent,
   resolveGoalId,
+  toAppliedCommandError,
   validateAgentOptions,
   withTaskClient,
 } from "../task/shared.js";
@@ -53,7 +54,9 @@ async function updateGoal(
   return withTaskClient(options, async (client) => {
     const { goals, tasks } = await loadBoard(client);
     const goal = await client.updateBoardGoal({ goalId: resolveGoalId(goals, id), ...fields });
-    const [row] = await toGoalRows(client, [goal], tasks);
+    const [row] = await toGoalRows(client, [goal], tasks).catch((error: unknown) => {
+      throw toAppliedCommandError({ entity: "goal", id: goal.id, error });
+    });
     return { type: "single", data: row!, schema: goalSchema };
   });
 }
@@ -127,7 +130,8 @@ async function setAutopilot(id: string, options: GoalOptions, _command: Command)
     const { goals, tasks } = await loadBoard(client);
     const goalId = resolveGoalId(goals, id);
     let goal = goals.find((candidate) => candidate.id === goalId)!;
-    if (changes.some((value) => value !== undefined)) {
+    const hasChanges = changes.some((value) => value !== undefined);
+    if (hasChanges) {
       const agent =
         options.profile || options.provider
           ? await resolveAgent(client, options)
@@ -140,7 +144,10 @@ async function setAutopilot(id: string, options: GoalOptions, _command: Command)
         autopilot: mergeAutopilot(goal.autopilot, agent, options, limits),
       });
     }
-    const [row] = await toGoalRows(client, [goal], tasks);
+    const [row] = await toGoalRows(client, [goal], tasks).catch((error: unknown) => {
+      if (!hasChanges) throw error;
+      throw toAppliedCommandError({ entity: "goal", id: goal.id, error });
+    });
     return { type: "single" as const, data: row!, schema: goalSchema };
   });
 }

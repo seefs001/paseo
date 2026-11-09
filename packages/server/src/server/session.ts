@@ -1,4 +1,8 @@
+import type { SshInboundMessage } from "@getpaseo/protocol/ssh-workspaces";
+import type { SshWorkspaceService } from "./ssh-workspaces/service.js";
+import { collectRequestPaths, isSshLocalOnlyPath } from "./ssh-workspaces/binding.js";
 import { SessionTitles } from "./agent/session-titles.js";
+import type { WorkspaceTrace } from "./workspace-trace/index.js";
 import type { SkillCatalog } from "./skills/catalog.js";
 import { DiffSession } from "./diff/index.js";
 import { type WorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
@@ -211,7 +215,6 @@ import { WorkspaceFilesSession } from "./session/files/workspace-files-session.j
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
 import { ProjectConfigSession } from "./session/project-config/project-config-session.js";
 import { DaemonSession, type DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
-import { saveDaemonPassword } from "./daemon-password.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
 import { HubExecutionController } from "./hub/execution-controller.js";
@@ -513,6 +516,8 @@ export interface SessionOptions {
   agentStorage: AgentStorage;
   messageReceipts: Pick<MessageReceipts, "send">;
   agentMessages: AgentMessageDelivery;
+  workspaceTrace?: WorkspaceTrace;
+  sshWorkspaces?: SshWorkspaceService;
   creationService: Pick<CreationService, "create" | "subscribe">;
   // The daemon shares one; a Session built without it creates its own.
   workspaceCreation?: WorkspaceCreation;
@@ -884,11 +889,15 @@ export class Session {
   private readonly workspaceScripts: WorkspaceScriptsService;
   private readonly messageReceipts: Pick<MessageReceipts, "send">;
   private readonly agentMessages: AgentMessageDelivery;
+  private readonly workspaceTrace: WorkspaceTrace | undefined;
+  private readonly sshWorkspaces: SshWorkspaceService | undefined;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
   private readonly creationService: Pick<CreationService, "create" | "subscribe">;
   private readonly workspaceCreation: WorkspaceCreation;
 
   constructor(options: SessionOptions) {
+    this.workspaceTrace = options.workspaceTrace;
+    this.sshWorkspaces = options.sshWorkspaces;
     const {
       clientId,
       permissions,
@@ -1201,12 +1210,7 @@ export class Session {
       logger: this.sessionLogger,
       hubRelationships: options.hubRelationships,
       reloadConfig: () => daemonConfigStore.reload(),
-      saveDaemonPassword: (password) => {
-        saveDaemonPassword(this.paseoHome, password);
-      },
-      setPasswordConfigured: (passwordSet) => {
-        daemonConfigStore.setPasswordConfigured(passwordSet);
-      },
+      saveDaemonPassword: (password) => daemonConfigStore.savePassword(password),
     });
     this.hubExecutionController = options.hubExecutionAgents
       ? new HubExecutionController({
@@ -1242,6 +1246,7 @@ export class Session {
       projectLive: (agent) => this.buildAgentPayload(agent),
       projectStored: (record) => this.buildStoredAgentPayload(record),
       isProviderVisible: (provider) => this.isProviderVisibleToClient(provider),
+      isWorkspaceVisible: (workspaceId) => this.isAgentWorkspaceVisible(workspaceId),
       isStoredProviderAvailable: (record) =>
         isStoredAgentProviderAvailable(
           record,
@@ -1254,7 +1259,8 @@ export class Session {
       emit: (message) => this.emit(message),
       enrichAgentPayload: (payload) => this.enrichAgentPayload(payload),
       buildStoredAgentPayload: (record) => this.buildStoredAgentPayload(record),
-      isProviderVisibleToClient: (provider) => this.isProviderVisibleToClient(provider),
+      isProviderVisibleToClient: (provider, workspaceId) =>
+        this.isProviderVisibleToClient(provider) && this.isAgentWorkspaceVisible(workspaceId),
       buildProjectPlacementForWorkspaceId: (workspaceId) =>
         this.buildProjectPlacementForWorkspaceId(workspaceId),
       emitWorkspaceUpdateForWorkspaceId: (workspaceId) =>
@@ -1348,6 +1354,8 @@ export class Session {
       listProviderSubagentActivity: async () => this.agentManager.listProviderSubagentActivity(),
       listTerminalActivityContributions: () => this.listTerminalActivityContributions(),
       isProviderVisibleToClient: (provider) => this.isProviderVisibleToClient(provider),
+      isWorkspaceVisibleToClient: (workspace) =>
+        !workspace.executionLocation || this.supports(CLIENT_CAPS.sshWorkspaces),
       buildWorkspaceDescriptor: (input) => this.buildWorkspaceDescriptor(input),
     });
 
@@ -2318,6 +2326,8 @@ export class Session {
       workspaceSetupObservation: this.workspaceSetupObservation,
       buildScripts: (workspace, project) =>
         this.buildWorkspaceScriptPayloadSnapshot(workspace, project),
+      describeExecutionLocation: (workspace) =>
+        this.sshWorkspaces?.describeLocation(workspace) ?? null,
     };
   }
 
@@ -2344,6 +2354,93 @@ export class Session {
    */
   public async handleMessage(msg: SessionInboundMessage, source?: object): Promise<void> {
     return this.delivery.request(source, msg, () => this.handleRequest(msg, source));
+  }
+
+  // SSH workspaces are reachable only through workspace-identified operations. Local-only
+  // requests that name their directory key or owner-side session directory are refused, so
+  // no owner directory with the same name is touched. Clients without the ssh_workspaces
+  // capability cannot address SSH workspaces or their agents at all. Agent creation by
+  // workspace id is mapped to the internal session directory here.
+  private async guardSshWorkspaceBoundary(
+    msg: SessionInboundMessage,
+  ): Promise<SessionInboundMessage | string> {
+    const ssh = this.sshWorkspaces;
+    const record = msg as unknown as Record<string, unknown>;
+    const workspaceId = typeof record.workspaceId === "string" ? record.workspaceId : null;
+    const sshWorkspaceId = ssh?.isSshWorkspaceId(workspaceId) ? workspaceId : null;
+    if (!this.supports(CLIENT_CAPS.sshWorkspaces)) {
+      if (sshWorkspaceId) return "This workspace runs on an SSH machine; update the app to use it.";
+      if (ssh) {
+        for (const id of collectStringFields(record, WORKSPACE_REF_KEYS)) {
+          if (ssh.isSshWorkspaceId(id)) {
+            return "This workspace runs on an SSH machine; update the app to use it.";
+          }
+        }
+        for (const ref of collectStringFields(record, AGENT_REF_KEYS)) {
+          if (!this.isAgentWorkspaceVisible(await this.agentRefWorkspaceId(ref))) {
+            return "This agent runs in an SSH workspace; update the app to use it.";
+          }
+        }
+      }
+    }
+    const isAgentCreate =
+      msg.type === "create_agent_request" || msg.type === "agent.create.request";
+    if (isAgentCreate && sshWorkspaceId && ssh) {
+      const workspace = await this.workspaceRegistry.get(sshWorkspaceId);
+      if (!workspace) return "Workspace not found";
+      return { ...msg, config: { ...msg.config, cwd: workspace.cwd } } as SessionInboundMessage;
+    }
+    for (const value of collectRequestPaths(record)) {
+      if (isSshLocalOnlyPath(value)) {
+        return "This operation works on local directories and is not available for SSH workspaces.";
+      }
+    }
+    return msg;
+  }
+
+  // Accepts the same identifiers handlers resolve (exact id, prefix, title).
+  private async agentRefWorkspaceId(ref: string): Promise<string | null> {
+    const direct = await this.agentWorkspaceId(ref);
+    if (direct) return direct;
+    const resolved = await this.resolveAgentIdentifier(ref).catch(() => null);
+    return resolved?.ok ? this.agentWorkspaceId(resolved.agentId) : null;
+  }
+
+  private async agentWorkspaceId(agentId: string): Promise<string | null> {
+    const live = this.agentManager.getAgent(agentId);
+    if (live) return live.workspaceId ?? null;
+    return (await this.agentStorage.get(agentId))?.workspaceId ?? null;
+  }
+
+  // Old clients would treat an SSH workspace's agents as local ones.
+  private isAgentWorkspaceVisible(workspaceId: string | null | undefined): boolean {
+    return (
+      !this.sshWorkspaces?.isSshWorkspaceId(workspaceId) || this.supports(CLIENT_CAPS.sshWorkspaces)
+    );
+  }
+
+  private async handleSshWorkspaceMessage(msg: SshInboundMessage): Promise<void> {
+    if (!this.sshWorkspaces) throw new Error("SSH workspaces are unavailable on this host");
+    const response = await this.sshWorkspaces.handle(msg, {
+      fullConfig: this.authorization.allowsPermission("daemon.read"),
+    });
+    this.emit(response);
+    if (response.type === "ssh.workspace.create.response" && response.payload.workspaceId) {
+      await this.emitWorkspaceUpdatesForWorkspaceIds([response.payload.workspaceId]);
+    }
+  }
+
+  private async handleWorkspaceTrace(
+    msg: Extract<SessionInboundMessage, { type: "workspace.trace.get.request" }>,
+  ): Promise<void> {
+    if (!this.workspaceTrace) throw new Error("Workspace Trace is unavailable");
+    if (!(await this.workspaceRegistry.get(msg.workspaceId)))
+      throw new Error("Workspace not found");
+    const trace = await this.workspaceTrace.get(msg);
+    this.emit({
+      type: "workspace.trace.get.response",
+      payload: { requestId: msg.requestId, trace },
+    });
   }
 
   private async handleRequest(msg: SessionInboundMessage, source?: object): Promise<void> {
@@ -2377,7 +2474,18 @@ export class Session {
         return;
       }
       try {
-        await this.dispatchInboundMessage(msg, source);
+        const guarded = await this.guardSshWorkspaceBoundary(msg);
+        if (typeof guarded === "string") {
+          const requestId = sessionRequestId(msg);
+          if (requestId) {
+            this.emit({
+              type: "rpc_error",
+              payload: { requestId, requestType: msg.type, error: guarded, code: "handler_error" },
+            });
+          }
+          return;
+        }
+        await this.dispatchInboundMessage(guarded, source);
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         this.sessionLogger.error({ err }, "Error handling message");
@@ -3220,11 +3328,9 @@ export class Session {
       case "diagnostics.request":
         return this.daemonSession.handleDiagnosticsRequest(msg);
       case "daemon.mcp.list_calls.request":
-        this.daemonSession.handleListMcpCallsRequest(msg);
-        return undefined;
+        return this.daemonSession.handleListMcpCallsRequest(msg);
       case "daemon.password.set.request":
-        this.daemonSession.handleSetPasswordRequest(msg);
-        return undefined;
+        return this.daemonSession.handleSetPasswordRequest(msg);
       case "daemon.update.request":
         return this.daemonSession.handleUpdateRequest(msg);
       case "set_daemon_config_request":
@@ -3377,6 +3483,22 @@ export class Session {
 
   private dispatchWorkspaceLabelMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
+      case "workspace.trace.get.request":
+        return this.handleWorkspaceTrace(msg);
+      case "ssh.machine.list.request":
+      case "ssh.machine.save.request":
+      case "ssh.machine.remove.request":
+      case "ssh.machine.check.request":
+      case "ssh.machine.trust.request":
+      case "ssh.machine.policy.set.request":
+      case "ssh.workspace.create.request":
+      case "ssh.workspace.files.list.request":
+      case "ssh.workspace.files.read.request":
+      case "ssh.workspace.routing.get.request":
+      case "ssh.workspace.routing.set.request":
+      case "ssh.workspace.operations.list.request":
+      case "ssh.workspace.operations.acknowledge.request":
+        return this.handleSshWorkspaceMessage(msg);
       case "workspace.label.list.request":
         return this.handleWorkspaceLabelList(msg);
       case "workspace.label.assignment.set.request":
@@ -5849,7 +5971,10 @@ export class Session {
     const live = this.agentManager.getAgent(agentId);
     if (live) {
       const payload = await this.buildAgentPayload(live);
-      return this.isProviderVisibleToClient(payload.provider) ? payload : null;
+      return this.isProviderVisibleToClient(payload.provider) &&
+        this.isAgentWorkspaceVisible(payload.workspaceId)
+        ? payload
+        : null;
     }
 
     const settled = await this.readSettledAgent(agentId);
@@ -5857,7 +5982,10 @@ export class Session {
       return null;
     }
     const payload = this.buildStoredAgentPayload(settled.record);
-    return this.isProviderVisibleToClient(payload.provider) ? payload : null;
+    return this.isProviderVisibleToClient(payload.provider) &&
+      this.isAgentWorkspaceVisible(payload.workspaceId)
+      ? payload
+      : null;
   }
 
   private async resolveDelegationRootWorkspaceId(agentId: string): Promise<string | null> {
@@ -6654,8 +6782,13 @@ export class Session {
       if (owner) {
         this.agentUpdates.beginSubscription({
           subscriptionId: owner.id,
-          isProviderVisible: (provider) =>
-            this.delivery.forSource(owner.source, () => this.isProviderVisibleToClient(provider)),
+          isProviderVisible: (provider, workspaceId) =>
+            this.delivery.forSource(
+              owner.source,
+              () =>
+                this.isProviderVisibleToClient(provider) &&
+                this.isAgentWorkspaceVisible(workspaceId),
+            ),
           filter: request.filter,
           backgroundVisibility,
           syncEnabled: Boolean(request.sync),
@@ -9345,4 +9478,41 @@ function createHostSession(options: SessionOptions, session: Session): Connected
 
 function hostSource(options: SessionOptions): string {
   return options.sourceId ?? "owner";
+}
+
+// Request fields that reference agents or workspaces, top level and one level down.
+const AGENT_REF_KEYS = new Set([
+  "agentId",
+  "agentIds",
+  "parentAgentId",
+  "callerAgentId",
+  "focusedAgentId",
+  "markedAgentId",
+  "ownerAgentId",
+  "sourceAgentId",
+  "targetAgentId",
+]);
+const WORKSPACE_REF_KEYS = new Set(["workspaceIds", "parentWorkspaceId", "sourceWorkspaceId"]);
+
+function collectStringFields(
+  message: Record<string, unknown>,
+  keys: ReadonlySet<string>,
+): string[] {
+  const found: string[] = [];
+  const visit = (value: Record<string, unknown>, depth: number) => {
+    for (const [key, entry] of Object.entries(value)) {
+      if (keys.has(key) && typeof entry === "string") found.push(entry);
+      else if (keys.has(key) && Array.isArray(entry)) {
+        for (const item of entry) if (typeof item === "string") found.push(item);
+      } else if (Array.isArray(entry) && depth < 1) {
+        for (const item of entry) {
+          if (item && typeof item === "object") visit(item as Record<string, unknown>, depth + 1);
+        }
+      } else if (entry && typeof entry === "object" && depth < 1) {
+        visit(entry as Record<string, unknown>, depth + 1);
+      }
+    }
+  };
+  visit(message, 0);
+  return found;
 }

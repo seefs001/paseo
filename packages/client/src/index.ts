@@ -1,4 +1,6 @@
 import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
+import type { WorkspaceTracePage, WorkspaceTraceQuery } from "@getpaseo/protocol/workspace-trace";
+export type { WorkspaceTracePage, WorkspaceTraceQuery } from "@getpaseo/protocol/workspace-trace";
 export type { TerminalReplayEvent, TerminalStreamEvent } from "./terminal-stream-router.js";
 import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { parentAddressLabels } from "@getpaseo/protocol/agent-labels";
@@ -188,6 +190,9 @@ export interface PaseoWorkspaceHandle {
     create(options: PaseoWorkspaceAgentCreateOptions): Promise<PaseoAgentHandle>;
   };
   readonly terminals: PaseoWorkspaceTerminalActions;
+  readonly trace: {
+    get(options?: Omit<WorkspaceTraceQuery, "workspaceId">): Promise<WorkspaceTracePage>;
+  };
   current(): PaseoWorkspace | null;
   refresh(options?: { requestId?: string }): Promise<PaseoWorkspace | null>;
   setTitle(title: string | null, requestId?: string): Promise<{ title: string | null }>;
@@ -897,6 +902,7 @@ function createWorkspaceHandleFactory(
           );
         },
       },
+      trace: { get: (options) => daemonClient.getWorkspaceTrace({ ...options, workspaceId: id }) },
       terminals: {
         create: (options) => terminals.create({ ...options, workspaceId: id }),
         list: (options) => terminals.list({ ...options, workspaceId: id }),

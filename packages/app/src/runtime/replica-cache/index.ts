@@ -332,10 +332,25 @@ const StoredWorkspaceSchema = z.strictObject({
   activityAt: z.null(),
   archivingAt: z.string().nullable(),
   diffStat: z.strictObject({ additions: z.number(), deletions: z.number() }).nullable(),
+  uncommittedDiffStat: z
+    .strictObject({ additions: z.number(), deletions: z.number() })
+    .nullable()
+    .optional(),
   scripts: z.array(WorkspaceScriptSchema),
   gitRuntime: WorkspaceGitRuntimeSchema,
   githubRuntime: WorkspaceGitHubRuntimePayloadSchema,
   forge: z.string().optional(),
+  // Keeps an SSH workspace from restoring as a local one before the daemon answers.
+  executionLocation: z
+    .strictObject({
+      kind: z.literal("ssh"),
+      machineId: z.string(),
+      machineDisplayName: z.string().optional(),
+      directory: z.string(),
+      key: z.string().optional(),
+      gitObservation: z.enum(["unobserved", "git", "not_git", "failed"]).optional(),
+    })
+    .optional(),
 });
 
 const StoredProjectSchema = z.strictObject({
@@ -741,6 +756,7 @@ function serializeWorkspace(workspace: WorkspaceDescriptor): StoredWorkspace {
     activityAt: null,
     archivingAt: workspace.archivingAt,
     diffStat: workspace.diffStat,
+    uncommittedDiffStat: workspace.uncommittedDiffStat,
     scripts: workspace.scripts.map((script) => ({
       scriptName: script.scriptName,
       type: script.type,
@@ -757,6 +773,7 @@ function serializeWorkspace(workspace: WorkspaceDescriptor): StoredWorkspace {
     gitRuntime: workspace.gitRuntime,
     githubRuntime: workspace.githubRuntime,
     forge: workspace.forge,
+    ...(workspace.executionLocation ? { executionLocation: workspace.executionLocation } : {}),
   };
 }
 

@@ -57,6 +57,39 @@ export {
 import { TerminalProfileSchema } from "./terminal-profile.js";
 export { TerminalProfileSchema, type TerminalProfile } from "./terminal-profile.js";
 import { z } from "zod";
+import {
+  WorkspaceTraceGetRequestSchema,
+  WorkspaceTraceGetResponseSchema,
+} from "./workspace-trace.js";
+import {
+  SshMachineListRequestSchema,
+  SshMachineSaveRequestSchema,
+  SshMachineRemoveRequestSchema,
+  SshMachineCheckRequestSchema,
+  SshMachineTrustRequestSchema,
+  SshMachinePolicySetRequestSchema,
+  SshWorkspaceCreateRequestSchema,
+  SshWorkspaceFilesListRequestSchema,
+  SshWorkspaceFilesReadRequestSchema,
+  SshMachineListResponseSchema,
+  SshMachineSaveResponseSchema,
+  SshMachineRemoveResponseSchema,
+  SshMachineCheckResponseSchema,
+  SshMachineTrustResponseSchema,
+  SshMachinePolicySetResponseSchema,
+  SshWorkspaceCreateResponseSchema,
+  SshWorkspaceFilesListResponseSchema,
+  SshWorkspaceFilesReadResponseSchema,
+  SshWorkspaceRoutingGetRequestSchema,
+  SshWorkspaceRoutingSetRequestSchema,
+  SshWorkspaceOperationsListRequestSchema,
+  SshWorkspaceRoutingGetResponseSchema,
+  SshWorkspaceRoutingSetResponseSchema,
+  SshWorkspaceOperationsListResponseSchema,
+  SshWorkspaceOperationsAcknowledgeRequestSchema,
+  SshWorkspaceOperationsAcknowledgeResponseSchema,
+  WorkspaceExecutionLocationSchema,
+} from "./ssh-workspaces.js";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-lifecycle.js";
@@ -3971,6 +4004,20 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceLabelUpdateRequestSchema,
   WorkspaceLabelDeleteRequestSchema,
   WorkspaceLabelDeleteInspectRequestSchema,
+  WorkspaceTraceGetRequestSchema,
+  SshMachineListRequestSchema,
+  SshMachineSaveRequestSchema,
+  SshMachineRemoveRequestSchema,
+  SshMachineCheckRequestSchema,
+  SshMachineTrustRequestSchema,
+  SshMachinePolicySetRequestSchema,
+  SshWorkspaceCreateRequestSchema,
+  SshWorkspaceFilesListRequestSchema,
+  SshWorkspaceFilesReadRequestSchema,
+  SshWorkspaceRoutingGetRequestSchema,
+  SshWorkspaceRoutingSetRequestSchema,
+  SshWorkspaceOperationsListRequestSchema,
+  SshWorkspaceOperationsAcknowledgeRequestSchema,
   ArtifactListRequestSchema,
   ArtifactReadRequestSchema,
   ArtifactRemoveRequestSchema,
@@ -4385,6 +4432,9 @@ export const ServerInfoStatusPayloadSchema = z
         boardTasks: z.boolean().optional(),
         // COMPAT(artifacts): added in v0.15.0, remove gate after 2027-11-04.
         artifacts: z.boolean().optional(),
+        workspaceTrace: z.boolean().optional(),
+        // SSH machines, SSH workspaces, Pi remote tool routing and remote read-only files.
+        sshWorkspaces: z.boolean().optional(),
         terminalCollection: z.boolean().optional(),
         // COMPAT(workspaceBaseBranch): added after v0.11.2, remove gate after 2027-10-14.
         workspaceBaseBranch: z.boolean().optional(),
@@ -4912,6 +4962,9 @@ export const WorkspaceDescriptorPayloadSchema = z
     // Retained for wire parsing of older daemon descriptors.
     internal: z.boolean().optional(),
     background: z.boolean().optional(),
+    // Present only for workspaces that execute on an SSH machine. Sent only to clients
+    // that advertise the ssh_workspaces capability.
+    executionLocation: WorkspaceExecutionLocationSchema.optional(),
     archivingAt: z.string().nullable().optional().default(null),
     status: WorkspaceStateBucketSchema,
     // Best-effort workspace status entry timestamp. Old daemons omit the
@@ -4926,6 +4979,14 @@ export const WorkspaceDescriptorPayloadSchema = z
     createdAt: z.string().optional(),
     lastUserMessageAt: z.string().nullable().optional(),
     diffStat: z
+      .object({
+        additions: z.number(),
+        deletions: z.number(),
+      })
+      .nullable()
+      .optional(),
+    // HEAD to working tree; absent or null means unknown, not a clean checkout.
+    uncommittedDiffStat: z
       .object({
         additions: z.number(),
         deletions: z.number(),
@@ -8076,6 +8137,20 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceLabelUpdateResponseSchema,
   WorkspaceLabelDeleteResponseSchema,
   WorkspaceLabelDeleteInspectResponseSchema,
+  WorkspaceTraceGetResponseSchema,
+  SshMachineListResponseSchema,
+  SshMachineSaveResponseSchema,
+  SshMachineRemoveResponseSchema,
+  SshMachineCheckResponseSchema,
+  SshMachineTrustResponseSchema,
+  SshMachinePolicySetResponseSchema,
+  SshWorkspaceCreateResponseSchema,
+  SshWorkspaceFilesListResponseSchema,
+  SshWorkspaceFilesReadResponseSchema,
+  SshWorkspaceRoutingGetResponseSchema,
+  SshWorkspaceRoutingSetResponseSchema,
+  SshWorkspaceOperationsListResponseSchema,
+  SshWorkspaceOperationsAcknowledgeResponseSchema,
   ArtifactListResponseSchema,
   ArtifactUpdateSchema,
   ArtifactReadResponseSchema,

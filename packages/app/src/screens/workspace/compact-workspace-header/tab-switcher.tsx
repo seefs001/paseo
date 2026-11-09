@@ -38,6 +38,7 @@ function getFallbackTabOptionLabel(
     files: string;
     pullRequest: string;
     artifact: string;
+    trace: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -73,6 +74,9 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "artifact" || tab.target.kind === "artifacts") {
     return labels.artifact;
   }
+  if (tab.target.kind === "trace") {
+    return labels.trace;
+  }
   return labels.agent;
 }
 
@@ -89,6 +93,7 @@ function getFallbackTabOptionDescription(
     files: string;
     pullRequest: string;
     artifact: string;
+    trace: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -118,6 +123,9 @@ function getFallbackTabOptionDescription(
   if (tab.target.kind === "artifact" || tab.target.kind === "artifacts") {
     return labels.artifact;
   }
+  if (tab.target.kind === "trace") {
+    return labels.trace;
+  }
   if (tab.target.kind === "working_diff" || tab.target.kind === "changes_tree") {
     return labels.changes;
   }
@@ -141,6 +149,7 @@ interface MobileWorkspaceTabSwitcherProps {
   normalizedWorkspaceId: string;
   onSelectSwitcherTab: (key: string) => void;
   createTerminalDisabled: boolean;
+  terminalUnavailableReason?: string;
   onCreateDraftTab: (input?: { paneId?: string }) => void;
   onCreateTerminal: (input?: { paneId?: string }) => void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
@@ -263,6 +272,7 @@ function MobileWorkspaceTabOption({
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
       artifact: t("artifacts.title"),
+      trace: t("workspaceTrace.title"),
     }),
     [t],
   );
@@ -314,6 +324,7 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
   normalizedWorkspaceId,
   onSelectSwitcherTab,
   createTerminalDisabled,
+  terminalUnavailableReason,
   onCreateDraftTab,
   onCreateTerminal,
   paneId,
@@ -342,6 +353,7 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
       artifact: t("artifacts.title"),
+      trace: t("workspaceTrace.title"),
     }),
     [t],
   );
@@ -385,29 +397,35 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
 
   const footer = useMemo(
     () => (
-      <View style={styles.tabSwitcherFooter}>
-        <Button
-          testID="workspace-tab-switcher-new-agent"
-          style={styles.tabSwitcherFooterButton}
-          variant="secondary"
-          leftIcon={SquarePen}
-          onPress={handleNewAgent}
-        >
-          {t("workspace.header.actions.newAgent")}
-        </Button>
-        <Button
-          testID="workspace-tab-switcher-new-terminal"
-          style={styles.tabSwitcherFooterButton}
-          variant="secondary"
-          leftIcon={SquareTerminal}
-          disabled={createTerminalDisabled}
-          onPress={handleNewTerminal}
-        >
-          {t("workspace.header.actions.newTerminal")}
-        </Button>
+      <View>
+        <View style={styles.tabSwitcherFooter}>
+          <Button
+            testID="workspace-tab-switcher-new-agent"
+            style={styles.tabSwitcherFooterButton}
+            variant="secondary"
+            leftIcon={SquarePen}
+            onPress={handleNewAgent}
+          >
+            {t("workspace.header.actions.newAgent")}
+          </Button>
+          <Button
+            testID="workspace-tab-switcher-new-terminal"
+            style={styles.tabSwitcherFooterButton}
+            variant="secondary"
+            leftIcon={SquareTerminal}
+            disabled={createTerminalDisabled}
+            accessibilityHint={terminalUnavailableReason}
+            onPress={handleNewTerminal}
+          >
+            {t("workspace.header.actions.newTerminal")}
+          </Button>
+        </View>
+        {terminalUnavailableReason ? (
+          <Text style={styles.terminalUnavailableReason}>{terminalUnavailableReason}</Text>
+        ) : null}
       </View>
     ),
-    [createTerminalDisabled, handleNewAgent, handleNewTerminal, t],
+    [createTerminalDisabled, terminalUnavailableReason, handleNewAgent, handleNewTerminal, t],
   );
 
   const renderTabOption = useCallback(
@@ -515,6 +533,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabSwitcherFooterButton: {
     flex: 1,
+  },
+  terminalUnavailableReason: {
+    paddingHorizontal: theme.spacing[6],
+    paddingBottom: theme.spacing[3],
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   // Sized and stroked like the 16px header glyphs beside it (1.5 stroke on a 24 viewbox = 1px).
   tabCountBadge: {

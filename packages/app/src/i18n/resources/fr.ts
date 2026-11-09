@@ -2,6 +2,124 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  sshMachines: {
+    title: "Machines SSH",
+    info: "Machines que cet hôte joint avec sa propre configuration et ses clés OpenSSH. Pi s'exécute sur cet hôte avec ses modèles et réglages ; les fichiers et commandes d'un espace de travail SSH s'exécutent sur la machine. Les téléphones et autres clients n'ont pas besoin de clés SSH.",
+    updateHost: "Mettez à jour cet hôte pour utiliser les machines SSH.",
+    add: "Ajouter",
+    empty: "Aucune machine SSH pour l'instant.",
+    hostLabel: "Alias ou hôte OpenSSH",
+    hostHint:
+      "Utilise ~/.ssh/config, les clés et l'agent SSH de cet hôte. Les mots de passe et invites MFA ne sont pas pris en charge.",
+    nameLabel: "Nom",
+    userLabel: "Utilisateur",
+    portLabel: "Port",
+    invalidPort: "Le port doit être un nombre entre 1 et 65535.",
+    cancel: "Annuler",
+    saveAndCheck: "Enregistrer et vérifier",
+    saveFailed: "Impossible d'enregistrer la machine",
+    check: "Vérifier",
+    trust: "Faire confiance à la clé d'hôte",
+    trustTitle: "Faire confiance à cette clé d'hôte ?",
+    trustFailed: "Impossible de faire confiance à la clé d'hôte",
+    toolRouting: "Routage des outils",
+    newWorkspace: "Nouvel espace de travail",
+    remove: "Supprimer",
+    removeTitle: "Supprimer la machine SSH ?",
+    removeMessage:
+      "Les fichiers de la machine ne sont pas modifiés. Les espaces de travail qui l'utilisent doivent d'abord être archivés.",
+    removeMessageInUse:
+      "{{count}} espace(s) de travail utilisent encore cette machine. Archivez-les avant de la supprimer ; les fichiers de la machine ne sont pas modifiés.",
+    removeFailed: "Impossible de supprimer la machine",
+    targetHidden: "Détails de connexion masqués",
+    summaryOnly:
+      "Vous pouvez ouvrir des espaces de travail sur cette machine. Modifier sa connexion ou le routage des outils nécessite l'accès d'administration de l'hôte.",
+    state: {
+      not_checked: "Non vérifiée",
+      checking: "Vérification",
+      needs_trust: "Clé d'hôte à confirmer",
+      ready: "Prête",
+      needs_attention: "Intervention requise",
+      disabled: "Désactivée",
+    },
+    policyHint:
+      "Les outils s'exécutent sur la machine par défaut. Les outils sans implémentation SSH sont indisponibles sauf s'ils sont listés ici comme locaux. Les outils locaux s'exécutent sur cet hôte, pas sur la machine.",
+    localSkills: "Lire les skills depuis cet hôte",
+    localSkillsHint:
+      "Les skills Pi chargées et leurs fichiers de référence sont lus ici, en lecture seule. Les commandes d'une skill s'exécutent toujours sur la machine.",
+    localTools: "Outils locaux",
+    localToolsHint:
+      "Noms d'outils séparés par des virgules, par exemple un outil de mémoire ou de navigateur. Les outils de fichiers, de recherche et bash s'exécutent toujours sur la machine.",
+    disabledTools: "Outils désactivés",
+    policyRevision: "Révision {{revision}}",
+    savePolicy: "Enregistrer le routage",
+    policySaveFailed: "Impossible d'enregistrer le routage des outils",
+    directoryLabel: "Dossier sur la machine",
+    directoryHint: "Un dossier existant. Paseo ne crée ni ne supprime de dossiers sur la machine.",
+    createWorkspace: "Créer l'espace de travail",
+    createWorkspaceFailed: "Impossible de créer l'espace de travail",
+    errors: {
+      hostRequired: "Saisissez un alias ou un hôte OpenSSH.",
+      hostInvalid: "Utilisez un alias ou un nom d'hôte sans espaces et sans tiret initial.",
+      userInvalid: "Le nom d'utilisateur ne peut pas contenir d'espaces ni commencer par un tiret.",
+      toolNameInvalid:
+        "Utilisez des noms d'outils composés de lettres, chiffres, points, tirets, deux-points ou tirets bas.",
+      remoteBuiltinLocal:
+        "Les outils de fichiers, de recherche et bash s'exécutent toujours sur la machine et ne peuvent pas être locaux.",
+      directoryRequired: "Saisissez un dossier de la machine.",
+    },
+    routing: {
+      workspaceHint:
+        "Réglages propres à cet espace de travail. Chaque réglage reprend la valeur de la machine sauf si vous le remplacez. Les changements s'appliquent au prochain appel d'outil.",
+      localMcpServers: "Serveurs MCP locaux",
+      localMcpServersHint:
+        "Serveurs MCP de la configuration Pi de cet hôte à démarrer pour cet espace de travail. Les autres restent arrêtés.",
+      disabledToolsHint:
+        "Noms d'outils que Pi ne peut pas appeler ici, y compris depuis le shell utilisateur.",
+      reload: "Recharger",
+      useMachineDefault: "Utiliser la valeur de la machine",
+      readOnly: "Modifier le routage des outils nécessite l'accès d'administration de l'hôte.",
+      machineMissing: "La machine de cet espace de travail est indisponible.",
+    },
+    operations: {
+      title: "Opérations",
+      empty: "Aucune modification envoyée à la machine pour l'instant.",
+      unknownNotice:
+        "Une opération a un résultat inconnu. Paseo a suspendu les modifications automatiques sur la machine. Vérifiez la machine, puis confirmez ci-dessous ; confirmer ne relance rien.",
+      confirm: "Confirmer les résultats",
+      confirmTitle: "Confirmer les résultats inconnus ?",
+      confirmMessage:
+        "Vous avez vérifié la machine pour {{count}} opération(s) au résultat inconnu. Après confirmation, les agents pourront de nouveau modifier la machine. Rien n'est relancé.",
+      stale:
+        "{{count}} opération(s) ont changé depuis le chargement de la liste et n'ont pas été confirmées. Actualisez et vérifiez de nouveau.",
+      state: {
+        admitted: "Admise",
+        sent: "Envoyée",
+        completed: "Terminée",
+        not_sent: "Non envoyée",
+        unknown: "Résultat inconnu",
+        acknowledged: "Inconnu, pris en compte",
+      },
+    },
+    workspace: {
+      terminalUnavailable:
+        "Les terminaux ne sont pas encore disponibles dans les espaces de travail SSH.",
+      panelUnavailable:
+        "Ce panneau agit sur l'ordinateur propriétaire et n'est pas disponible dans les espaces de travail SSH. Utilisez Fichiers pour la machine.",
+    },
+    files: {
+      title: "Fichiers",
+      location: "Sur {{machine}}",
+      up: "Remonter",
+      refresh: "Actualiser",
+      close: "Fermer",
+      loading: "Chargement…",
+      empty: "Dossier vide",
+      binary: "Fichier binaire ; aperçu indisponible.",
+      truncated: "Affichage du premier Mo.",
+      disconnected: "L'hôte est déconnecté.",
+    },
+  },
   scheduleTargets: {
     workspace: "Espace de travail (facultatif)",
     conversation: "Conversation (facultatif)",
@@ -213,7 +331,7 @@ export const fr: TranslationResources = {
       collapseQuote: "Réduire la citation",
       editQuoteComment: "Modifier le commentaire",
       artifactQuoteSource: "{{title}} · rév. {{revision}}",
-      openArtifactQuoteSource: "Ouvrir l’artefact",
+      openArtifactQuoteSource: "Ouvrir l’Artifact",
       addImage: "Ajouter une image",
       pasteImage: "Coller une image",
       addFile: "Importer un fichier",
@@ -1271,6 +1389,113 @@ export const fr: TranslationResources = {
       },
     },
   },
+  workspaceTrace: {
+    title: "Trace",
+    unsupported: "Cet hôte doit être mis à jour pour afficher Trace.",
+    loading: "Chargement de la trace…",
+    loadFailed: "Impossible de charger la trace",
+    retry: "Réessayer",
+    recent: "Activité récente",
+    focusedOn: "Centré sur {{title}}",
+    clearFocus: "Tout afficher",
+    count: "Événements {{count}}",
+    refresh: "Actualiser",
+    refreshing: "Actualisation…",
+    empty: "Aucune activité entre agents enregistrée",
+    loadMore: "Charger les précédents",
+    loadingMore: "Chargement…",
+    focusHere: "Centrer ici",
+    openArtifact: "Ouvrir l'Artifact",
+    showSource: "Afficher la source",
+    openConversation: "Ouvrir la conversation",
+    sourceItemNotAddressable:
+      "Cet événement n'a pas d'élément source localisable ; la conversation s'ouvre à sa position actuelle.",
+    sourceUnavailable: "Source indisponible ici",
+    gapForAgent: "{{gap}} ({{agent}})",
+    lane: {
+      unknown: "Agent inconnu",
+    },
+    kind: {
+      delegation: "Délégation",
+      agent_created: "Agent créé",
+      message: "Message",
+      notification: "Notification de fin",
+      dispatch: "Remise",
+      artifact: "Artifact",
+      schedule: "Exécution planifiée",
+    },
+    status: {
+      queued: "En file",
+      dispatched: "Remis",
+      failed: "Échec",
+      unknown: "Inconnu",
+      recorded: "Enregistré",
+    },
+    statusDetail: {
+      recorded: "Enregistré au moment où il s'est produit",
+      queued: "En file, pas encore remis",
+      dispatched: "Remis à l'agent ; ne prouve pas que le travail est terminé",
+      failed: "Échec de la remise",
+      unknown: "État de remise inconnu",
+    },
+    evidence: {
+      existing: "Depuis l'historique",
+    },
+    evidenceDetail: {
+      recorded: "Enregistré par le daemon au moment où il s'est produit",
+      existing: "Reconstitué depuis l'historique existant ; peut être incomplet",
+    },
+    availability: {
+      local: "Local",
+      archived: "Archivé",
+      missing: "Supprimé ou absent",
+      external: "Autre espace de travail ou hôte",
+    },
+    gap: {
+      history: "Une partie de l'historique est indisponible",
+      retention: "Les anciens enregistrements ont été purgés",
+      pending: "Certaines remises sont en attente",
+      recording: "Certains enregistrements causaux sont manquants",
+      focus_unavailable: "L'événement ciblé n'est plus disponible",
+      window: "Seule une partie de l'activité est chargée",
+    },
+    behavior: {
+      started: "A démarré un tour",
+      steered: "A réorienté le tour en cours",
+      interrupted: "A interrompu le tour en cours",
+      out_of_band: "Remis hors d'un tour",
+    },
+    requested: {
+      steer: "Réorientation demandée",
+      interrupt: "Interruption demandée",
+    },
+    notification: {
+      finished: "L'agent a terminé",
+      errored: "L'agent a échoué",
+      "permission-required": "L'agent demande une autorisation",
+      closed: "L'agent est fermé",
+    },
+    edge: {
+      delegation: "Délégation",
+      message: "Message",
+      notification: "Notification",
+    },
+    detail: {
+      kind: "Type",
+      agent: "Agent",
+      availability: "Disponibilité",
+      time: "Heure",
+      evidence: "Preuve",
+      status: "État",
+      behavior: "Remise",
+      notification: "Notification",
+      batch: "Lot",
+      batchCount: "{{count}} messages remis ensemble",
+      incoming: "De",
+      outgoing: "Vers",
+      outsideWindow: "Hors de la plage chargée",
+    },
+  },
   artifacts: {
     collection: {
       empty: "Aucun résultat enregistré",
@@ -1287,8 +1512,8 @@ export const fr: TranslationResources = {
       noChat: "Ouvrez un onglet de conversation pour ajouter cette citation.",
       added: "Citation ajoutée au brouillon de la conversation.",
     },
-    pill: "Artefacts {{count}}",
-    title: "Artefacts",
+    pill: "Artifacts {{count}}",
+    title: "Artifacts",
     filter: {
       sessionOnly: "Cette session seulement ({{count}})",
       showAll: "Tout afficher ({{count}})",
@@ -1306,27 +1531,28 @@ export const fr: TranslationResources = {
     },
     viewer: {
       loading: "Chargement…",
-      missing: "Cet artefact n’est plus dans la collection.",
+      linksUnsupported: "Mettez à jour cet hôte pour voir les tâches et objectifs liés.",
+      missing: "Cet Artifact n’est plus dans la collection.",
       openSource: "Ouvrir la session d’origine",
       sourceGone: "La session d’origine n’est plus disponible",
       goalGone: "L’objectif a été supprimé",
       taskGone: "La tâche a été supprimée",
-      remove: "Retirer des Artefacts",
-      removeTitle: "Retirer cet artefact ?",
+      remove: "Retirer des Artifacts",
+      removeTitle: "Retirer cet Artifact ?",
       removeMessage:
-        "Il quitte la collection d’Artefacts. Les fichiers de l’espace de travail restent.",
+        "Il quitte la collection d’Artifacts. Les fichiers de l’espace de travail restent.",
     },
     errors: { offline: "L’hôte est hors ligne." },
   },
   desk: {
     title: "Desk",
-    tasksAndGoals: "Tâches et objectifs",
+    tasksAndGoals: "Tasks & Goals",
     attentionCount: "Vous attend : {{count}}",
     attentionCountPartial: "Vous attend : au moins {{count}}",
     section: {
       needsYou: "Vous attend",
       active: "Sessions actives",
-      recent: "Réponses et artefacts récents",
+      recent: "Réponses et Artifacts récents",
       recentNote: "Un tour terminé n’est pas un travail terminé",
       incomplete: "Certains hôtes ne sont pas entièrement chargés",
       unknownCount: "Statut inconnu : {{count}}",
@@ -1335,7 +1561,7 @@ export const fr: TranslationResources = {
     empty: {
       needsYou: "Rien ne vous attend.",
       active: "Aucune session active.",
-      recent: "Aucune nouvelle réponse ni aucun artefact.",
+      recent: "Aucune nouvelle réponse ni aucun Artifact.",
     },
     request: {
       kind: {
@@ -1359,6 +1585,9 @@ export const fr: TranslationResources = {
       untitled: "Session sans titre",
       return: "Retour à la conversation",
       returnLabel: "Ouvrir cette conversation",
+      markAllRead: "Tout marquer comme lu",
+      markingAllRead: "Marquage comme lu...",
+      markAllReadFailed: "Impossible de marquer toutes les réponses comme lues : {{message}}",
       unknown: "Statut inconnu",
       openDecision: "Décision en attente",
       newReply: "Nouvelle réponse",
@@ -1397,7 +1626,7 @@ export const fr: TranslationResources = {
       source: {
         sessions: "sessions",
         decisions: "décisions",
-        artifacts: "artefacts",
+        artifacts: "Artifacts",
       },
     },
   },
@@ -1456,11 +1685,11 @@ export const fr: TranslationResources = {
         delete: "Supprimer l'objectif",
         deleteTitle: "Supprimer l'objectif ?",
         deleteMessage:
-          "« {{title}} » sera supprimé. Ses tâches restent sur le Bureau comme travail libre.",
+          "« {{title}} » sera supprimé. Ses tâches restent dans Tasks & Goals comme travail sans objectif.",
       },
       settings: {
-        title: "Réglages du Bureau",
-        hostSection: "Fonctionnement du Bureau",
+        title: "Réglages de Tasks & Goals",
+        hostSection: "Fonctionnement de Tasks & Goals",
         hostHint: "Enregistré sur cet hôte ; tous les appareils le suivent",
         decideKinds: "Dans À décider",
         decideKindsHint: "Les autres points de contrôle restent avec leur travail dans En vol",
@@ -1469,7 +1698,8 @@ export const fr: TranslationResources = {
         notifyKinds: "Notifications push",
         notifyKindsHint: "Points de contrôle qui alertent votre téléphone",
         save: "Enregistrer",
-        unavailable: "Les réglages du Bureau sont indisponibles tant que cet hôte est hors ligne",
+        unavailable:
+          "Les réglages de Tasks & Goals sont indisponibles tant que cet hôte est hors ligne",
       },
       kinds: {
         permission: "Demandes d'autorisation",
@@ -1581,10 +1811,15 @@ export const fr: TranslationResources = {
         saving: "Enregistrement…",
         saved: "« {{title}} » enregistrée",
         failed: "Enregistrement impossible : {{message}}",
+        failedHeld:
+          "« {{title}} » n'a peut-être pas été enregistrée : {{message}}. Vérifiez le tableau avant de l'ajouter à nouveau.",
+        failedHeldWait: "Videz la ligne pour restaurer « {{title}} ».",
+        draftOtherHost:
+          "Ce brouillon appartient à {{host}}. Revenez-y pour l'ajouter, ou videz la ligne pour commencer ici.",
       },
-      searchPlaceholder: "Rechercher dans le bureau...",
+      searchPlaceholder: "Rechercher des tâches...",
       newGoal: "Nouvel objectif",
-      settings: "Réglages du bureau",
+      settings: "Réglages de Tasks & Goals",
       zoneTab: "{{zone}}, {{count}} éléments",
       zones: {
         decide: "À décider",
@@ -1631,7 +1866,7 @@ export const fr: TranslationResources = {
         label: "Plus tard, {{count}} reportés",
       },
       empty: {
-        title: "Le bureau est dégagé",
+        title: "Tasks & Goals est vide",
         description: "Les objectifs, les idées et le travail mené par les agents apparaissent ici.",
         decide: "Rien n'attend votre décision",
         flight: "Rien n'est en cours",
@@ -1657,7 +1892,7 @@ export const fr: TranslationResources = {
         flight: "En cours : {{count}}",
       },
       command: {
-        open: "Ouvrir le bureau",
+        open: "Ouvrir Desk",
       },
     },
     detail: {
@@ -1707,7 +1942,7 @@ export const fr: TranslationResources = {
         planning: "Planification",
         projects: "Projets",
         save: "Enregistrer la vue",
-        saveHint: "Filtrez le tableau ou choisissez des colonnes d'abord",
+        saveHint: "Filtrez les tâches ou choisissez des colonnes d'abord",
         name: "Nom de la vue",
         namePlaceholder: "Nommez cette vue",
         remove: "Supprimer la vue {{name}}",
@@ -1720,7 +1955,7 @@ export const fr: TranslationResources = {
       collapse: "Réduire",
       expandColumn: "Développer {{column}}, {{count}} éléments",
       columnTab: "{{column}}, {{count}} éléments",
-      searchPlaceholder: "Rechercher dans le tableau...",
+      searchPlaceholder: "Rechercher des tâches...",
       clearSearch: "Effacer la recherche",
       showViews: "Afficher les vues",
       hideViews: "Masquer les vues",
@@ -1744,7 +1979,7 @@ export const fr: TranslationResources = {
         remove: "Retirer le filtre {{filter}}",
       },
       empty: {
-        title: "Rien sur le tableau pour l'instant",
+        title: "Aucune tâche pour l'instant",
         description: "Les agents en cours et les tâches planifiées s'affichent ici.",
       },
       sidebar: {
@@ -1871,11 +2106,11 @@ export const fr: TranslationResources = {
       },
     },
     capture: {
-      slashCommand: "Ajouter une tâche au tableau",
+      slashCommand: "Ajouter une tâche à Tasks & Goals",
       added: "Tâche ajoutée à À faire",
-      openBoard: "Ouvrir le tableau",
+      openBoard: "Ouvrir Desk",
       addFailed: "Impossible d'ajouter la tâche : {{message}}",
-      addToBoard: "Ajouter au tableau",
+      addToBoard: "Ajouter à Tasks & Goals",
       attachments: "Pièces jointes",
       attachIssue: "Joindre une issue",
       attachNeedsProject: "Choisissez un projet pour joindre ses issues",
@@ -1916,7 +2151,7 @@ export const fr: TranslationResources = {
         starting: "Démarrage...",
       },
     },
-    title: "Bureau",
+    title: "Desk",
     newTask: "Nouvelle tâche",
     columns: {
       backlog: "Backlog",
@@ -1931,8 +2166,8 @@ export const fr: TranslationResources = {
       title: "Aucune tâche pour l'instant",
       description: "Planifiez le travail ici, puis lancez-le dans un nouvel espace de travail.",
     },
-    unavailable: "Mettez à jour un hôte pour utiliser le Tableau",
-    hostUnsupported: "Mettez à jour {{host}} pour utiliser le Tableau",
+    unavailable: "Mettez à jour un hôte pour utiliser Tasks & Goals",
+    hostUnsupported: "Mettez à jour {{host}} pour utiliser Tasks & Goals",
     hostLoadFailed: "{{host}} : impossible de charger les tâches",
     workspaceUnavailable: "Espace de travail indisponible",
     actions: {
@@ -1966,7 +2201,8 @@ export const fr: TranslationResources = {
     },
     confirmDelete: {
       title: "Supprimer la tâche ?",
-      message: "« {{title}} » sera retirée du Tableau. Son espace de travail n'est pas modifié.",
+      message:
+        "« {{title}} » sera retirée de Tasks & Goals. Son espace de travail n'est pas modifié.",
       confirm: "Supprimer",
     },
     errors: {
@@ -2178,7 +2414,7 @@ export const fr: TranslationResources = {
       search: "Recherche",
       schedules: "Planifications",
       mcpCalls: "Appels MCP",
-      board: "Bureau",
+      board: "Desk",
     },
     worktreeSetup: {
       title: "Configurer les scripts de worktree",
@@ -4099,6 +4335,8 @@ export const fr: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "Profils d’agent",
+        appliedPreferenceSaveFailed:
+          "Profil appliqué, mais impossible de l'enregistrer par défaut : {{error}}",
         unavailable: "Connectez-vous à cet hôte pour gérer les profils d’agent",
         unsupported: "Le daemon de cet hôte ne prend pas encore en charge les profils d’agent",
         emptyState:

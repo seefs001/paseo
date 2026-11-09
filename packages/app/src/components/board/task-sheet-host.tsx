@@ -1,4 +1,4 @@
-import { useMemo, type ReactElement } from "react";
+import { useCallback, useMemo, type ReactElement } from "react";
 import { closeBoardTaskSheet, dismissBoardTaskSheet, useBoardTaskSheet } from "@/board/sheet";
 import { BoardTaskSheet, type BoardTaskSheetHost } from "@/components/board/task-sheet";
 import { useHostFeatureMap } from "@/runtime/host-features";
@@ -18,16 +18,27 @@ function sortProjects(projects: ReadonlyMap<string, ProjectDescriptor>): Project
 export function BoardTaskSheetHostView(): ReactElement | null {
   const sheet = useBoardTaskSheet();
   if (sheet.status !== "open") return null;
-  return <OpenBoardTaskSheet key={sheet.openCount} target={sheet.target} visible={sheet.visible} />;
+  return (
+    <OpenBoardTaskSheet
+      key={sheet.openCount}
+      openCount={sheet.openCount}
+      target={sheet.target}
+      visible={sheet.visible}
+    />
+  );
 }
 
 function OpenBoardTaskSheet({
+  openCount,
   target,
   visible,
 }: {
+  openCount: number;
   target: Parameters<typeof BoardTaskSheet>[0]["target"];
   visible: boolean;
 }): ReactElement {
+  const close = useCallback(() => closeBoardTaskSheet(openCount), [openCount]);
+  const dismiss = useCallback(() => dismissBoardTaskSheet(openCount), [openCount]);
   const hosts = useHosts();
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const connectionStatuses = useHostRuntimeConnectionStatuses(serverIds);
@@ -56,8 +67,8 @@ function OpenBoardTaskSheet({
       target={target}
       visible={visible}
       hosts={sheetHosts}
-      onClose={closeBoardTaskSheet}
-      onDismiss={dismissBoardTaskSheet}
+      onClose={close}
+      onDismiss={dismiss}
     />
   );
 }

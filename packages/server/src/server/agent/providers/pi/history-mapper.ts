@@ -27,6 +27,8 @@ export interface PiCapturedUserMessageEntry {
   text: string;
 }
 
+export type PiHistoryMessage = PiAgentMessage & { replayTimestamp?: string };
+
 const PiHistoryMarkerSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("message") }),
   z.object({
@@ -133,7 +135,7 @@ export class PiHistoryMapper {
   ) {}
 
   async mapMessages(
-    messages: readonly PiAgentMessage[],
+    messages: readonly PiHistoryMessage[],
     markers: readonly PiHistoryMarker[] = [],
   ): Promise<AgentStreamEvent[]> {
     const events: AgentStreamEvent[] = [];
@@ -156,7 +158,17 @@ export class PiHistoryMapper {
     return events;
   }
 
-  private async mapMessage(message: PiAgentMessage): Promise<AgentStreamEvent[]> {
+  private async mapMessage(message: PiHistoryMessage): Promise<AgentStreamEvent[]> {
+    const events = await this.mapMessageContent(message);
+    const timestamp = message.replayTimestamp;
+    if (timestamp === undefined) return events;
+    for (const event of events) {
+      if (event.type === "timeline") event.timestamp = timestamp;
+    }
+    return events;
+  }
+
+  private async mapMessageContent(message: PiAgentMessage): Promise<AgentStreamEvent[]> {
     switch (message.role) {
       case "user":
         return this.mapUserMessage(message);
@@ -414,7 +426,7 @@ export class PiHistoryMapper {
 
 export async function* streamPiHistory(
   provider: string,
-  messages: PiAgentMessage[],
+  messages: PiHistoryMessage[],
   userEntries: readonly PiCapturedUserMessageEntry[] = [],
   hooks: PiHistoryMapperHooks = {},
   // At most eight 2 MiB child files per replay; remaining cards keep their summaries.

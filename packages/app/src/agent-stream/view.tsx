@@ -41,8 +41,15 @@ import {
   type InlinePathTarget,
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
-import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
-import { clearChatQuoteJump, useChatQuoteJumpTarget } from "@/attachments/chat-quote-jump";
+import { getStreamItemMessageId, isAgentToolCallItem, type StreamItem } from "@/types/stream";
+import {
+  clearChatQuoteJump,
+  clearChatQuoteJumpLanded,
+  markChatQuoteJumpLanded,
+  useChatQuoteJumpLanded,
+  useChatQuoteJumpTarget,
+} from "@/attachments/chat-quote-jump";
+import { QuoteJumpHighlight } from "./quote-jump-highlight";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
 import type { PendingPermission } from "@/types/shared";
@@ -174,6 +181,7 @@ function renderStreamItemWithTurnFooter(input: {
   strategy: TurnContentStrategy;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
+  highlight: ReactNode;
 }): ReactNode {
   if (!input.content) {
     return null;
@@ -192,6 +200,7 @@ function renderStreamItemWithTurnFooter(input: {
   ) : null;
   const content = (
     <StreamItemWrapper gapBelow={input.layoutItem.gapBelow} turnIndent={input.turnIndent}>
+      {input.highlight}
       {input.content}
     </StreamItemWrapper>
   );
@@ -253,6 +262,8 @@ export interface AgentStreamViewProps {
   isAuthoritativeHistoryReady?: boolean;
   isInitialHistoryLoading?: boolean;
   revealInitialHistory?: boolean;
+  /** A loading overlay covers the stream while history catches up; a quote jump waits for it. */
+  isHistoryCatchingUp?: boolean;
   /** Tail space required by a transparent overlay rendered at the bottom edge. */
   bottomOverlayTailClearance?: number;
   /** Bottom offset required for controls floating above that overlay. */
@@ -352,6 +363,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       isAuthoritativeHistoryReady = true,
       isInitialHistoryLoading,
       revealInitialHistory,
+      isHistoryCatchingUp = false,
       bottomOverlayTailClearance = 0,
       bottomOverlayControlClearance,
       toast,
@@ -713,12 +725,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     // once paging clears.
     const [isQuoteJumpPaging, setQuoteJumpPaging] = useState(false);
     useEffect(() => {
-      if (!quoteJump || !isActive || !isAuthoritativeHistoryReady) return;
-      const { messageId, requestId } = quoteJump;
-      const isLoaded = [...effectiveStreamItems, ...(effectiveStreamHead ?? [])].some(
-        (item) => getStreamItemMessageId(item) === messageId,
+      // Wait out the catch-up overlay, or the highlight plays under it.
+      if (!quoteJump || !isActive || !isAuthoritativeHistoryReady || isHistoryCatchingUp) return;
+      const { callId, requestId } = quoteJump;
+      // A tool call's stream id carries its turn; the source only knows the call id.
+      const targetItem = [...effectiveStreamItems, ...(effectiveStreamHead ?? [])].find((item) =>
+        callId
+          ? isAgentToolCallItem(item) && item.payload.data.callId === callId
+          : getStreamItemMessageId(item) === quoteJump.messageId,
       );
-      if (!isLoaded) {
+      if (!targetItem) {
         if (isQuoteJumpPaging || isLoadingOlder) return;
         if (!hasOlder) {
           clearChatQuoteJump(requestId);
@@ -741,21 +757,33 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           });
         return;
       }
+      const messageId = getStreamItemMessageId(targetItem);
       // Opening a folded turn or an earlier window rerenders first; this effect reruns then.
       if (!mountedMessageIds.has(messageId) && revealLoadedMessage(messageId)) return;
       clearChatQuoteJump(requestId);
       viewportRef.current?.scrollToMessage?.(messageId);
+      // The row's highlight starts when the row mounts, so a row the list renders only after
+      // the scroll still shows the whole fade.
+      markChatQuoteJumpLanded({
+        serverId: resolvedServerId,
+        agentId,
+        itemId: targetItem.id,
+        requestId,
+      });
     }, [
       effectiveStreamHead,
       effectiveStreamItems,
       hasOlder,
       isActive,
       isAuthoritativeHistoryReady,
+      isHistoryCatchingUp,
       isLoadingOlder,
       isQuoteJumpPaging,
       loadOlder,
       mountedMessageIds,
       quoteJump,
+      agentId,
+      resolvedServerId,
       revealLoadedMessage,
       t,
       toast,
@@ -1104,9 +1132,18 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           strategy: streamRenderStrategy,
           supportsTimelineCursor: supportsAgentForkContextCursor,
           onForkAssistantTurn: readOnly ? undefined : handleForkAssistantTurn,
+          highlight: (
+            <QuoteJumpHighlightSlot
+              serverId={resolvedServerId}
+              agentId={agentId}
+              itemId={item.id}
+            />
+          ),
         });
       },
       [
+        agentId,
+        resolvedServerId,
         getTurnIndent,
         handleForkAssistantTurn,
         readOnly,
@@ -1472,6 +1509,9 @@ function agentStreamViewPropsEqual(
   }
   if (left.revealInitialHistory !== right.revealInitialHistory) {
     reasons.push("revealInitialHistory");
+  }
+  if (left.isHistoryCatchingUp !== right.isHistoryCatchingUp) {
+    reasons.push("isHistoryCatchingUp");
   }
   if (left.bottomOverlayTailClearance !== right.bottomOverlayTailClearance) {
     reasons.push("bottomOverlayTailClearance");
@@ -1994,6 +2034,20 @@ interface StreamItemWrapperProps {
   gapBelow: number;
   turnIndent: TurnIndent;
   children: ReactNode;
+}
+
+function QuoteJumpHighlightSlot(props: { serverId: string; agentId: string; itemId: string }) {
+  const requestId = useChatQuoteJumpLanded(props.serverId, props.agentId, props.itemId);
+  const handleDone = useCallback(() => {
+    if (requestId !== null) clearChatQuoteJumpLanded(requestId);
+  }, [requestId]);
+  // Leaving the row ends this highlight too, so returning to it later does not replay it.
+  // Clearing by request id leaves a newer jump alone.
+  useEffect(() => {
+    if (requestId === null) return;
+    return () => clearChatQuoteJumpLanded(requestId);
+  }, [requestId]);
+  return requestId === null ? null : <QuoteJumpHighlight key={requestId} onDone={handleDone} />;
 }
 
 function StreamItemWrapper({ gapBelow, turnIndent, children }: StreamItemWrapperProps) {
