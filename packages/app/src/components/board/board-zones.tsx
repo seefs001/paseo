@@ -51,6 +51,7 @@ import {
 import { DeskFlightRow } from "@/components/board/desk-flight-row";
 import { DeskLandedRow } from "@/components/board/desk-landed-row";
 import { DeskLaterTray } from "@/components/board/desk-later-tray";
+import { DeskDecideMarkAllRead } from "@/components/board/desk-mark-all-read";
 import { BoardTaskCard } from "@/components/board/task-card";
 import { ResizeHandle } from "@/components/resize-handle";
 import { DensityIcon } from "@/components/ui/density-icon";
@@ -101,12 +102,15 @@ export function DeskZoneHeader({
   label,
   count,
   snoozedCount,
+  checkpoints,
 }: {
   zone: DeskZoneId;
   label: string;
   count: number;
   /** Decide only: how many checkpoints wait in Later. */
   snoozedCount?: number;
+  /** Decide only: the open checkpoints, for marking finished agents read in one go. */
+  checkpoints?: readonly DeskCheckpoint[];
 }): ReactElement {
   return (
     <View style={styles.zoneHeader} testID={`board-zone-header-${zone}`}>
@@ -115,6 +119,7 @@ export function DeskZoneHeader({
         {label}
       </Text>
       <Text style={styles.zoneCount}>{count}</Text>
+      {checkpoints ? <DeskDecideMarkAllRead checkpoints={checkpoints} /> : null}
       {snoozedCount !== undefined ? <LaterTarget count={snoozedCount} /> : null}
     </View>
   );
@@ -599,6 +604,7 @@ export function BoardWideZones({
                 label={deskZoneLabel(zone, t)}
                 count={countDeskZone(context.model, zone.id)}
                 snoozedCount={zone.id === "decide" ? context.model.snoozed.length : undefined}
+                checkpoints={zone.id === "decide" ? context.model.decide : undefined}
               />
               <ScrollView
                 style={styles.zoneScroll}

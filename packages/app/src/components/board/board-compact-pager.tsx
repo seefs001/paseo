@@ -130,6 +130,7 @@ export function BoardCompactPager({
                   label={deskZoneLabel(zone, t)}
                   count={countDeskZone(context.model, zone.id)}
                   snoozedCount={zone.id === "decide" ? context.model.snoozed.length : undefined}
+                  checkpoints={zone.id === "decide" ? context.model.decide : undefined}
                 />
                 <ScrollView
                   style={styles.pageScroll}
