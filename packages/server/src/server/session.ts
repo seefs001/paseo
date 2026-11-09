@@ -2392,6 +2392,8 @@ export class Session {
       if (!workspace) return "Workspace not found";
       return { ...msg, config: { ...msg.config, cwd: workspace.cwd } } as SessionInboundMessage;
     }
+    const catalogRequest = withoutSshCatalogCwd(msg);
+    if (catalogRequest) return catalogRequest;
     for (const value of collectRequestPaths(record)) {
       if (isSshLocalOnlyPath(value)) {
         return "This operation works on local directories and is not available for SSH workspaces.";
@@ -9595,6 +9597,22 @@ const AGENT_REF_KEYS = new Set([
   "targetAgentId",
 ]);
 const WORKSPACE_REF_KEYS = new Set(["workspaceIds", "parentWorkspaceId", "sourceWorkspaceId"]);
+
+const PROVIDER_CATALOG_CWD_REQUESTS = new Set([
+  "get_providers_snapshot_request",
+  "refresh_providers_snapshot_request",
+  "list_provider_models_request",
+  "list_provider_modes_request",
+]);
+
+// Provider catalogs are owner-side. An SSH directory key or session directory has no local
+// project config, so catalog reads for it use the global snapshot instead of being refused.
+function withoutSshCatalogCwd(msg: SessionInboundMessage): SessionInboundMessage | null {
+  if (!PROVIDER_CATALOG_CWD_REQUESTS.has(msg.type)) return null;
+  const cwd = (msg as { cwd?: unknown }).cwd;
+  if (typeof cwd !== "string" || !isSshLocalOnlyPath(cwd)) return null;
+  return { ...msg, cwd: undefined } as SessionInboundMessage;
+}
 
 function collectStringFields(
   message: Record<string, unknown>,

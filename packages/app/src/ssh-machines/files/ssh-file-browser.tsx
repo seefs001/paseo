@@ -6,6 +6,15 @@ import type { SshRemoteEntry, WorkspaceExecutionLocation } from "@getpaseo/proto
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { Button } from "@/components/ui/button";
 import { PressHighlight } from "@/components/ui/press-highlight";
+import { MaterialFileIcon } from "@/components/material-file-icon";
+import {
+  TreeChevron,
+  treeRowPaddingLeft,
+  workspaceTreeRowStyles,
+  WORKSPACE_TREE_ICON_LABEL_GAP,
+  WORKSPACE_TREE_ICON_SIZE,
+} from "@/components/tree-primitives";
+import { formatFileSize } from "@/utils/format-file-size";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { toErrorMessage } from "@/utils/error-messages";
@@ -192,6 +201,8 @@ function FilesView({
   );
 }
 
+// Rows match the local file explorer (Material icons, tree row geometry) so an SSH
+// workspace reads like a local one.
 function EntryRow({
   entry,
   onOpen,
@@ -203,15 +214,25 @@ function EntryRow({
   return (
     <PressHighlight
       onPress={handlePress}
-      style={styles.entry}
-      highlightStyle={styles.entryPressed}
+      style={[workspaceTreeRowStyles.row, styles.entry]}
+      highlightStyle={workspaceTreeRowStyles.active}
       accessibilityRole="button"
     >
-      <Text style={styles.entryKind}>{entry.kind === "directory" ? "▸" : " "}</Text>
-      <Text style={styles.entryName} numberOfLines={1}>
-        {entry.name}
-      </Text>
-      {entry.size === null ? null : <Text style={styles.entrySize}>{entry.size}</Text>}
+      <View style={styles.entryInfo}>
+        <View style={styles.entryIcon}>
+          {entry.kind === "directory" ? (
+            <TreeChevron expanded={false} />
+          ) : (
+            <MaterialFileIcon fileName={entry.name} size={WORKSPACE_TREE_ICON_SIZE} />
+          )}
+        </View>
+        <Text style={[styles.entryName, workspaceTreeRowStyles.name]} numberOfLines={1}>
+          {entry.name}
+        </Text>
+      </View>
+      {entry.size === null || entry.kind === "directory" ? null : (
+        <Text style={styles.entrySize}>{formatFileSize(entry.size)}</Text>
+      )}
     </PressHighlight>
   );
 }
@@ -294,24 +315,26 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: "40%",
   },
   entry: {
+    paddingLeft: treeRowPaddingLeft(0),
+  },
+  entryInfo: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[1],
+    gap: WORKSPACE_TREE_ICON_LABEL_GAP,
+    minWidth: 0,
   },
-  entryPressed: {
-    backgroundColor: theme.colors.surface2,
-  },
-  entryKind: {
-    width: 12,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+  entryIcon: {
+    width: WORKSPACE_TREE_ICON_SIZE,
+    height: WORKSPACE_TREE_ICON_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   entryName: {
     flex: 1,
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
   },
   entrySize: {
     color: theme.colors.foregroundMuted,
