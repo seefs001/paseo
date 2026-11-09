@@ -1,3 +1,4 @@
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type { UserComposerAttachment } from "@/attachments/types";
 import type { DraftAgentControlsProps } from "@/composer/agent-controls";
 import type { UseAgentFormStateResult } from "@/hooks/use-agent-form-state";
@@ -20,21 +21,29 @@ export function resolveDraftKey(input: {
 
 export function buildDraftAgentControls(input: {
   formState: UseAgentFormStateResult;
-  features?: DraftAgentControlsProps["features"];
-  onSetFeature?: DraftAgentControlsProps["onSetFeature"];
+  optionControls?: DraftAgentControlsProps["optionControls"];
+  options: DraftAgentControlsProps["options"];
+  onSetOption: DraftAgentControlsProps["onSetOption"];
   onApplyAgentProfile: DraftAgentControlsProps["onApplyAgentProfile"];
   selectedRoleId?: DraftAgentControlsProps["selectedRoleId"];
   onSelectRole?: DraftAgentControlsProps["onSelectRole"];
   onDropdownClose?: DraftAgentControlsProps["onDropdownClose"];
+  context: NonNullable<DraftAgentControlsProps["context"]>;
+  metadata: Record<string, JsonValue>;
+  onSetMetadata: (patch: Record<string, JsonValue>) => void;
 }): DraftAgentControlsProps {
   const {
     formState,
-    features,
-    onSetFeature,
+    optionControls,
+    options,
+    onSetOption,
     onApplyAgentProfile,
+    onDropdownClose,
+    context,
+    metadata,
+    onSetMetadata,
     selectedRoleId,
     onSelectRole,
-    onDropdownClose,
   } = input;
   return {
     providerDefinitions: formState.providerDefinitions,
@@ -54,8 +63,9 @@ export function buildDraftAgentControls(input: {
     onSelectThinkingOption: formState.setThinkingOptionFromUser,
     onApplyAgentProfile,
     ...(onSelectRole ? { selectedRoleId: selectedRoleId ?? null, onSelectRole } : {}),
-    features,
-    onSetFeature,
+    optionControls,
+    options,
+    onSetOption,
     onDropdownClose,
     onModelSelectorOpen: formState.refetchProviderModelsIfStale,
     onRetryModelProvider: formState.refreshProviderModels,
@@ -63,6 +73,9 @@ export function buildDraftAgentControls(input: {
     modelSelectorServerId: formState.selectedServerId,
     profileInitializationError: formState.profileInitializationError,
     onRetryProfileInitialization: formState.retryProfileInitialization,
+    context,
+    metadata,
+    onSetMetadata,
   };
 }
 

@@ -1,12 +1,12 @@
 /** @vitest-environment jsdom */
-import React, { act, useState } from "react";
+import React, { act, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDraftStore } from "@/stores/draft-store";
 import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
-import { useDraftAgentFeatures } from "@/hooks/use-draft-agent-features";
+import { useDraftProviderOptions } from "@/hooks/use-draft-provider-options";
 import { materializeAgentProfile } from "@/agent-profiles/internal/materialize-profile";
 import {
   encodeProfileReferences,
@@ -43,6 +43,8 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
   useAgentFormState: () => ({
     selectedServerId: "host-1",
     selectedProvider: "codex",
+    getSelectedProvider: () => "codex",
+    getSelectedModel: () => "",
     setProviderFromUser: () => undefined,
     selectedMode: "auto",
     setModeFromUser: () => undefined,
@@ -152,6 +154,7 @@ describe("useAgentInputDraft live contract", () => {
       drafts: {},
       createModalDraft: null,
       attachmentFocusRequestByDraftKey: {},
+      textReplacementRequestByDraftKey: {},
     });
   });
 
@@ -261,30 +264,30 @@ describe("useAgentInputDraft live contract", () => {
     "applies saved Pi Fast=$fastMode from $initialProvider without losing model isolation",
     async ({ initialProvider, fastMode }) => {
       const queryClient = new QueryClient();
-      const features = [{ id: "fast_mode", type: "toggle", label: "Fast", value: false }];
-      for (const provider of ["pi", initialProvider]) {
-        queryClient.setQueryData(
-          ["providerFeatures", "host-1", provider, "/repo", null, "openai/model-a", null],
-          features,
-        );
+      const optionControls = [{ key: "fast_mode", type: "toggle", label: "Fast" }];
+      function seedControls(provider: string, model: string) {
+        for (const value of [undefined, true, false]) {
+          const config = {
+            provider,
+            cwd: "/repo",
+            model,
+            ...(value === undefined ? {} : { providerOptions: { fast_mode: value } }),
+          };
+          queryClient.setQueryData(["providerControls", "host-1", config], {
+            controls: optionControls,
+            options: { fast_mode: value ?? false },
+          });
+        }
       }
-      const targetQueryKey = [
-        "providerFeatures",
-        "host-1",
-        "pi",
-        "/repo",
-        null,
-        "openai/model-b",
-        null,
-      ];
+      for (const provider of ["pi", initialProvider]) seedControls(provider, "openai/model-a");
       const profile = materializeAgentProfile({
         id: "pi-fast-profile",
         name: "Fast model B",
         provider: "pi",
         model: "openai/model-b",
-        featureValues: { fast_mode: fastMode },
+        options: { fast_mode: fastMode },
       });
-      let latest: ReturnType<typeof useDraftAgentFeatures> | null = null;
+      let latest: ReturnType<typeof useDraftProviderOptions> | null = null;
       let select: ((provider: string, modelId: string) => void) | null = null;
       function controls() {
         if (!latest) throw new Error("Expected draft feature controls");
@@ -299,10 +302,16 @@ describe("useAgentInputDraft live contract", () => {
           provider: initialProvider,
           modelId: "openai/model-a",
         });
-        select = (provider, modelId) => setSelection({ provider, modelId });
-        latest = useDraftAgentFeatures({
+        const selectionRef = useRef(selection);
+        select = (provider, modelId) => {
+          selectionRef.current = { provider, modelId };
+          setSelection({ provider, modelId });
+        };
+        latest = useDraftProviderOptions({
           serverId: "host-1",
           ...selection,
+          getProvider: () => selectionRef.current.provider,
+          getModelId: () => selectionRef.current.modelId,
           cwd: "/repo",
           modeId: null,
           thinkingOptionId: null,
@@ -322,38 +331,44 @@ describe("useAgentInputDraft live contract", () => {
         render();
       });
       await act(async () => {
-        controls().setFeatureValue("fast_mode", !fastMode);
+        controls().setOption("fast_mode", !fastMode);
       });
       await act(async () => {
         selectModel(profile.provider, profile.modelId);
-        controls().applyProfileFeatureValues(profile);
+        controls().applyProfile(profile);
       });
       // The target model's capabilities arrive after the profile selection.
       await act(async () => {
-        queryClient.setQueryData(targetQueryKey, features);
+        seedControls("pi", "openai/model-b");
         await new Promise<void>((resolve) => notifyManager.schedule(resolve));
       });
 
-      expect(controls().featureValues).toEqual({ fast_mode: fastMode });
-      expect(controls().features).toMatchObject([{ id: "fast_mode", value: fastMode }]);
+      expect(controls().options).toEqual({ fast_mode: fastMode });
+      expect(controls().optionControls).toMatchObject({
+        controls: [{ key: "fast_mode" }],
+        options: { fast_mode: fastMode },
+      });
 
       await act(async () => {
-        controls().setFeatureValue("fast_mode", !fastMode);
+        controls().setOption("fast_mode", !fastMode);
       });
       await act(async () => {
-        controls().applyProfileFeatureValues(profile);
+        controls().applyProfile(profile);
       });
-      expect(controls().featureValues).toEqual({ fast_mode: fastMode });
+      expect(controls().options).toEqual({ fast_mode: fastMode });
 
       await act(async () => {
         selectModel("pi", "openai/model-a");
       });
       const originalFast = initialProvider === "pi" ? !fastMode : false;
-      expect(controls().features).toMatchObject([{ id: "fast_mode", value: originalFast }]);
+      expect(controls().optionControls).toMatchObject({
+        controls: [{ key: "fast_mode" }],
+        options: { fast_mode: originalFast },
+      });
       await act(async () => {
         selectModel("pi", "openai/model-b");
       });
-      expect(controls().featureValues).toEqual({ fast_mode: fastMode });
+      expect(controls().options).toEqual({ fast_mode: fastMode });
 
       await act(async () => {
         root.unmount();
@@ -369,8 +384,11 @@ describe("useAgentInputDraft live contract", () => {
       await act(async () => {
         selectModel("pi", "openai/model-b");
       });
-      expect(controls().featureValues).toBeUndefined();
-      expect(controls().features).toMatchObject([{ id: "fast_mode", value: false }]);
+      expect(controls().options).toBeUndefined();
+      expect(controls().optionControls).toMatchObject({
+        controls: [{ key: "fast_mode" }],
+        options: { fast_mode: false },
+      });
     },
   );
 
@@ -725,6 +743,37 @@ describe("useAgentInputDraft live contract", () => {
         createWorkspaceFileAttachment({ path: "src/app.ts" }),
       ],
     });
+  });
+
+  it("shows text another module put in the draft while the input is retained off screen", async () => {
+    let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+    function getLatest(): ReturnType<typeof useAgentInputDraft> {
+      if (!latest) throw new Error("Expected hook result");
+      return latest;
+    }
+    function Probe() {
+      latest = useAgentInputDraft({ draftKey: "draft:replaced" });
+      return null;
+    }
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing root container");
+    const root = createTestRoot(container);
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <Probe />
+        </QueryClientProvider>,
+      );
+    });
+    const before = getLatest().textReplacement.key;
+
+    await act(async () => {
+      useDraftStore.getState().replaceDraftText({ draftKey: "draft:replaced", text: "from away" });
+    });
+
+    expect(getLatest().textReplacement).toMatchObject({ kind: "replace", text: "from away" });
+    expect(getLatest().textReplacement.key).not.toBe(before);
+    expect(getLatest().textSource.getSnapshot()).toBe("from away");
   });
 
   it("clear resets text and attachments", async () => {

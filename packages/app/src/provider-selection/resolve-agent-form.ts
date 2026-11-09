@@ -568,7 +568,7 @@ function completeResolution(
   const nextState = {
     ...state,
     resolution: { status: "completed" } as const,
-    initialFeatureValues: profile?.featureValues,
+    initialFeatureValues: profile?.options,
   };
   if (!hasFormStateChanged(state.form, resolved)) return nextState;
   return { ...nextState, form: resolved };

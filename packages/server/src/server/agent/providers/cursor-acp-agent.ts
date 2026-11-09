@@ -137,18 +137,19 @@ export function normalizeCursorSessionConfig(config: AgentSessionConfig): AgentS
     return config;
   }
   const thinkingFromParams = parsed.params.effort ?? parsed.params.reasoning;
-  const featureValues = { ...config.featureValues };
-  if (parsed.params.fast !== undefined && featureValues.fast === undefined) {
-    featureValues.fast = parsed.params.fast;
+  const providerOptions = { ...config.providerOptions };
+  if (parsed.params.fast !== undefined && providerOptions.fast === undefined) {
+    providerOptions.fast = parsed.params.fast;
   }
-  if (parsed.params.context !== undefined && featureValues.context === undefined) {
-    featureValues.context = parsed.params.context;
+  if (parsed.params.context !== undefined && providerOptions.context === undefined) {
+    providerOptions.context = parsed.params.context;
   }
   return {
     ...config,
     model: parsed.modelId,
     thinkingOptionId: config.thinkingOptionId ?? thinkingFromParams,
-    featureValues: Object.keys(featureValues).length > 0 ? featureValues : config.featureValues,
+    providerOptions:
+      Object.keys(providerOptions).length > 0 ? providerOptions : config.providerOptions,
   };
 }
 

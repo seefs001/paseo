@@ -147,6 +147,11 @@ export const ar: TranslationResources = {
     retryHint:
       "إذا انتهت مهلة الرفع أو انقطع الاتصال، تحقّق من 'gh gist list' على المضيف قبل إعادة المحاولة.",
   },
+  pluginCombobox: {
+    searching: "جارٍ البحث…",
+    empty: "لا توجد نتائج",
+    failed: "فشل البحث: {{message}}",
+  },
   paneFind: {
     connectionFailure: "تعذر البحث في هذه المحادثة. تحقق من الاتصال بالمضيف وأعد المحاولة.",
     historyChangedFailure: "تغيّرت المحادثة أثناء البحث. أعد البحث.",

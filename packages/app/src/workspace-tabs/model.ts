@@ -10,7 +10,7 @@ export interface WorkspaceDraftTabSetup {
   modeId: string | null;
   model: string | null;
   thinkingOptionId: string | null;
-  featureValues: Record<string, unknown>;
+  providerOptions: Record<string, unknown>;
   /** An Agent role the draft starts with. */
   roleId?: string;
 }

@@ -152,6 +152,11 @@ export const ko: TranslationResources = {
     retryHint:
       "업로드 시간이 초과되거나 연결이 끊겼다면 다시 시도하기 전에 호스트에서 gh gist list를 확인하세요.",
   },
+  pluginCombobox: {
+    searching: "검색 중…",
+    empty: "결과 없음",
+    failed: "검색 실패: {{message}}",
+  },
   paneFind: {
     connectionFailure: "이 채팅을 검색할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
     historyChangedFailure: "검색 중에 채팅이 변경되었습니다. 다시 검색하세요.",

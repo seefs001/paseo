@@ -102,7 +102,7 @@ export function normalizeWorkspaceDraftTabSetup(
     thinkingOptionId: trimOptionalString(
       typeof record.thinkingOptionId === "string" ? record.thinkingOptionId : null,
     ),
-    featureValues: isPlainRecord(record.featureValues) ? { ...record.featureValues } : {},
+    providerOptions: isPlainRecord(record.providerOptions) ? { ...record.providerOptions } : {},
     ...(typeof record.roleId === "string" && record.roleId ? { roleId: record.roleId } : {}),
   };
 }
@@ -186,7 +186,7 @@ function workspaceDraftTabSetupsEqual(
     left.thinkingOptionId === right.thinkingOptionId &&
     left.roleId === right.roleId &&
     equal(left.metadata, right.metadata) &&
-    recordsShallowEqual(left.featureValues, right.featureValues)
+    recordsShallowEqual(left.providerOptions, right.providerOptions)
   );
 }
 

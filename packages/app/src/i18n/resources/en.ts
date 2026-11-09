@@ -149,6 +149,11 @@ export const en = {
     retryHint:
       "If the upload timed out or the connection was lost, check 'gh gist list' on the host before retrying.",
   },
+  pluginCombobox: {
+    searching: "Searching…",
+    empty: "No results",
+    failed: "Search failed: {{message}}",
+  },
   paneFind: {
     connectionFailure: "Could not search this chat. Check the host connection and retry.",
     historyChangedFailure: "The chat changed while searching. Search again.",

@@ -284,7 +284,7 @@ describe("mergeSelectedComposerPreferences", () => {
             codex: {
               mode: "full-access",
               thinkingByModel: { "gpt-5.4-mini": "medium" },
-              featureValues: { fast_mode: true },
+              options: { fast_mode: true },
             },
             claude: { model: "claude-sonnet-4-6" },
           },
@@ -299,7 +299,7 @@ describe("mergeSelectedComposerPreferences", () => {
           model: "gpt-5.4",
           mode: "full-access",
           thinkingByModel: { "gpt-5.4-mini": "medium" },
-          featureValues: { fast_mode: true },
+          options: { fast_mode: true },
         },
         claude: { model: "claude-sonnet-4-6" },
       },
@@ -1266,7 +1266,7 @@ describe("remembered profile initialization", () => {
     modelId: "gpt-5.3-codex",
     modeId: "auto",
     thinkingOptionId: "xhigh",
-    featureValues: { fast_mode: true, plan_mode: false, service_tier: "priority" },
+    options: { fast_mode: true, plan_mode: false, service_tier: "priority" },
   };
 
   it("waits for the latest complete profile before resolving the draft", () => {
@@ -1285,7 +1285,7 @@ describe("remembered profile initialization", () => {
       modeId: "auto",
       thinkingOptionId: "xhigh",
     });
-    expect(ready.initialFeatureValues).toEqual(profile.featureValues);
+    expect(ready.initialFeatureValues).toEqual(profile.options);
     expect(ready.resolution.status).toBe("completed");
   });
 
@@ -1301,7 +1301,7 @@ describe("remembered profile initialization", () => {
       profileInitialization: { status: "resolved", profile },
     });
     expect(retried.resolution.status).toBe("completed");
-    expect(retried.initialFeatureValues).toEqual(profile.featureValues);
+    expect(retried.initialFeatureValues).toEqual(profile.options);
   });
 
   it("waits for the profile's provider models before choosing a default model", () => {
@@ -1314,7 +1314,7 @@ describe("remembered profile initialization", () => {
     expect(pending.resolution.status).toBe("pending");
     const ready = resolveAgentForm(pending, { ...inputs, profileInitialization: initialization });
     expect(ready.form.model).toBe("gpt-5.3-codex");
-    expect(ready.initialFeatureValues).toEqual(profile.featureValues);
+    expect(ready.initialFeatureValues).toEqual(profile.options);
   });
 
   it("does not replace an open draft when its profile is edited", () => {
@@ -1322,7 +1322,7 @@ describe("remembered profile initialization", () => {
       ...inputs,
       profileInitialization: { status: "resolved", profile },
     });
-    const edited = { ...profile, thinkingOptionId: "low", featureValues: { fast_mode: false } };
+    const edited = { ...profile, thinkingOptionId: "low", options: { fast_mode: false } };
     const next = {
       ...inputs,
       profileInitialization: { status: "resolved" as const, profile: edited },
@@ -1378,7 +1378,7 @@ describe("remembered profile initialization", () => {
       ...inputs,
       profileInitialization: {
         status: "resolved",
-        profile: { ...profile, modeId: "", thinkingOptionId: "", featureValues: {} },
+        profile: { ...profile, modeId: "", thinkingOptionId: "", options: {} },
       },
     });
     expect(ready.form.modeId).toBe("auto");

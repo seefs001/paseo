@@ -183,6 +183,13 @@
                 },
                 "additionalProperties": {}
               },
+              "options": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
               "notes": {
                 "type": "string"
               }

@@ -11,7 +11,8 @@ import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation
 import {
   type AgentCapabilityFlags,
   type AgentClient,
-  type AgentFeature,
+  type AgentDraftControls,
+  type AgentOptionControl,
   type AgentLaunchContext,
   type AgentMetadata,
   type AgentMode,
@@ -44,7 +45,7 @@ import {
   type ProviderRefreshContext,
 } from "../../agent-sdk-types.js";
 import { importSessionFromPersistence } from "../../provider-session-import.js";
-import { ToolPolicyUnsupportedError } from "../../provider-options.js";
+import { assertChangesAreLive, ToolPolicyUnsupportedError } from "../../provider-options.js";
 import { runProviderRefreshActivity } from "../../provider-refresh-deadline.js";
 import { runProviderTurn } from "../provider-runner.js";
 import {
@@ -138,6 +139,8 @@ const QUESTION_RESPONSE_HEADER = "Response";
 export const PiProviderOptionsSchema = z
   .object({
     sessionDir: z.string().min(1).optional(),
+    fast_mode: z.boolean().optional(),
+    fast_mode_by_model: z.record(z.string(), z.boolean()).optional(),
     rpcTimeoutMs: z.number().int().positive().default(DEFAULT_PI_RPC_TIMEOUT_MS),
     extensionTimeoutMs: z.number().int().positive().default(DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS),
   })
@@ -264,12 +267,12 @@ function bindPiFastMode(
   config: AgentSessionConfig,
   model: { provider?: string; id?: string } | null | undefined,
 ): void {
-  const values = config.featureValues;
+  const values = config.providerOptions;
   if (!values || values.fast_mode !== true) return;
   if (Object.keys(readPiFastModeByModel(values)).length > 0) return;
   const key = piFastModelKey(model);
   if (!key) return;
-  config.featureValues = {
+  config.providerOptions = {
     ...values,
     [PI_FAST_MODE_BY_MODEL]: { [key]: true },
   };
@@ -279,12 +282,12 @@ function syncPiFastModeFlag(
   config: AgentSessionConfig,
   model: { provider?: string; id?: string } | null | undefined,
 ): void {
-  const values = config.featureValues;
+  const values = config.providerOptions;
   if (!values) return;
   if (Object.keys(readPiFastModeByModel(values)).length === 0) return;
   const enabled = piFastModeEnabled(values, model);
   if (values.fast_mode === enabled) return;
-  config.featureValues = { ...values, fast_mode: enabled };
+  config.providerOptions = { ...values, fast_mode: enabled };
 }
 
 function writePiFastMode(
@@ -294,10 +297,10 @@ function writePiFastMode(
 ): void {
   const key = piFastModelKey(model);
   if (!key) return;
-  const map = readPiFastModeByModel(config.featureValues);
+  const map = readPiFastModeByModel(config.providerOptions);
   map[key] = enabled;
-  config.featureValues = {
-    ...config.featureValues,
+  config.providerOptions = {
+    ...config.providerOptions,
     fast_mode: enabled,
     [PI_FAST_MODE_BY_MODEL]: map,
   };
@@ -307,28 +310,27 @@ function piExtensionFastMode(config: AgentSessionConfig): {
   fastModeByModel: Record<string, boolean>;
   legacyUnscopedFast: boolean | null;
 } {
-  const map = readPiFastModeByModel(config.featureValues);
+  const map = readPiFastModeByModel(config.providerOptions);
   if (Object.keys(map).length > 0) {
     return { fastModeByModel: map, legacyUnscopedFast: null };
   }
   return {
     fastModeByModel: {},
-    legacyUnscopedFast: config.featureValues?.fast_mode === true ? true : null,
+    legacyUnscopedFast: config.providerOptions?.fast_mode === true ? true : null,
   };
 }
 
-function buildPiFeatures(state: PiSessionState, config: AgentSessionConfig): AgentFeature[] {
+function buildPiControls(state: PiSessionState): AgentOptionControl[] {
   if (!PI_FAST_MODE_APIS.includes(state.model?.api ?? "")) return [];
   return [
     {
       type: "toggle",
-      id: "fast_mode",
+      key: "fast_mode",
       label: "Fast",
       description:
         "Request priority processing. Availability and extra usage depend on the provider.",
       tooltip: "Toggle priority processing",
       icon: "zap",
-      value: piFastModeEnabled(config.featureValues, state.model),
     },
   ];
 }
@@ -1632,6 +1634,8 @@ export class PiRpcAgentSession implements AgentSession {
     };
   }
 
+  readonly openOptionsPatch: Record<string, unknown>;
+
   constructor(options: PiRpcAgentSessionOptions) {
     this.runtimeSession = options.runtimeSession;
     this.shareGh = options.shareGh;
@@ -1640,6 +1644,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.config.thinkingOptionId = this.state.thinkingLevel;
     bindPiFastMode(this.config, this.state.model);
     syncPiFastModeFlag(this.config, this.state.model);
+    this.openOptionsPatch = this.fastModeOptions();
     this.capabilities = options.capabilities;
     this.provider = PI_PROVIDER;
     this.currentModeId = options.currentModeId ?? null;
@@ -2115,21 +2120,35 @@ export class PiRpcAgentSession implements AgentSession {
     this.config.model = `${model.provider}/${model.id}`;
     bindPiFastMode(this.config, this.state.model);
     syncPiFastModeFlag(this.config, this.state.model);
+    this.emit({ type: "options_changed", provider: this.provider, patch: this.fastModeOptions() });
     return { model: modelToId(this.state.model) };
   }
 
-  get features(): AgentFeature[] {
-    return buildPiFeatures(this.state, this.config);
+  get controls(): AgentOptionControl[] {
+    return buildPiControls(this.state);
   }
 
-  get featureValues(): Readonly<Record<string, unknown>> {
-    return this.config.featureValues ?? {};
+  private fastModeOptions(): Record<string, unknown> {
+    return {
+      fast_mode: piFastModeEnabled(this.config.providerOptions, this.state.model),
+      fast_mode_by_model: readPiFastModeByModel(this.config.providerOptions),
+    };
   }
 
-  async setFeature(featureId: string, value: unknown): Promise<void> {
-    if (featureId !== "fast_mode") {
-      throw new PiFeatureError(featureId, `Unknown Pi feature: ${featureId}`);
-    }
+  async applyOptions(options: Record<string, unknown>): Promise<Record<string, unknown>> {
+    assertChangesAreLive({
+      provider: this.provider,
+      patch: options,
+      current: this.config.providerOptions,
+      live: ["fast_mode"],
+    });
+    if (!("fast_mode" in options)) return {};
+    await this.setFastMode(options.fast_mode === null ? false : options.fast_mode);
+    return this.fastModeOptions();
+  }
+
+  private async setFastMode(value: unknown): Promise<void> {
+    const featureId = "fast_mode";
     if (typeof value !== "boolean") {
       throw new PiFeatureError(featureId, "Pi fast mode requires a boolean");
     }
@@ -3414,7 +3433,7 @@ export class PiRpcAgentClient implements AgentClient {
     }
   }
 
-  async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
+  async listControls(config: AgentSessionConfig): Promise<AgentDraftControls> {
     const options = PiProviderOptionsSchema.parse(config.providerOptions ?? {});
     // Resolve the selected model's actual API, including custom Pi providers, without saving a session.
     // Feature listing never runs tools. In an SSH session directory it starts no MCP servers
@@ -3426,7 +3445,10 @@ export class PiRpcAgentClient implements AgentClient {
       ...(isSshSessionDirectory(config.cwd) ? { extraArgs: ["--no-mcp", "--no-extensions"] } : {}),
     });
     try {
-      return buildPiFeatures(await session.getState(), config);
+      const state = await session.getState();
+      bindPiFastMode(config, state.model);
+      syncPiFastModeFlag(config, state.model);
+      return { controls: buildPiControls(state), options: config.providerOptions ?? {} };
     } finally {
       await session.close();
     }

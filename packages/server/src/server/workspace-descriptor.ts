@@ -123,6 +123,7 @@ async function describeLocalWorkspaceRecord(
     title: workspace.title,
     pinnedAt: workspace.pinnedAt,
     residentAt: workspace.residentAt,
+    metadata: workspace.metadata,
     ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
     background: workspace.background,
     parentWorkspaceId: workspace.parentWorkspaceId,
@@ -163,6 +164,7 @@ export async function describeCreatedWorktreeWorkspace(
     title: result.workspace.title,
     pinnedAt: result.workspace.pinnedAt,
     residentAt: result.workspace.residentAt,
+    metadata: result.workspace.metadata,
     ...(result.workspace.labels && result.workspace.labels.length > 0
       ? { labels: result.workspace.labels }
       : {}),
@@ -214,6 +216,7 @@ async function describeSshWorkspaceRecord(
     title: workspace.title,
     pinnedAt: workspace.pinnedAt,
     residentAt: workspace.residentAt,
+    metadata: workspace.metadata,
     ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
     background: workspace.background,
     executionLocation: location,

@@ -1394,7 +1394,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
         }),
         selectedMode: profile.modeId,
         selectedThinkingOptionId: profile.thinkingOptionId,
-        featureValues: profile.featureValues,
+        featureValues: profile.options,
       });
     },
     setThinking(thinkingOptionId) {

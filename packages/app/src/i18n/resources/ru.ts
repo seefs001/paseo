@@ -153,6 +153,11 @@ export const ru: TranslationResources = {
     retryHint:
       "При тайм-ауте загрузки или потере соединения проверьте 'gh gist list' на хосте перед повторной попыткой.",
   },
+  pluginCombobox: {
+    searching: "Поиск…",
+    empty: "Нет результатов",
+    failed: "Не удалось выполнить поиск: {{message}}",
+  },
   paneFind: {
     connectionFailure:
       "Не удалось выполнить поиск в чате. Проверьте подключение к хосту и повторите попытку.",

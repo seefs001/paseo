@@ -1,4 +1,5 @@
-import { useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+import type { ComposerTextSource } from "@/composer/text-source";
 import { View, Text } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
@@ -38,17 +39,26 @@ function FailedSubmission({
 export function FailedSubmissions({
   draft,
   disabled,
+  textSource,
   onRestored,
 }: {
   draft: AgentInputDraftSubmission;
   disabled: boolean;
+  textSource: ComposerTextSource;
   onRestored: () => void;
 }) {
   const { t } = useTranslation();
+  const getHasText = useCallback(() => textSource.getSnapshot().trim().length > 0, [textSource]);
+  const hasText = useSyncExternalStore(textSource.subscribe, getHasText, getHasText);
+  const restoreDisabled = disabled || hasText;
   return (
     <View style={styles.container}>
       <Text style={styles.hint}>
-        {t(disabled ? "composer.failedSubmission.waitForEmpty" : "composer.failedSubmission.saved")}
+        {t(
+          restoreDisabled
+            ? "composer.failedSubmission.waitForEmpty"
+            : "composer.failedSubmission.saved",
+        )}
       </Text>
       {Object.entries(draft.failures ?? {}).map(([id, input]) => (
         <FailedSubmission
@@ -56,7 +66,7 @@ export function FailedSubmissions({
           id={id}
           input={input}
           draft={draft}
-          disabled={disabled}
+          disabled={restoreDisabled}
           onRestored={onRestored}
         />
       ))}

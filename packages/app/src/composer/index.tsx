@@ -142,6 +142,7 @@ import {
 } from "@/attachments/service";
 import { resolveAgentControlsMode } from "@/composer/agent-controls/mode";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
+import { useIsInputLive } from "./input/use-input-live";
 import { resolveActiveSendBehavior } from "./input/state";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
@@ -184,6 +185,8 @@ import type { RoleReferenceSelection } from "@/composer/profile-reference/use-ro
 import type { SessionReferenceSelection } from "@/hooks/use-agent-autocomplete";
 import { useReferencePreview } from "@/composer/profile-reference/preview";
 import { AgentMentionDetailSheet } from "@/attachments/agent-mention-detail-sheet";
+import { ComposerInputProvider, type ComposerInput } from "@/composer/session";
+import { insertAtSelection } from "@/composer/insert-text";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useWorkspaceAttachmentsForScopes } from "@/attachments/workspace-attachments-store";
 import { droppedItemsToSelectedFiles } from "@/composer/attachments/drop";
@@ -1274,21 +1277,14 @@ interface ComposerVoiceModeButtonProps {
   t: TFunction;
 }
 
-function showsVoiceModeButton(input: {
+/** Whether voice mode can take the trailing disc; MessageInput decides when it does. */
+function offersVoiceMode(input: {
   isVoiceModeForAgent: boolean;
   hasAgent: boolean;
   isAgentRunning: boolean;
-  hasSendableContent: boolean;
   showVoice: boolean;
 }): boolean {
-  // Voice mode holds the trailing disc until there is something to send, then Send takes it.
-  return (
-    input.showVoice &&
-    !input.isVoiceModeForAgent &&
-    input.hasAgent &&
-    !input.isAgentRunning &&
-    !input.hasSendableContent
-  );
+  return input.showVoice && !input.isVoiceModeForAgent && input.hasAgent && !input.isAgentRunning;
 }
 
 function ComposerVoiceModeButton({
@@ -1452,11 +1448,6 @@ function ComposerContentImpl({
   const { finePointer: hasFinePointer } = usePointerCapabilities();
   const isDesktopLayout = resolveIsDesktopWebBreakpoint(isCompactLayout);
   const messagePlaceholder = resolveMessagePlaceholder(inputMode, isDesktopLayout, t, placeholder);
-  const hasText = useSyncExternalStore(
-    textSource.subscribe,
-    () => textSource.getSnapshot().trim().length > 0,
-    () => textSource.getSnapshot().trim().length > 0,
-  );
   const setUserInput = onChangeText;
   const workspaceAttachments = useWorkspaceAttachmentsForScopes(attachmentScopeKeys);
   const {
@@ -1602,6 +1593,43 @@ function ComposerContentImpl({
       resetSuppression,
       shareModel,
       t,
+    ],
+  );
+
+  const insertUserInput = useCallback(
+    (text: string) => {
+      const input = messageInputRef.current;
+      if (!input) {
+        onChangeText(textSource.getSnapshot() + text);
+        return;
+      }
+      const inserted = insertAtSelection(input.getInputSnapshot(), text);
+      input.replaceText(inserted.text, inserted.selection);
+    },
+    [onChangeText, textSource],
+  );
+  const isInputLive = useIsInputLive(messageInputRef);
+  const isComposerLockedRef = useRef(isComposerLocked);
+  isComposerLockedRef.current = isComposerLocked;
+  const composerInput = useMemo<ComposerInput>(
+    () => ({
+      locked: isComposerLocked,
+      isLocked: () => isComposerLockedRef.current,
+      isLive: isInputLive,
+      textSource,
+      setText: replaceUserInput,
+      insertText: insertUserInput,
+      attachments,
+      changeAttachments: setSelectedAttachments,
+    }),
+    [
+      attachments,
+      insertUserInput,
+      isComposerLocked,
+      isInputLive,
+      replaceUserInput,
+      setSelectedAttachments,
+      textSource,
     ],
   );
 
@@ -2382,8 +2410,6 @@ function ComposerContentImpl({
     ],
   );
 
-  const hasSendableContent = hasText || selectedAttachments.length > 0;
-
   // An open autocomplete owns the arrows; otherwise they may recall sent messages.
   const handleCommandKeyPress = useCallback(
     (event: ComposerKeyPressEvent) => {
@@ -2438,11 +2464,10 @@ function ComposerContentImpl({
 
   const voiceModeContent = useMemo(
     () =>
-      showsVoiceModeButton({
+      offersVoiceMode({
         isVoiceModeForAgent,
         hasAgent,
         isAgentRunning,
-        hasSendableContent,
         showVoice: mode.showVoice,
       }) ? (
         <View style={styles.rightControls}>
@@ -2461,7 +2486,6 @@ function ComposerContentImpl({
       toolbarGlyph,
       handleToggleRealtimeVoice,
       hasAgent,
-      hasSendableContent,
       isAgentRunning,
       isConnected,
       isVoiceModeForAgent,
@@ -2616,18 +2640,27 @@ function ComposerContentImpl({
     [attachments, setSelectedAttachments, setGithubSearchQuery, setIsGithubPickerOpen],
   );
 
-  const leftContent = useMemo(
-    () =>
-      renderLeftContent({
-        agentControls,
-        agentId,
-        serverId,
-        focusInput,
-        isCompactLayout,
-        showAgentControls: mode.showAgentControls,
-      }),
-    [agentControls, agentId, focusInput, isCompactLayout, mode.showAgentControls, serverId],
-  );
+  const leftContent = useMemo(() => {
+    const controls = renderLeftContent({
+      agentControls,
+      agentId,
+      serverId,
+      focusInput,
+      isCompactLayout,
+      showAgentControls: mode.showAgentControls,
+    });
+    return controls ? (
+      <ComposerInputProvider value={composerInput}>{controls}</ComposerInputProvider>
+    ) : null;
+  }, [
+    agentControls,
+    agentId,
+    composerInput,
+    focusInput,
+    isCompactLayout,
+    mode.showAgentControls,
+    serverId,
+  ]);
 
   const handleAttachButtonRef = useCallback((node: View | null) => {
     attachButtonRef.current = node;
@@ -2863,13 +2896,8 @@ function ComposerContentImpl({
         {hasFailedDrafts ? (
           <FailedSubmissions
             draft={submissionDraft}
-            disabled={
-              hasText ||
-              attachments.length > 0 ||
-              isProcessing ||
-              isSubmitLoading ||
-              isUploadingFile
-            }
+            textSource={textSource}
+            disabled={attachments.length > 0 || isProcessing || isSubmitLoading || isUploadingFile}
             onRestored={focusMessageInput}
           />
         ) : null}
@@ -2879,7 +2907,7 @@ function ComposerContentImpl({
     sendError,
     submissionDraft,
     focusMessageInput,
-    hasText,
+    textSource,
     attachments.length,
     isProcessing,
     isSubmitLoading,

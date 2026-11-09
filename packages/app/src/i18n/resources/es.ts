@@ -154,6 +154,11 @@ export const es: TranslationResources = {
     retryHint:
       "Si la subida agotó el tiempo de espera o se perdió la conexión, revisa 'gh gist list' en el host antes de reintentar.",
   },
+  pluginCombobox: {
+    searching: "Buscando…",
+    empty: "Sin resultados",
+    failed: "La búsqueda falló: {{message}}",
+  },
   paneFind: {
     connectionFailure:
       "No se pudo buscar en este chat. Comprueba la conexión con el host y vuelve a intentarlo.",

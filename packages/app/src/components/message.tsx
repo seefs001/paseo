@@ -2044,6 +2044,24 @@ function buildShimmerTextStyle(input: {
   });
 }
 
+const BADGE_HEADER_STYLE = { display: "flex", flexDirection: "column" } as const;
+const EXPANDED_BADGE_HEADER_STYLE = {
+  ...BADGE_HEADER_STYLE,
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+} as const;
+
+interface ExpandableBadgeHeaderProps {
+  expanded: boolean;
+  children: ReactNode;
+}
+
+function ExpandableBadgeHeader({ expanded, children }: ExpandableBadgeHeaderProps) {
+  if (!isWeb) return children;
+  return <div style={expanded ? EXPANDED_BADGE_HEADER_STYLE : BADGE_HEADER_STYLE}>{children}</div>;
+}
+
 export const ExpandableBadge = memo(function ExpandableBadge({
   label,
   style,
@@ -2316,6 +2334,44 @@ export const ExpandableBadge = memo(function ExpandableBadge({
       }
     : {};
 
+  const header = (
+    <Pressable
+      {...pressHandlers}
+      disabled={!isInteractive}
+      accessibilityState={accessibilityState}
+      style={pressableStyle}
+    >
+      <View style={expandableBadgeStylesheet.headerRow}>
+        <View style={expandableBadgeStylesheet.iconBadge}>{iconSlotNode}</View>
+        <ExpandableBadgeLabelRow
+          label={label}
+          labelStyle={labelStyle}
+          secondaryLabel={secondaryLabel}
+          secondaryLabelStyle={secondaryLabelStyle}
+          shouldMeasureWebShimmer={shouldMeasureWebShimmer}
+          shouldMeasureNativeShimmer={shouldMeasureNativeShimmer}
+          isWebShimmer={isWebShimmer}
+          isNativeShimmer={isNativeShimmer}
+          shimmerLabelTextStyle={shimmerLabelTextStyle}
+          shimmerSecondaryTextStyle={shimmerSecondaryTextStyle}
+          labelRowWidth={labelRowWidth}
+          labelRowHeight={labelRowHeight}
+          nativeShimmerPeakWidth={nativeShimmerPeakWidth}
+          shimmerDuration={shimmerDuration}
+          nativeGradientId={nativeGradientIdRef.current}
+          onLabelRowLayout={handleLabelRowLayout}
+          onLabelLayout={handleLabelLayout}
+          onSecondaryLayout={handleSecondaryLayout}
+          showOpenFileButton={Boolean(onOpenFile && isHovered)}
+          isOpenFileHovered={isOpenFileHovered}
+          onOpenFilePress={handleOpenFilePress}
+          onOpenFileHoverIn={handleOpenFileHoverIn}
+          onOpenFileHoverOut={handleOpenFileHoverOut}
+        />
+      </View>
+    </Pressable>
+  );
+
   return (
     <View
       style={containerStyle}
@@ -2323,41 +2379,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
       onPointerEnter={isWeb ? handleHoverIn : undefined}
       onPointerLeave={isWeb ? handleHoverOut : undefined}
     >
-      <Pressable
-        {...pressHandlers}
-        disabled={!isInteractive}
-        accessibilityState={accessibilityState}
-        style={pressableStyle}
-      >
-        <View style={expandableBadgeStylesheet.headerRow}>
-          <View style={expandableBadgeStylesheet.iconBadge}>{iconSlotNode}</View>
-          <ExpandableBadgeLabelRow
-            label={label}
-            labelStyle={labelStyle}
-            secondaryLabel={secondaryLabel}
-            secondaryLabelStyle={secondaryLabelStyle}
-            shouldMeasureWebShimmer={shouldMeasureWebShimmer}
-            shouldMeasureNativeShimmer={shouldMeasureNativeShimmer}
-            isWebShimmer={isWebShimmer}
-            isNativeShimmer={isNativeShimmer}
-            shimmerLabelTextStyle={shimmerLabelTextStyle}
-            shimmerSecondaryTextStyle={shimmerSecondaryTextStyle}
-            labelRowWidth={labelRowWidth}
-            labelRowHeight={labelRowHeight}
-            nativeShimmerPeakWidth={nativeShimmerPeakWidth}
-            shimmerDuration={shimmerDuration}
-            nativeGradientId={nativeGradientIdRef.current}
-            onLabelRowLayout={handleLabelRowLayout}
-            onLabelLayout={handleLabelLayout}
-            onSecondaryLayout={handleSecondaryLayout}
-            showOpenFileButton={Boolean(onOpenFile && isHovered)}
-            isOpenFileHovered={isOpenFileHovered}
-            onOpenFilePress={handleOpenFilePress}
-            onOpenFileHoverIn={handleOpenFileHoverIn}
-            onOpenFileHoverOut={handleOpenFileHoverOut}
-          />
-        </View>
-      </Pressable>
+      <ExpandableBadgeHeader expanded={isExpanded}>{header}</ExpandableBadgeHeader>
       {detailContent ? (
         <View
           ref={detailWrapperRef}

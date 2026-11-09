@@ -139,6 +139,11 @@ export const zhCN: TranslationResources = {
     copyFailed: "无法复制分享链接",
     retryHint: "若上传超时或连接中断，请先在主机上检查 gh gist list，再决定是否重试。",
   },
+  pluginCombobox: {
+    searching: "搜索中…",
+    empty: "无结果",
+    failed: "搜索失败：{{message}}",
+  },
   paneFind: {
     connectionFailure: "无法搜索此聊天。请检查主机连接后重试。",
     historyChangedFailure: "搜索期间聊天已更改。请重新搜索。",

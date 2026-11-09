@@ -5,6 +5,7 @@ import {
   HostsUpdateRequestSchema,
   HostsRemoveRequestSchema,
   HostsLinkOpenRequestSchema,
+  HostsLinkAckSchema,
   HostsRouteOpenRequestSchema,
   HostsRouteFrameRequestSchema,
   HostsRouteCloseRequestSchema,
@@ -374,6 +375,9 @@ import type {
 // unknown avoids zod-aot's recursive z.json() object-codegen regression.
 const JsonWireValueSchema = z.unknown() as z.ZodType<JsonValue>;
 
+/** Plugin-owned data on an agent or workspace. Paseo stores it and never reads a key. */
+const EntityMetadataSchema = z.record(z.string(), JsonWireValueSchema);
+
 export const AgentStatusSchema = z.enum(AGENT_LIFECYCLE_STATUSES);
 
 const AgentModeSchema: z.ZodType<AgentMode> = z.object({
@@ -430,6 +434,39 @@ export const AgentFeatureSelectSchema = z.object({
 export const AgentFeatureSchema = z.discriminatedUnion("type", [
   AgentFeatureToggleSchema,
   AgentFeatureSelectSchema,
+]);
+
+export const AgentOptionChoiceSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+});
+
+export const AgentOptionToggleControlSchema = z.object({
+  type: z.literal("toggle"),
+  key: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  tooltip: z.string().optional(),
+  icon: z.string().optional(),
+  defaultValue: z.boolean().optional(),
+});
+
+export const AgentOptionSelectControlSchema = z.object({
+  type: z.literal("select"),
+  key: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  tooltip: z.string().optional(),
+  icon: z.string().optional(),
+  desktopTrigger: z.enum(["icon", "label"]).optional(),
+  defaultValue: z.string().optional(),
+  choices: z.array(AgentOptionChoiceSchema),
+});
+
+export const AgentOptionControlSchema = z.discriminatedUnion("type", [
+  AgentOptionToggleControlSchema,
+  AgentOptionSelectControlSchema,
 ]);
 
 const AgentModelDefinitionSchema = z.object({
@@ -585,6 +622,7 @@ const AgentSessionConfigSchema = z.object({
   modeId: z.string().optional(),
   model: z.string().optional(),
   thinkingOptionId: z.string().optional(),
+  // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01. Folded into providerOptions.
   featureValues: z.record(z.string(), z.unknown()).optional(),
   title: z.string().trim().min(1).max(MAX_EXPLICIT_AGENT_TITLE_CHARS).optional().nullable(),
   providerOptions: ProviderOptionsSchema.optional(),
@@ -977,13 +1015,16 @@ const AgentActiveTurnPayloadSchema = z.object({
 });
 
 export const AgentSnapshotPayloadSchema = z.object({
-  metadata: AgentMetadataSchema.optional(),
   id: z.string(),
   provider: AgentProviderSchema,
   cwd: z.string(),
   workspaceId: z.string().optional(),
   model: z.string().nullable(),
+  // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01. Built from controls + options.
   features: z.array(AgentFeatureSchema).optional(),
+  /** Effective provider options: `config.json` defaults deep-merged with the agent's own. */
+  options: ProviderOptionsSchema.optional(),
+  controls: z.array(AgentOptionControlSchema).optional(),
   thinkingOptionId: z.string().nullable().optional(),
   effectiveThinkingOptionId: z.string().nullable().optional(),
   createdAt: z.string(),
@@ -1002,6 +1043,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   lastError: z.string().optional(),
   title: z.string().nullable(),
   labels: z.record(z.string(), z.string()).default({}),
+  metadata: EntityMetadataSchema.optional(),
   requiresAttention: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
   attentionTimestamp: z.string().nullable().optional(),
@@ -1151,6 +1193,22 @@ export const WorkspaceTitleSetRequestSchema = z.object({
   workspaceId: z.string(),
   // Null or empty string clears the title and reverts to the derived name.
   title: z.string().nullable(),
+  requestId: z.string(),
+});
+
+export const AgentMetadataUpdateRequestSchema = z.object({
+  type: z.literal("agent.metadata.update.request"),
+  agentId: z.string(),
+  // Top-level keys replace; null removes the key.
+  patch: EntityMetadataSchema,
+  requestId: z.string(),
+});
+
+export const WorkspaceMetadataUpdateRequestSchema = z.object({
+  type: z.literal("workspace.metadata.update.request"),
+  workspaceId: z.string(),
+  // Top-level keys replace; null removes the key.
+  patch: EntityMetadataSchema,
   requestId: z.string(),
 });
 
@@ -2337,6 +2395,7 @@ export const CreateAgentRequestMessageSchema = z.object({
   // Omitted on agent-scoped creation, the caller agent's own value applies.
   background: z.boolean().optional(),
   labels: z.record(z.string(), z.string()).default({}),
+  metadata: EntityMetadataSchema.optional(),
   requestId: z.string(),
 });
 
@@ -2636,7 +2695,10 @@ export const AgentConfigApplySchema = z.object({
   modelId: z.string().nullable().optional(),
   modeId: z.string().optional(),
   thinkingOptionId: z.string().nullable().optional(),
+  // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01. Maps to an options patch.
   featureValues: z.record(z.string(), z.unknown()).optional(),
+  /** Patch of the agent's own options: replaces top-level keys; `null` removes the key. */
+  options: ProviderOptionsSchema.optional(),
 });
 
 export type AgentConfigApply = z.infer<typeof AgentConfigApplySchema>;
@@ -2742,6 +2804,28 @@ export const WorkspaceTitleSetResponsePayloadSchema = z.object({
 export const WorkspaceTitleSetResponseSchema = z.object({
   type: z.literal("workspace.title.set.response"),
   payload: WorkspaceTitleSetResponsePayloadSchema,
+});
+
+export const AgentMetadataUpdateResponseSchema = z.object({
+  type: z.literal("agent.metadata.update.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    accepted: z.boolean(),
+    metadata: EntityMetadataSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const WorkspaceMetadataUpdateResponseSchema = z.object({
+  type: z.literal("workspace.metadata.update.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    accepted: z.boolean(),
+    metadata: EntityMetadataSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const WorkspacePinSetResponsePayloadSchema = z.object({
@@ -3391,6 +3475,7 @@ export const WorkspaceCreateRequestSchema = z.object({
   idempotencyKey: z.string().min(1).max(512).optional(),
   // Optional user-set title applied to the created workspace.
   title: z.string().optional(),
+  metadata: EntityMetadataSchema.optional(),
   // Optional prompt context for workspace-level name/branch generation.
   firstAgentContext: FirstAgentContextSchema.optional(),
   // Retained for wire parsing; public internal creation is no longer supported.
@@ -3645,11 +3730,19 @@ const ListCommandsDraftConfigSchema = z.object({
   modeId: z.string().optional(),
   model: z.string().optional(),
   thinkingOptionId: z.string().optional(),
+  // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01. Folded into providerOptions.
   featureValues: z.record(z.string(), z.unknown()).optional(),
+  providerOptions: ProviderOptionsSchema.optional(),
 });
 
 export const ListProviderFeaturesRequestMessageSchema = z.object({
   type: z.literal("list_provider_features_request"),
+  draftConfig: ListCommandsDraftConfigSchema,
+  requestId: z.string(),
+});
+
+export const ProviderControlsListRequestMessageSchema = z.object({
+  type: z.literal("provider.controls.list.request"),
   draftConfig: ListCommandsDraftConfigSchema,
   requestId: z.string(),
 });
@@ -3831,6 +3924,7 @@ export const HubExecutionAgentCreateRequestSchema = z.object({
   model: z.string().optional(),
   modeId: z.string().optional(),
   thinkingOptionId: z.string().optional(),
+  // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01. Folded into providerOptions.
   featureValues: z.record(z.string(), z.unknown()).optional(),
   providerOptions: ProviderOptionsSchema.optional(),
   toolPolicy: ToolPolicySchema.optional(),
@@ -3965,6 +4059,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HostsUpdateRequestSchema,
   HostsRemoveRequestSchema,
   HostsLinkOpenRequestSchema,
+  HostsLinkAckSchema,
   HostsRouteOpenRequestSchema,
   HostsRouteFrameRequestSchema,
   HostsRouteCloseRequestSchema,
@@ -3995,6 +4090,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
   WorkspaceTitleSetRequestSchema,
+  AgentMetadataUpdateRequestSchema,
+  WorkspaceMetadataUpdateRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceResidentSetRequestSchema,
   WorkspaceProjectSetRequestSchema,
@@ -4084,6 +4181,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ListProviderModelsRequestMessageSchema,
   ListProviderModesRequestMessageSchema,
   ListProviderFeaturesRequestMessageSchema,
+  ProviderControlsListRequestMessageSchema,
   ListAvailableProvidersRequestMessageSchema,
   GetProvidersSnapshotRequestMessageSchema,
   RefreshProvidersSnapshotRequestMessageSchema,
@@ -4605,6 +4703,8 @@ export const ServerInfoStatusPayloadSchema = z
         selectiveAgentTimeline: z.boolean().optional(),
         explicitEventSubscriptions: z.boolean().optional(),
         ownedSubscriptions: z.boolean().optional(),
+        providerOptionControls: z.boolean().optional(),
+        entityMetadata: z.boolean().optional(),
         diffSubscription: z.boolean().optional(),
         binaryChunkingV1: z.boolean().optional(),
         workspaceSetupObservation: z.boolean().optional(),
@@ -4959,6 +5059,7 @@ export const WorkspaceDescriptorPayloadSchema = z
     residentAt: z.string().nullable().optional(),
     // COMPAT(workspaceLabels): added in v0.5.0, remove optional after 2027-08-14.
     labels: z.array(z.string()).optional(),
+    metadata: EntityMetadataSchema.optional(),
     // Retained for wire parsing of older daemon descriptors.
     internal: z.boolean().optional(),
     background: z.boolean().optional(),
@@ -7331,6 +7432,19 @@ export const ListProviderModesResponseMessageSchema = z.object({
   }),
 });
 
+export const ProviderControlsListResponseMessageSchema = z.object({
+  type: z.literal("provider.controls.list.response"),
+  payload: z.object({
+    provider: AgentProviderSchema,
+    controls: z.array(AgentOptionControlSchema).optional(),
+    /** Effective options for the draft: `config.json` defaults merged with the draft's own. */
+    options: ProviderOptionsSchema.optional(),
+    error: z.string().nullable().optional(),
+    fetchedAt: z.string(),
+    requestId: z.string(),
+  }),
+});
+
 export const ListProviderFeaturesResponseMessageSchema = z.object({
   type: z.literal("list_provider_features_response"),
   payload: z.object({
@@ -8245,6 +8359,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProjectIconSetResponseSchema,
   ProjectRemoveResponseSchema,
   WorkspaceTitleSetResponseSchema,
+  AgentMetadataUpdateResponseSchema,
+  WorkspaceMetadataUpdateResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceResidentSetResponseSchema,
   WorkspaceProjectSetResponseSchema,
@@ -8310,6 +8426,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ListProviderModelsResponseMessageSchema,
   ListProviderModesResponseMessageSchema,
   ListProviderFeaturesResponseMessageSchema,
+  ProviderControlsListResponseMessageSchema,
   ListAvailableProvidersResponseSchema,
   GetProvidersSnapshotResponseMessageSchema,
   ProvidersSnapshotUpdateMessageSchema,
@@ -8568,6 +8685,12 @@ export type ListProviderModelsRequestMessage = z.infer<
   typeof ListProviderModelsRequestMessageSchema
 >;
 export type ListProviderModesRequestMessage = z.infer<typeof ListProviderModesRequestMessageSchema>;
+export type ProviderControlsListRequestMessage = z.infer<
+  typeof ProviderControlsListRequestMessageSchema
+>;
+export type ProviderControlsListResponseMessage = z.infer<
+  typeof ProviderControlsListResponseMessageSchema
+>;
 export type ListProviderFeaturesRequestMessage = z.infer<
   typeof ListProviderFeaturesRequestMessageSchema
 >;
@@ -8614,6 +8737,10 @@ export type ProjectRemoveRequest = z.infer<typeof ProjectRemoveRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
 export type WorkspaceResidentSetRequest = z.infer<typeof WorkspaceResidentSetRequestSchema>;
+export type AgentMetadataUpdateRequest = z.infer<typeof AgentMetadataUpdateRequestSchema>;
+export type WorkspaceMetadataUpdateRequest = z.infer<typeof WorkspaceMetadataUpdateRequestSchema>;
+export type AgentMetadataUpdateResponse = z.infer<typeof AgentMetadataUpdateResponseSchema>;
+export type WorkspaceMetadataUpdateResponse = z.infer<typeof WorkspaceMetadataUpdateResponseSchema>;
 export type WorkspaceBaseBranchSetRequest = z.infer<typeof WorkspaceBaseBranchSetRequestSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;
 export type WorkspaceRecoveryRestoreRequest = z.infer<typeof WorkspaceRecoveryRestoreRequestSchema>;

@@ -246,6 +246,7 @@ export class WorkspaceCreation {
       {
         expectsInitialAgent: Boolean(request.firstAgentContext),
         workspaceId,
+        metadata: request.metadata,
         ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
       },
     );
@@ -304,6 +305,7 @@ export class WorkspaceCreation {
         githubPrNumber: source.githubPrNumber,
         firstAgentContext: request.firstAgentContext,
         title: request.title,
+        metadata: request.metadata,
         ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
       },
       source.baseBranch

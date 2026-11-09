@@ -1,18 +1,18 @@
-import type { AgentFeature, AgentFeatureToggle } from "../../agent-sdk-types.js";
+import type { AgentOptionControl, AgentOptionToggleControl } from "../../agent-sdk-types.js";
 import { claudeManifestModelSupportsFastMode } from "./model-manifest.js";
 
-export const CLAUDE_MCP_AUTO_ACCEPT_FEATURE: Omit<AgentFeatureToggle, "value"> = {
+export const CLAUDE_MCP_AUTO_ACCEPT_CONTROL: AgentOptionToggleControl = {
   type: "toggle",
-  id: "auto_accept_mcp",
+  key: "auto_accept_mcp",
   label: "MCP",
   description: "Automatically approves MCP tool calls.",
   tooltip: "Automatically approve MCP tools",
   icon: "shield-check",
 };
 
-export const CLAUDE_FAST_MODE_FEATURE: Omit<AgentFeatureToggle, "value"> = {
+export const CLAUDE_FAST_MODE_CONTROL: AgentOptionToggleControl = {
   type: "toggle",
-  id: "fast_mode",
+  key: "fast_mode",
   label: "Fast",
   description: "Lower latency Opus responses at higher token cost",
   tooltip: "Toggle fast mode",
@@ -23,21 +23,8 @@ export function claudeModelSupportsFastMode(modelId: string | null | undefined):
   return claudeManifestModelSupportsFastMode(modelId);
 }
 
-export function buildClaudeFeatures(input: {
-  modelId: string | null | undefined;
-  fastModeEnabled: boolean;
-  mcpAutoAcceptEnabled: boolean;
-}): AgentFeature[] {
-  const features: AgentFeature[] = [
-    { ...CLAUDE_MCP_AUTO_ACCEPT_FEATURE, value: input.mcpAutoAcceptEnabled },
-  ];
-  if (!claudeModelSupportsFastMode(input.modelId)) {
-    return features;
-  }
-
-  features.push({
-    ...CLAUDE_FAST_MODE_FEATURE,
-    value: input.fastModeEnabled,
-  });
-  return features;
+export function buildClaudeControls(modelId: string | null | undefined): AgentOptionControl[] {
+  const controls: AgentOptionControl[] = [{ ...CLAUDE_MCP_AUTO_ACCEPT_CONTROL }];
+  if (claudeModelSupportsFastMode(modelId)) controls.push({ ...CLAUDE_FAST_MODE_CONTROL });
+  return controls;
 }

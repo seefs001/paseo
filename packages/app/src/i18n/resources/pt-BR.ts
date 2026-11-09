@@ -153,6 +153,11 @@ export const ptBR: TranslationResources = {
     retryHint:
       "Se o envio expirou ou a conexão foi perdida, verifique 'gh gist list' no host antes de tentar novamente.",
   },
+  pluginCombobox: {
+    searching: "Pesquisando…",
+    empty: "Nenhum resultado",
+    failed: "Falha na pesquisa: {{message}}",
+  },
   paneFind: {
     connectionFailure:
       "Não foi possível pesquisar nesta conversa. Verifique a conexão com o host e tente novamente.",

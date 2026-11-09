@@ -1,3 +1,4 @@
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { promises as fs } from "node:fs";
 
 import type { Logger } from "pino";
@@ -107,6 +108,8 @@ const PersistedWorkspaceRecordSchema = z.object({
     .optional()
     .transform((value) => value ?? null),
   labels: z.array(z.string()).optional(),
+  // Plugin-owned data. Paseo stores it and never reads a key.
+  metadata: z.record(z.string(), z.custom<JsonValue>()).default({}),
   untrustedSource: UntrustedWorkspaceSourceSchema.optional(),
   // Public discovery visibility. Contents retain their ordinary lifecycle.
   background: z.boolean().optional().default(false),
@@ -731,6 +734,7 @@ export function createPersistedWorkspaceRecord(input: {
   pinnedAt?: string | null;
   residentAt?: string | null;
   labels?: string[];
+  metadata?: Record<string, JsonValue>;
   untrustedSource?: UntrustedWorkspaceSource;
   background?: boolean;
   executionLocation?: PersistedWorkspaceRecord["executionLocation"];

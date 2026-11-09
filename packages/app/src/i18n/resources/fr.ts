@@ -154,6 +154,11 @@ export const fr: TranslationResources = {
     retryHint:
       "En cas de délai dépassé ou de perte de connexion, vérifiez 'gh gist list' sur l’hôte avant de réessayer.",
   },
+  pluginCombobox: {
+    searching: "Recherche…",
+    empty: "Aucun résultat",
+    failed: "Échec de la recherche : {{message}}",
+  },
   paneFind: {
     connectionFailure:
       "Impossible de rechercher dans cette conversation. Vérifiez la connexion à l’hôte et réessayez.",

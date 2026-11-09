@@ -152,6 +152,11 @@ export const ja: TranslationResources = {
     retryHint:
       "タイムアウトや接続切断が発生した場合は、再試行する前にホストで gh gist list を確認してください。",
   },
+  pluginCombobox: {
+    searching: "検索中…",
+    empty: "結果がありません",
+    failed: "検索に失敗しました: {{message}}",
+  },
   paneFind: {
     connectionFailure:
       "このチャットを検索できませんでした。ホストへの接続を確認して再試行してください。",

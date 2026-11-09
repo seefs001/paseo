@@ -2169,20 +2169,19 @@ describe("PiRpcAgentSession", () => {
       pi.queueSessionSetup((runtime) => {
         runtime.state = { ...runtime.state, model };
       });
-      const session = await createClient(pi).createSession(
-        createConfig({ featureValues: { fast_mode: true } }),
-      );
+      const config = createConfig({ providerOptions: { fast_mode: true } });
+      const session = await createClient(pi).createSession(config);
       onTestFinished(() => session.close());
-      expect(session.features).toEqual([
+      expect(config.providerOptions?.fast_mode).toBe(true);
+      expect(session.controls).toEqual([
         {
           type: "toggle",
-          id: "fast_mode",
+          key: "fast_mode",
           label: "Fast",
           description:
             "Request priority processing. Availability and extra usage depend on the provider.",
           tooltip: "Toggle priority processing",
           icon: "zap",
-          value: true,
         },
       ]);
       const listeners = await loadPaseoExtensionListeners(
@@ -2212,19 +2211,19 @@ describe("PiRpcAgentSession", () => {
     const payload = { model: model.id, input: [] };
     const beforeRequest = () => listeners.get("before_provider_request")?.({ payload }, { model });
 
-    expect(session.features?.[0]?.value).toBe(false);
+    expect(config.providerOptions?.fast_mode ?? false).toBe(false);
     expect(await beforeRequest()).toBeUndefined();
-    await session.setFeature!("fast_mode", true);
-    expect(session.features?.[0]?.value).toBe(true);
-    expect(config.featureValues).toEqual({
+    await session.applyOptions!({ fast_mode: true });
+    expect(config.providerOptions?.fast_mode ?? false).toBe(true);
+    expect(config.providerOptions).toEqual({
       fast_mode: true,
       fast_mode_by_model: { "openai-codex/gpt-5.4": true },
     });
     expect(await beforeRequest()).toEqual({ ...payload, service_tier: "priority" });
 
-    await session.setFeature!("fast_mode", false);
-    expect(session.features?.[0]?.value).toBe(false);
-    expect(config.featureValues).toEqual({
+    await session.applyOptions!({ fast_mode: false });
+    expect(config.providerOptions?.fast_mode ?? false).toBe(false);
+    expect(config.providerOptions).toEqual({
       fast_mode: false,
       fast_mode_by_model: { "openai-codex/gpt-5.4": false },
     });
@@ -2242,18 +2241,18 @@ describe("PiRpcAgentSession", () => {
         runtime.state = { ...runtime.state, model };
       });
       const session = await createClient(pi).createSession(
-        createConfig({ featureValues: { fast_mode: true } }),
+        createConfig({ providerOptions: { fast_mode: true } }),
       );
       onTestFinished(() => session.close());
       const listeners = await connectPaseoExtension(pi);
-      expect(session.features).toEqual([]);
+      expect(session.controls).toEqual([]);
       expect(
         await listeners.get("before_provider_request")?.(
           { payload: { model: model.id } },
           { model },
         ),
       ).toBeUndefined();
-      await expect(session.setFeature!("fast_mode", true)).rejects.toThrow(
+      await expect(session.applyOptions!({ fast_mode: true })).rejects.toThrow(
         "unavailable for this model",
       );
       expect(pi.latestSession().prompts).toEqual([]);
@@ -2267,28 +2266,28 @@ describe("PiRpcAgentSession", () => {
     pi.queueSessionSetup((runtime) => {
       runtime.state = { ...runtime.state, model };
     });
-    const config = createConfig({ featureValues: { fast_mode: true } });
+    const config = createConfig({ providerOptions: { fast_mode: true } });
     const session = await createClient(pi).createSession(config);
     onTestFinished(() => session.close());
     const runtime = pi.latestSession();
     const listeners = await connectPaseoExtension(pi);
     runtime.setModelResult = unsupported;
     await session.setModel!("anthropic/claude-sonnet");
-    expect(session.features).toEqual([]);
+    expect(session.controls).toEqual([]);
     expect(
       await listeners.get("before_provider_request")?.(
         { payload: {} },
         { model: runtime.state.model },
       ),
     ).toBeUndefined();
-    expect(config.featureValues).toEqual({
+    expect(config.providerOptions).toEqual({
       fast_mode: false,
       fast_mode_by_model: { "openai/gpt-5.4": true },
     });
 
     runtime.setModelResult = model;
     await session.setModel!("openai/gpt-5.4");
-    expect(session.features?.[0]?.value).toBe(true);
+    expect(config.providerOptions?.fast_mode ?? false).toBe(true);
     expect(
       await listeners.get("before_provider_request")?.(
         { payload: {} },
@@ -2304,7 +2303,7 @@ describe("PiRpcAgentSession", () => {
     pi.queueSessionSetup((runtime) => {
       runtime.state = { ...runtime.state, model: astra };
     });
-    const config = createConfig({ featureValues: { fast_mode: true } });
+    const config = createConfig({ providerOptions: { fast_mode: true } });
     const session = await createClient(pi).createSession(config);
     onTestFinished(() => session.close());
     const listeners = await connectPaseoExtension(pi);
@@ -2331,7 +2330,7 @@ describe("PiRpcAgentSession", () => {
 
     runtime.setModelResult = sol;
     await session.setModel!("responses/gpt-6.1-sol");
-    expect(session.features?.[0]?.value).toBe(false);
+    expect(config.providerOptions?.fast_mode ?? false).toBe(false);
     expect(
       await listeners.get("before_provider_request")?.(
         { payload: { model: sol.id, service_tier: "priority" } },
@@ -2341,8 +2340,8 @@ describe("PiRpcAgentSession", () => {
 
     runtime.setModelResult = astra;
     await session.setModel!("responses/gpt-6-astra");
-    expect(session.features?.[0]?.value).toBe(true);
-    await session.setFeature!("fast_mode", false);
+    expect(config.providerOptions?.fast_mode ?? false).toBe(true);
+    await session.applyOptions!({ fast_mode: false });
     expect(
       await listeners.get("before_provider_request")?.(
         { payload: { ...astraPayload } },
@@ -2352,11 +2351,11 @@ describe("PiRpcAgentSession", () => {
 
     runtime.setModelResult = sol;
     await session.setModel!("responses/gpt-6.1-sol");
-    await session.setFeature!("fast_mode", true);
+    await session.applyOptions!({ fast_mode: true });
     runtime.setModelResult = astra;
     await session.setModel!("responses/gpt-6-astra");
-    expect(session.features?.[0]?.value).toBe(false);
-    expect(config.featureValues).toEqual({
+    expect(config.providerOptions?.fast_mode ?? false).toBe(false);
+    expect(config.providerOptions).toEqual({
       fast_mode: false,
       fast_mode_by_model: {
         "responses/gpt-6-astra": false,
@@ -2371,15 +2370,15 @@ describe("PiRpcAgentSession", () => {
     pi.queueSessionSetup((runtime) => {
       runtime.state = { ...runtime.state, model };
     });
-    const config = createConfig({ featureValues: { other_feature: "keep" } });
+    const config = createConfig({ providerOptions: { rpcTimeoutMs: 12345 } });
     const client = createClient(pi);
     const session = await client.createSession(config);
     onTestFinished(() => session.close());
     await connectPaseoExtension(pi);
-    await session.setFeature!("fast_mode", true);
-    await session.setFeature!("fast_mode", true);
-    expect(config.featureValues).toEqual({
-      other_feature: "keep",
+    await session.applyOptions!({ fast_mode: true });
+    await session.applyOptions!({ fast_mode: true });
+    expect(config.providerOptions).toEqual({
+      rpcTimeoutMs: 12345,
       fast_mode: true,
       fast_mode_by_model: { "openai/gpt-5.4": true },
     });
@@ -2390,7 +2389,7 @@ describe("PiRpcAgentSession", () => {
     const resumed = await client.resumeSession(handle, config);
     onTestFinished(() => resumed.close());
     const listeners = await connectPaseoExtension(pi);
-    expect(resumed.features?.[0]?.value).toBe(true);
+    expect(config.providerOptions?.fast_mode).toBe(true);
     expect(await listeners.get("before_provider_request")?.({ payload: {} }, { model })).toEqual({
       service_tier: "priority",
     });
@@ -2408,11 +2407,11 @@ describe("PiRpcAgentSession", () => {
     const listeners = await connectPaseoExtension(pi);
     const runtime = pi.latestSession();
     runtime.state = { ...runtime.state, model: RESTRICTED_THINKING_MODEL };
-    await expect(session.setFeature!("fast_mode", true)).rejects.toThrow(
+    await expect(session.applyOptions!({ fast_mode: true })).rejects.toThrow(
       "unavailable for this model",
     );
-    expect(session.features?.[0]?.value).toBe(false);
-    expect(config.featureValues).toBeUndefined();
+    expect(config.providerOptions?.fast_mode ?? false).toBe(false);
+    expect(config.providerOptions).toBeUndefined();
     expect(
       await listeners.get("before_provider_request")?.({ payload: {} }, { model }),
     ).toBeUndefined();
@@ -2426,19 +2425,20 @@ describe("PiRpcAgentSession", () => {
         model: { provider: "openai", id: "gpt-5.4", api: "openai-responses" },
       };
     });
-    const session = await createClient(pi).createSession(createConfig());
+    const config = createConfig();
+    const session = await createClient(pi).createSession(config);
     onTestFinished(() => session.close());
     await connectPaseoExtension(pi);
     const runtime = pi.latestSession();
     runtime.holdNextPrompt();
-    const failure = expect(session.setFeature!("fast_mode", true)).rejects.toThrow(
+    const failure = expect(session.applyOptions!({ fast_mode: true })).rejects.toThrow(
       "Pi disconnected",
     );
     await runtime.failHeldPrompt(new Error("Pi disconnected"));
     await failure;
-    expect(session.features?.[0]?.value).toBe(false);
-    await session.setFeature!("fast_mode", true);
-    expect(session.features?.[0]?.value).toBe(true);
+    expect(config.providerOptions?.fast_mode ?? false).toBe(false);
+    await session.applyOptions!({ fast_mode: true });
+    expect(config.providerOptions?.fast_mode ?? false).toBe(true);
   });
 
   test("rejects invalid Fast controls and controls on closed sessions", async () => {
@@ -2450,10 +2450,14 @@ describe("PiRpcAgentSession", () => {
       };
     });
     const session = await createClient(pi).createSession(createConfig());
-    await expect(session.setFeature!("other", true)).rejects.toThrow("Unknown Pi feature");
-    await expect(session.setFeature!("fast_mode", "true")).rejects.toThrow("requires a boolean");
+    await expect(session.applyOptions!({ other: true })).rejects.toThrow("cannot change");
+    await expect(session.applyOptions!({ fast_mode: "true" })).rejects.toThrow(
+      "requires a boolean",
+    );
     await session.close();
-    await expect(session.setFeature!("fast_mode", true)).rejects.toThrow("Pi session is closed");
+    await expect(session.applyOptions!({ fast_mode: true })).rejects.toThrow(
+      "Pi session is closed",
+    );
     expect(pi.latestSession().prompts).toEqual([]);
   });
 
@@ -3587,6 +3591,19 @@ describe("PiRpcAgentClient", () => {
     },
   );
 
+  test("lists no draft controls for an unsupported model and closes the Pi probe", async () => {
+    const pi = new FakePi();
+    const client = createClient(pi);
+
+    await expect(
+      client.listControls(createConfig({ model: "openrouter/test/model" })),
+    ).resolves.toEqual({ controls: [], options: {} });
+
+    expect(pi.recordedLaunches).toMatchObject([{ noSession: true }]);
+    expect(pi.latestSession().closed).toBe(true);
+    expect(pi.latestSession().prompts).toEqual([]);
+  });
+
   test.each(["openai-responses", "openai-codex-responses"])(
     "lists Fast in draft and profile configuration for %s",
     async (api) => {
@@ -3598,10 +3615,13 @@ describe("PiRpcAgentClient", () => {
         };
       });
       const client = createClient(pi);
-      const features = await client.listFeatures(
-        createConfig({ model: "custom/responses-model", featureValues: { fast_mode: true } }),
+      const features = await client.listControls(
+        createConfig({ model: "custom/responses-model", providerOptions: { fast_mode: true } }),
       );
-      expect(features).toMatchObject([{ id: "fast_mode", type: "toggle", value: true }]);
+      expect(features).toMatchObject({
+        controls: [{ key: "fast_mode", type: "toggle" }],
+        options: { fast_mode: true },
+      });
       expect(pi.recordedLaunches).toMatchObject([
         { model: "custom/responses-model", noSession: true },
       ]);
@@ -3618,8 +3638,9 @@ describe("PiRpcAgentClient", () => {
         model: { provider: "openai", id: "gpt-5.4", api: "openai-responses" },
       };
     });
-    const features = await createClient(pi).listFeatures(createConfig());
-    expect(features).toMatchObject([{ id: "fast_mode", value: false }]);
+    const features = await createClient(pi).listControls(createConfig());
+    expect(features.controls).toMatchObject([{ key: "fast_mode" }]);
+    expect(features.options.fast_mode ?? false).toBe(false);
     expect(pi.recordedLaunches).toMatchObject([{ noSession: true }]);
     expect(pi.latestSession().closed).toBe(true);
   });
@@ -3633,8 +3654,8 @@ describe("PiRpcAgentClient", () => {
       };
     });
     await expect(
-      createClient(pi).listFeatures(createConfig({ model: "openai/custom-model" })),
-    ).resolves.toEqual([]);
+      createClient(pi).listControls(createConfig({ model: "openai/custom-model" })),
+    ).resolves.toEqual({ controls: [], options: {} });
     expect(pi.latestSession().closed).toBe(true);
   });
 
@@ -3643,7 +3664,7 @@ describe("PiRpcAgentClient", () => {
     pi.queueSessionSetup((runtime) => {
       runtime.getStateError = new Error("Pi state unavailable");
     });
-    await expect(createClient(pi).listFeatures(createConfig())).rejects.toThrow(
+    await expect(createClient(pi).listControls(createConfig())).rejects.toThrow(
       "Pi state unavailable",
     );
     expect(pi.latestSession().closed).toBe(true);

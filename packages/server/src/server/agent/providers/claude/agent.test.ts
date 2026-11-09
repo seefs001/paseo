@@ -18,6 +18,9 @@ import {
   resolveClaudeCodeVersion,
   toClaudeSdkMcpConfig,
 } from "./agent.js";
+import { AgentManager } from "../../agent-manager.js";
+import { ensureAgentLoaded } from "../../agent-loading.js";
+import { AgentStorage } from "../../agent-storage.js";
 import { createImportDescriptorScheduler } from "./import-descriptor-scheduler.js";
 import { claudeProjectDirSync } from "./project-dir.js";
 import { streamSession } from "../test-utils/session-stream-adapter.js";
@@ -31,8 +34,8 @@ import type {
 } from "../../agent-sdk-types.js";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import { buildAgentPrompt, renderPromptAttachmentAsText } from "../../prompt-attachments.js";
-import { AgentManager } from "../../agent-manager.js";
-import { AgentStorage } from "../../agent-storage.js";
+import { applyProviderOptionsPatch } from "../../option-controls.js";
+import { mergeProviderOptions } from "../../provider-options.js";
 
 interface TestClaudeSession {
   translateMessageToEvents(message: SDKMessage): Promise<AgentStreamEvent[]>;
@@ -1146,72 +1149,93 @@ describe("ClaudeAgentSession features", () => {
     const client = new ClaudeAgentClient({ logger, resolveBinary: async () => "/test/claude/bin" });
 
     await expect(
-      client.listFeatures({
+      client.listControls({
         provider: "claude",
         cwd: process.cwd(),
         model: "claude-opus-4-8",
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
-      expect.objectContaining({ id: "fast_mode", value: false }),
-    ]);
+    ).resolves.toEqual({
+      controls: [
+        expect.objectContaining({ key: "auto_accept_mcp", type: "toggle" }),
+        expect.objectContaining({ key: "fast_mode", type: "toggle" }),
+      ],
+      options: {},
+    });
 
     await expect(
-      client.listFeatures({
+      client.listControls({
         provider: "claude",
         cwd: process.cwd(),
         model: "claude-opus-4-8[1m]",
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
-      expect.objectContaining({ id: "fast_mode", value: false }),
-    ]);
+    ).resolves.toEqual({
+      controls: [
+        expect.objectContaining({ key: "auto_accept_mcp", type: "toggle" }),
+        expect.objectContaining({ key: "fast_mode", type: "toggle" }),
+      ],
+      options: {},
+    });
 
     await expect(
-      client.listFeatures({
+      client.listControls({
         provider: "claude",
         cwd: process.cwd(),
         model: "claude-opus-4-8-20260101",
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
-      expect.objectContaining({ id: "fast_mode", value: false }),
-    ]);
+    ).resolves.toEqual({
+      controls: [
+        expect.objectContaining({ key: "auto_accept_mcp", type: "toggle" }),
+        expect.objectContaining({ key: "fast_mode", type: "toggle" }),
+      ],
+      options: {},
+    });
 
     await expect(
-      client.listFeatures({
+      client.listControls({
         provider: "claude",
         cwd: process.cwd(),
         model: "claude-opus-5",
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: "auto_accept_mcp", value: false }),
-      expect.objectContaining({ id: "fast_mode", value: false }),
-    ]);
+    ).resolves.toEqual({
+      controls: [
+        expect.objectContaining({ key: "auto_accept_mcp", type: "toggle" }),
+        expect.objectContaining({ key: "fast_mode", type: "toggle" }),
+      ],
+      options: {},
+    });
 
     await expect(
-      client.listFeatures({
+      client.listControls({
         provider: "claude",
         cwd: process.cwd(),
         model: "openrouter/anthropic/claude-opus-4-8",
       }),
-    ).resolves.toEqual([expect.objectContaining({ id: "auto_accept_mcp", value: false })]);
+    ).resolves.toEqual({
+      controls: [expect.objectContaining({ key: "auto_accept_mcp", type: "toggle" })],
+      options: {},
+    });
 
     await expect(
-      client.listFeatures({
+      client.listControls({
         provider: "claude",
         cwd: process.cwd(),
         model: "claude-sonnet-5",
       }),
-    ).resolves.toEqual([expect.objectContaining({ id: "auto_accept_mcp", value: false })]);
+    ).resolves.toEqual({
+      controls: [expect.objectContaining({ key: "auto_accept_mcp", type: "toggle" })],
+      options: {},
+    });
 
     await expect(
-      client.listFeatures({
+      client.listControls({
         provider: "claude",
         cwd: process.cwd(),
         model: "claude-sonnet-4-6",
       }),
-    ).resolves.toEqual([expect.objectContaining({ id: "auto_accept_mcp", value: false })]);
+    ).resolves.toEqual({
+      controls: [expect.objectContaining({ key: "auto_accept_mcp", type: "toggle" })],
+      options: {},
+    });
   });
 
   test("auto-approves MCP tools and still asks for shell tools", async () => {
@@ -1225,7 +1249,7 @@ describe("ClaudeAgentSession features", () => {
       provider: "claude",
       cwd: process.cwd(),
       modeId: "default",
-      featureValues: { auto_accept_mcp: true },
+      providerOptions: { auto_accept_mcp: true },
     });
     const events: AgentStreamEvent[] = [];
     const unsubscribe = session.subscribe((event) => events.push(event));
@@ -1260,6 +1284,25 @@ describe("ClaudeAgentSession features", () => {
     }
   });
 
+  test("opens with Fast off on a model that has none, so unrelated options still apply", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-sonnet-5",
+      providerOptions: { fast_mode: true },
+    });
+
+    expect(session.openOptionsPatch).toEqual({ fast_mode: false });
+    await expect(session.applyOptions?.({ allowedTools: ["Read"] })).resolves.toBeUndefined();
+    await session.close();
+  });
+
   test("passes initial fast mode through Claude flag settings", async () => {
     const { queryFactory, queryMock } = createQueryMock();
     const client = new ClaudeAgentClient({
@@ -1271,7 +1314,7 @@ describe("ClaudeAgentSession features", () => {
       provider: "claude",
       cwd: process.cwd(),
       model: "claude-opus-4-8",
-      featureValues: { fast_mode: true },
+      providerOptions: { fast_mode: true },
     });
 
     await expect(
@@ -1779,26 +1822,27 @@ describe("ClaudeAgentSession features", () => {
           provider: "claude",
           cwd,
           model: "claude-opus-4-8",
-          featureValues: { fast_mode: true, auto_accept_mcp: false, other_feature: "keep" },
+          providerOptions: { fast_mode: true, auto_accept_mcp: false, allowedTools: ["Read"] },
         },
         undefined,
         { workspaceId: undefined },
       );
       agentId = agent.id;
-      await manager.setAgentFeature(agent.id, "auto_accept_mcp", true);
+      await manager.setAgentOptions(agent.id, { auto_accept_mcp: true });
       await manager.setAgentModel(agent.id, "claude-sonnet-4-6");
       await manager.setAgentModel(agent.id, "claude-opus-4-8");
       await manager.flush();
-      const expected = { fast_mode: false, auto_accept_mcp: true, other_feature: "keep" };
-      expect((await storage.get(agent.id))?.config?.featureValues).toEqual(expected);
+      const expected = { fast_mode: false, auto_accept_mcp: true, allowedTools: ["Read"] };
+      expect((await storage.get(agent.id))?.config?.providerOptions).toEqual(expected);
       const reloaded = await manager.reloadAgentSession(agent.id);
-      expect(reloaded.config.featureValues).toEqual(expected);
-      expect(reloaded.features).toEqual(
+      expect(reloaded.config.providerOptions).toEqual(expected);
+      expect(reloaded.controls).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: "fast_mode", value: false }),
-          expect.objectContaining({ id: "auto_accept_mcp", value: true }),
+          expect.objectContaining({ key: "fast_mode" }),
+          expect.objectContaining({ key: "auto_accept_mcp" }),
         ]),
       );
+      expect(reloaded.effectiveOptions).toMatchObject(expected);
     } finally {
       if (agentId) await manager.closeAgent(agentId);
       await manager.flush();
@@ -1818,15 +1862,19 @@ describe("ClaudeAgentSession features", () => {
       provider: "claude",
       cwd: process.cwd(),
       model: "claude-opus-4-8",
-      featureValues: { fast_mode: false, auto_accept_mcp: true },
+      providerOptions: { fast_mode: false, auto_accept_mcp: true },
     });
     try {
       await session.setModel!("claude-opus-4-8");
+      const initialFlagUpdates = queryMock.applyFlagSettings.mock.calls.length;
       queryMock.applyFlagSettings.mockRejectedValueOnce(new Error("flag update failed"));
-      await expect(session.setFeature!("fast_mode", true)).rejects.toThrow("flag update failed");
-      expect(session.featureValues).toEqual({ fast_mode: false, auto_accept_mcp: true });
-      expect(session.features).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: false })]),
+      await expect(session.applyOptions!({ fast_mode: true })).rejects.toThrow(
+        "flag update failed",
+      );
+      await session.applyOptions!({ fast_mode: false, auto_accept_mcp: true });
+      expect(queryMock.applyFlagSettings).toHaveBeenCalledTimes(initialFlagUpdates + 1);
+      expect(session.controls).toEqual(
+        expect.arrayContaining([expect.objectContaining({ key: "fast_mode" })]),
       );
     } finally {
       await session.close();
@@ -1851,7 +1899,7 @@ describe("ClaudeAgentSession features", () => {
         ensureQuery(): Promise<unknown>;
       }
     ).ensureQuery();
-    await session.setFeature?.("fast_mode", true);
+    await session.applyOptions?.({ fast_mode: true });
 
     expect(queryFactory).toHaveBeenCalledTimes(1);
     expect(queryMock.applyFlagSettings).toHaveBeenLastCalledWith({ fastMode: true });
@@ -1859,6 +1907,242 @@ describe("ClaudeAgentSession features", () => {
     expect(queryMock.return).not.toHaveBeenCalled();
 
     await session.close();
+  });
+
+  test("rejects a change to a launch option while the first query is starting", async () => {
+    const { queryFactory } = createQueryMock();
+    let releaseBinary!: () => void;
+    const binaryLookup = new Promise<void>((resolve) => {
+      releaseBinary = resolve;
+    });
+    let lookupStarted!: () => void;
+    const lookupEntered = new Promise<void>((resolve) => {
+      lookupStarted = resolve;
+    });
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => {
+        lookupStarted();
+        await binaryLookup;
+        return "/test/claude/bin";
+      },
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+      providerOptions: { disallowedTools: ["Bash"] },
+    });
+
+    const turn = session.startTurn("hello");
+    await lookupEntered;
+    await expect(session.applyOptions?.({ disallowedTools: [] })).rejects.toThrow(
+      /disallowedTools.*cannot change on a running session/,
+    );
+    releaseBinary();
+    await turn;
+
+    expect(queryFactory.mock.calls[0]?.[0].options).toMatchObject({ disallowedTools: ["Bash"] });
+    await session.close();
+  });
+
+  test("a patch before the first prompt keeps the restrictions the session opened with", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+      providerOptions: {
+        disallowedTools: ["Bash"],
+        sandbox: { enabled: true, failIfUnavailable: true },
+      },
+    });
+
+    await session.applyOptions?.({ fast_mode: true });
+    await (session as unknown as { ensureQuery(): Promise<unknown> }).ensureQuery();
+
+    expect(queryFactory.mock.calls[0]?.[0].options).toMatchObject({
+      disallowedTools: ["Bash"],
+      sandbox: { enabled: true, failIfUnavailable: true },
+    });
+    await session.close();
+  });
+
+  test("an option Claude reads when it starts changes before the query exists and is rejected after", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+      providerOptions: { disallowedTools: ["Bash"] },
+    });
+
+    await session.applyOptions?.({ disallowedTools: ["Bash", "Write"] });
+    await (session as unknown as { ensureQuery(): Promise<unknown> }).ensureQuery();
+    expect(queryFactory.mock.calls[0]?.[0].options).toMatchObject({
+      disallowedTools: ["Bash", "Write"],
+    });
+
+    // The query now runs with these; replacing it would end its background work.
+    await expect(session.applyOptions?.({ disallowedTools: [] })).rejects.toThrow(
+      /disallowedTools.*cannot change on a running session/,
+    );
+    // The same value is not a change, and Fast still applies.
+    await expect(
+      session.applyOptions?.({ disallowedTools: ["Bash", "Write"], fast_mode: true }),
+    ).resolves.toBeUndefined();
+    expect(queryFactory).toHaveBeenCalledTimes(1);
+    await session.close();
+  });
+
+  test("switching to a model without Fast turns it off, reports that, and later patches still apply", async () => {
+    const { queryFactory, queryMock } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+      providerOptions: { fast_mode: true },
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.setModel?.("claude-fable-5");
+
+    expect(queryMock.applyFlagSettings).toHaveBeenLastCalledWith({ fastMode: false });
+    const reported = events.filter((event) => event.type === "options_changed");
+    expect(reported).toEqual([
+      { type: "options_changed", provider: "claude", patch: { fast_mode: false } },
+    ]);
+    // With a `config.json` default of `fast_mode: true`, the agent's effective options must
+    // still read Fast as off: a removed key would let the default fill `true` back in.
+    const stored = applyProviderOptionsPatch({
+      options: { fast_mode: true },
+      patch: reported[0].patch,
+    });
+    expect(mergeProviderOptions({ fast_mode: true }, stored)).toEqual({ fast_mode: false });
+    await expect(session.applyOptions?.({ fast_mode: null })).resolves.toBeUndefined();
+    await session.close();
+  });
+
+  test("removing fast_mode turns Fast off", async () => {
+    const { queryFactory, queryMock } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+    });
+    await (session as unknown as { ensureQuery(): Promise<unknown> }).ensureQuery();
+    await session.applyOptions?.({ fast_mode: true });
+
+    await session.applyOptions?.({ fast_mode: null });
+
+    expect(queryMock.applyFlagSettings).toHaveBeenLastCalledWith({ fastMode: false });
+    await session.close();
+  });
+
+  test("retries a fast mode change the runtime rejected", async () => {
+    const { queryFactory, queryMock } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+    });
+    await (session as unknown as { ensureQuery(): Promise<unknown> }).ensureQuery();
+    queryMock.applyFlagSettings.mockClear();
+    queryMock.applyFlagSettings.mockRejectedValueOnce(new Error("runtime unavailable"));
+
+    await expect(session.applyOptions?.({ fast_mode: true })).rejects.toThrow(
+      "runtime unavailable",
+    );
+    await session.applyOptions?.({ fast_mode: true });
+
+    expect(queryMock.applyFlagSettings).toHaveBeenCalledTimes(2);
+    expect(queryMock.applyFlagSettings).toHaveBeenLastCalledWith({ fastMode: true });
+
+    await session.close();
+  });
+
+  test("fast mode survives a daemon restart through the stored providerOptions", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "claude-fast-restart-"));
+    const storagePath = path.join(root, "agents");
+    const makeClient = () => {
+      const mock = createQueryMock();
+      const client = new ClaudeAgentClient({
+        logger,
+        queryFactory: mock.queryFactory,
+        resolveBinary: async () => "/test/claude/bin",
+      });
+      return { ...mock, client };
+    };
+    const agentId = "00000000-0000-4000-8000-0000000000f1";
+    const before = makeClient();
+    const storage = new AgentStorage(storagePath, logger);
+    const manager = new AgentManager({
+      clients: { claude: before.client },
+      registry: storage,
+      logger,
+    });
+    try {
+      await manager.createAgent(
+        { provider: "claude", cwd: root, model: "claude-opus-4-8" },
+        agentId,
+        { workspaceId: undefined },
+      );
+      await manager.setAgentOptions(agentId, { fast_mode: true });
+      await manager.closeAgent(agentId);
+      await manager.flush();
+      await storage.flush();
+
+      const after = makeClient();
+      const restartedStorage = new AgentStorage(storagePath, logger);
+      const restarted = new AgentManager({
+        clients: { claude: after.client },
+        registry: restartedStorage,
+        logger,
+      });
+      const agent = await ensureAgentLoaded(agentId, {
+        agentManager: restarted,
+        agentStorage: restartedStorage,
+        logger,
+      });
+      const session = (agent as unknown as { session: { ensureQuery(): Promise<unknown> } | null })
+        .session;
+      await session?.ensureQuery();
+
+      expect(restarted.getAgent(agentId)?.config.providerOptions).toEqual({ fast_mode: true });
+      expect(after.queryFactory.mock.calls[0]?.[0].options.settings).toMatchObject({
+        fastMode: true,
+      });
+      await restarted.closeAgent(agentId);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });
 
