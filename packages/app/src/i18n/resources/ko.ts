@@ -1495,6 +1495,7 @@ export const ko: TranslationResources = {
       noChat: "인용을 추가하려면 대화 탭을 여세요.",
       added: "대화 초안에 인용을 추가했습니다.",
     },
+    selection: en.artifacts.selection,
     pill: "Artifacts {{count}}",
     title: "Artifacts",
     filter: { sessionOnly: "이 세션만 ({{count}})", showAll: "모두 보기 ({{count}})" },

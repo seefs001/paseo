@@ -13,7 +13,9 @@ import { isWeb } from "@/constants/platform";
 import type { DroppedItem, DroppedPathItem, FileDropSink } from "./types";
 import {
   parseWorkspaceFileDragPayload,
+  parseWorkspaceFilesDragPayload,
   WORKSPACE_FILE_DRAG_MIME,
+  WORKSPACE_FILES_DRAG_MIME,
 } from "@/attachments/workspace-file-drag";
 
 type DesktopDragDropPayload =
@@ -200,7 +202,8 @@ export function useDropListeners({
         if (suppressed.value || !hasSink.value) return;
         const types = new Set(e.dataTransfer?.types ?? []);
         const acceptsWorkspaceFile =
-          types.has(WORKSPACE_FILE_DRAG_MIME) && Boolean(getSink()?.onWorkspaceFile);
+          (types.has(WORKSPACE_FILE_DRAG_MIME) || types.has(WORKSPACE_FILES_DRAG_MIME)) &&
+          Boolean(getSink()?.onWorkspaceFile);
         if (types.has("Files") || acceptsWorkspaceFile) {
           isDragging.value = true;
         }
@@ -215,7 +218,8 @@ export function useDropListeners({
         // promise a drop that the handler then discards (suppressed/archived/no consumer mounted).
         const types = new Set(e.dataTransfer.types);
         const acceptsWorkspaceFile =
-          types.has(WORKSPACE_FILE_DRAG_MIME) && Boolean(getSink()?.onWorkspaceFile);
+          (types.has(WORKSPACE_FILE_DRAG_MIME) || types.has(WORKSPACE_FILES_DRAG_MIME)) &&
+          Boolean(getSink()?.onWorkspaceFile);
         const acceptsDrop = types.has("Files") || acceptsWorkspaceFile;
         const canAccept = acceptsDrop && !disabledRef.current && !suppressed.value && hasSink.value;
         e.dataTransfer.dropEffect = canAccept ? "copy" : "none";
@@ -249,6 +253,12 @@ export function useDropListeners({
         if (serializedWorkspaceFile && sink.onWorkspaceFile) {
           const payload = parseWorkspaceFileDragPayload(serializedWorkspaceFile);
           if (payload) {
+            sink.onWorkspaceFile(payload);
+          }
+        }
+        const serializedWorkspaceFiles = e.dataTransfer?.getData(WORKSPACE_FILES_DRAG_MIME);
+        if (serializedWorkspaceFiles && sink.onWorkspaceFile) {
+          for (const payload of parseWorkspaceFilesDragPayload(serializedWorkspaceFiles)) {
             sink.onWorkspaceFile(payload);
           }
         }

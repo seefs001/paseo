@@ -1502,6 +1502,7 @@ export const ja: TranslationResources = {
       noChat: "引用を追加するには会話タブを開いてください。",
       added: "会話の下書きに引用を追加しました。",
     },
+    selection: en.artifacts.selection,
     pill: "Artifacts {{count}}",
     title: "Artifacts",
     filter: { sessionOnly: "このセッションのみ（{{count}}）", showAll: "すべて表示（{{count}}）" },

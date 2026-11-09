@@ -40,13 +40,13 @@ export const en = {
       disabled: "Disabled",
     },
     policyHint:
-      "Tools run on the machine by default. Tools without an SSH implementation are unavailable unless listed as local here. Local tools run on this host, not on the machine.",
+      "File, search and bash tools run on the machine. Other tools listed as local run on this host, as in a local session.",
     localSkills: "Read skills from this host",
     localSkillsHint:
       "Loaded Pi skills and their reference files are read here, read-only. Commands from a skill still run on the machine.",
     localTools: "Local tools",
     localToolsHint:
-      "Tool names separated by commas, for example a memory or browser tool. File, search and bash tools always run on the machine.",
+      "Tool names separated by commas; * means all (the default for new machines). File, search and bash tools always run on the machine.",
     disabledTools: "Disabled tools",
     policyRevision: "Revision {{revision}}",
     savePolicy: "Save routing",
@@ -70,7 +70,7 @@ export const en = {
         "Settings for this workspace only. Each setting uses the machine default unless you override it. Changes apply to the next tool call.",
       localMcpServers: "Local MCP servers",
       localMcpServersHint:
-        "MCP servers from this host's Pi config to start for this workspace. Others stay off.",
+        "MCP servers from this host's Pi config to start for this workspace; * means all (the default for new machines). Others stay off.",
       disabledToolsHint: "Tool names Pi may not call here, including from the user shell.",
       reload: "Reload",
       useMachineDefault: "Use machine default",
@@ -1494,6 +1494,18 @@ export const en = {
       chooseChat: "Choose a conversation",
       noChat: "Open a conversation tab to add this quote.",
       added: "Quote added to the conversation draft.",
+    },
+    selection: {
+      select: "Select",
+      selectAll: "Select all",
+      count: "{{count}} selected",
+      copyPaths: "Copy paths",
+      remove: "Remove",
+      done: "Done",
+      removeTitle: "Remove {{count}} artifacts?",
+      clearAll: "Clear all",
+      clearAllTitle: "Remove every artifact in this workspace?",
+      failed: "{{count}} failed: {{message}}",
     },
     pill: "Artifacts {{count}}",
     title: "Artifacts",

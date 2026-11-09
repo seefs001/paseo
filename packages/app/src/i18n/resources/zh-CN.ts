@@ -40,13 +40,13 @@ export const zhCN: TranslationResources = {
       disabled: "已停用",
     },
     policyHint:
-      "工具默认在机器上运行。没有 SSH 实现的工具不可用，除非在这里列为本机工具。本机工具在此主机运行，而不是在机器上。",
+      "文件、搜索和 bash 工具在机器上运行。其他工具按“本机工具”在此主机运行，和本地会话一样。",
     localSkills: "从此主机读取 skills",
     localSkillsHint:
       "已加载的 Pi skills 及其参考文件从这里只读读取。skill 中的命令仍在机器上运行。",
     localTools: "本机工具",
     localToolsHint:
-      "用逗号分隔的工具名，例如记忆或浏览器工具。文件、搜索和 bash 工具始终在机器上运行。",
+      "用逗号分隔的工具名；* 表示全部（新机器默认）。文件、搜索和 bash 工具始终在机器上运行。",
     disabledTools: "停用的工具",
     policyRevision: "版本 {{revision}}",
     savePolicy: "保存路由",
@@ -68,7 +68,7 @@ export const zhCN: TranslationResources = {
         "仅对此工作区生效。每项默认沿用机器设置，除非你单独覆盖。改动从下一次工具调用开始生效。",
       localMcpServers: "本机 MCP 服务器",
       localMcpServersHint:
-        "为此工作区启动的、来自此主机 Pi 配置的 MCP 服务器。其他服务器保持关闭。",
+        "为此工作区启动的、来自此主机 Pi 配置的 MCP 服务器；* 表示全部（新机器默认）。其他服务器保持关闭。",
       disabledToolsHint: "Pi 在这里不能调用的工具名，包括用户 shell。",
       reload: "重新加载",
       useMachineDefault: "沿用机器设置",
@@ -1460,6 +1460,18 @@ export const zhCN: TranslationResources = {
       chooseChat: "选择对话",
       noChat: "先打开一个对话标签，再添加引用。",
       added: "引用已添加到对话草稿。",
+    },
+    selection: {
+      select: "选择",
+      selectAll: "全选",
+      count: "已选 {{count}} 项",
+      copyPaths: "复制路径",
+      remove: "移除",
+      done: "完成",
+      removeTitle: "移除 {{count}} 个 Artifact？",
+      clearAll: "清空全部",
+      clearAllTitle: "移除这个工作区的全部 Artifact？",
+      failed: "{{count}} 项失败：{{message}}",
     },
     pill: "Artifacts {{count}}",
     title: "Artifacts",

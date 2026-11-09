@@ -1505,6 +1505,7 @@ export const ru: TranslationResources = {
       noChat: "Откройте вкладку разговора, чтобы добавить цитату.",
       added: "Цитата добавлена в черновик разговора.",
     },
+    selection: en.artifacts.selection,
     pill: "Artifacts {{count}}",
     title: "Artifacts",
     filter: { sessionOnly: "Только эта сессия ({{count}})", showAll: "Показать все ({{count}})" },

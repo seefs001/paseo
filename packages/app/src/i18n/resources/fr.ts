@@ -1517,6 +1517,7 @@ export const fr: TranslationResources = {
       noChat: "Ouvrez un onglet de conversation pour ajouter cette citation.",
       added: "Citation ajoutée au brouillon de la conversation.",
     },
+    selection: en.artifacts.selection,
     pill: "Artifacts {{count}}",
     title: "Artifacts",
     filter: {

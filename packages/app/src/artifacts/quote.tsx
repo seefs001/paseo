@@ -6,6 +6,8 @@ import { StyleSheet } from "react-native-unistyles";
 import type { ArtifactQuoteContextAttachment } from "@/attachments/types";
 import { generateAttachmentId } from "@/attachments/utils";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
+import { useProviderIcon } from "@/components/provider-icons";
+import { DensityIcon } from "@/components/ui/density-icon";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { useToast } from "@/contexts/toast-context";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
@@ -15,6 +17,10 @@ import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layo
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
 import { toErrorMessage } from "@/utils/error-messages";
+import { deriveSidebarStateBucket, type SidebarStateBucket } from "@/utils/sidebar-agent-state";
+import { getStatusDotColor } from "@/utils/status-dot-color";
+import { formatTimeAgo } from "@/utils/time";
+import { MessageSquareDashed } from "lucide-react-native";
 
 export interface ArtifactQuoteInput {
   artifact: Artifact;
@@ -25,6 +31,12 @@ interface QuoteDestination {
   tabId: string;
   draftKey: string;
   title: string;
+  /** Null for an unsent draft tab. */
+  agent: {
+    provider: string;
+    bucket: SidebarStateBucket;
+    lastActivityAt: Date;
+  } | null;
 }
 
 export function ArtifactQuoteSheet({
@@ -58,6 +70,11 @@ export function ArtifactQuoteSheet({
             tabId: tab.tabId,
             draftKey: buildDraftStoreKey({ serverId, agentId: tab.target.agentId }),
             title: agent.title || t("workspace.tabs.fallback.agent"),
+            agent: {
+              provider: agent.provider,
+              bucket: deriveSidebarStateBucket(agent),
+              lastActivityAt: agent.lastActivityAt,
+            },
           },
         ];
       }
@@ -71,6 +88,7 @@ export function ArtifactQuoteSheet({
               draftId: tab.target.draftId,
             }),
             title: t("workspace.tabs.fallback.agent"),
+            agent: null,
           },
         ];
       }
@@ -112,37 +130,58 @@ export function ArtifactQuoteSheet({
       visible={quote !== null}
       onClose={onClose}
       header={header}
+      desktopMaxWidth={560}
       testID="artifact-quote-destination"
     >
-      <View style={styles.list}>
-        {destinations.length === 0 ? (
-          <Text style={styles.muted}>{t("artifacts.interaction.noChat")}</Text>
-        ) : null}
-        {destinations.map((destination) => (
-          <QuoteDestinationRow
-            key={destination.tabId}
-            destination={destination}
-            onSelect={choose}
-            disabled={pending}
-          />
-        ))}
-      </View>
+      {quote ? <QuotePreview quote={quote} /> : null}
+      {destinations.length === 0 ? (
+        <Text style={styles.empty}>{t("artifacts.interaction.noChat")}</Text>
+      ) : (
+        <View style={styles.list}>
+          {destinations.map((destination) => (
+            <QuoteDestinationRow
+              key={destination.tabId}
+              serverId={serverId}
+              destination={destination}
+              onSelect={choose}
+              disabled={pending}
+            />
+          ))}
+        </View>
+      )}
     </AdaptiveModalSheet>
   );
 }
 
+function QuotePreview({ quote }: { quote: ArtifactQuoteInput }) {
+  return (
+    <View style={styles.preview} testID="artifact-quote-preview">
+      <Text style={styles.previewTitle} numberOfLines={1}>
+        {quote.artifact.title}
+      </Text>
+      <Text style={styles.previewText} numberOfLines={4}>
+        {quote.text.trim()}
+      </Text>
+    </View>
+  );
+}
+
 function QuoteDestinationRow({
+  serverId,
   destination,
   onSelect,
   disabled,
 }: {
+  serverId: string;
   destination: QuoteDestination;
   onSelect: (destination: QuoteDestination) => Promise<void>;
   disabled: boolean;
 }) {
+  const ProviderIcon = useProviderIcon(destination.agent?.provider ?? "", serverId);
   const select = useCallback(() => {
     void onSelect(destination);
   }, [destination, onSelect]);
+  const { agent } = destination;
   return (
     <PressHighlight
       accessibilityRole="button"
@@ -151,14 +190,87 @@ function QuoteDestinationRow({
       style={styles.destination}
       testID={`artifact-quote-to-${destination.tabId}`}
     >
-      <Text style={styles.title}>{destination.title}</Text>
+      <View style={styles.icon}>
+        <DensityIcon
+          icon={agent ? ProviderIcon : MessageSquareDashed}
+          size="sm"
+          color="foregroundMuted"
+        />
+      </View>
+      <Text style={styles.title} numberOfLines={1}>
+        {destination.title}
+      </Text>
+      {agent ? (
+        <>
+          <Text style={styles.meta} numberOfLines={1}>
+            {formatTimeAgo(agent.lastActivityAt)}
+          </Text>
+          <StatusDot bucket={agent.bucket} />
+        </>
+      ) : null}
     </PressHighlight>
   );
 }
 
+function StatusDot({ bucket }: { bucket: SidebarStateBucket }) {
+  styles.useVariants({ bucket });
+  return <View style={styles.dot} />;
+}
+
 const styles = StyleSheet.create((theme) => ({
-  list: { gap: theme.spacing[2], padding: theme.spacing[4] },
-  destination: { padding: theme.spacing[3], borderRadius: theme.borderRadius.md },
-  title: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
-  muted: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  preview: {
+    marginHorizontal: theme.spacing[4],
+    marginTop: theme.spacing[2],
+    marginBottom: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    gap: theme.spacing[1],
+    borderLeftWidth: 2,
+    borderLeftColor: theme.colors.border,
+    backgroundColor: theme.colors.surface2,
+    borderRadius: theme.borderRadius.md,
+  },
+  previewTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  previewText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  list: { paddingHorizontal: theme.spacing[2], paddingBottom: theme.spacing[3] },
+  destination: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    minHeight: 40,
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+  },
+  icon: { width: 20, alignItems: "center" },
+  title: { flex: 1, minWidth: 0, color: theme.colors.foreground, fontSize: theme.fontSize.base },
+  meta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: theme.borderRadius.full,
+    variants: {
+      bucket: {
+        needs_input: {
+          backgroundColor: getStatusDotColor({ theme, bucket: "needs_input" }) ?? undefined,
+        },
+        failed: { backgroundColor: getStatusDotColor({ theme, bucket: "failed" }) ?? undefined },
+        running: { backgroundColor: getStatusDotColor({ theme, bucket: "running" }) ?? undefined },
+        attention: {
+          backgroundColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
+        },
+        done: { backgroundColor: theme.colors.border },
+      },
+    },
+  },
+  empty: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    textAlign: "center",
+    padding: theme.spacing[6],
+  },
 }));

@@ -1512,6 +1512,7 @@ export const ptBR: TranslationResources = {
       noChat: "Abra uma aba de conversa para adicionar esta citação.",
       added: "Citação adicionada ao rascunho da conversa.",
     },
+    selection: en.artifacts.selection,
     pill: "Artifacts {{count}}",
     title: "Artifacts",
     filter: { sessionOnly: "Só esta sessão ({{count}})", showAll: "Mostrar tudo ({{count}})" },

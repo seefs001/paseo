@@ -1522,6 +1522,7 @@ export const es: TranslationResources = {
       noChat: "Abre una pestaña de conversación para añadir esta cita.",
       added: "Cita añadida al borrador de la conversación.",
     },
+    selection: en.artifacts.selection,
     pill: "Artifacts {{count}}",
     title: "Artifacts",
     filter: { sessionOnly: "Solo esta sesión ({{count}})", showAll: "Mostrar todo ({{count}})" },

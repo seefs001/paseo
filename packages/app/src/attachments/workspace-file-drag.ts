@@ -2,6 +2,8 @@ import type { WorkspaceFileComposerAttachment } from "./types";
 import { isWorkspaceFileComposerAttachment } from "./workspace-file";
 
 export const WORKSPACE_FILE_DRAG_MIME = "application/x-paseo-workspace-file+json";
+/** Several workspace files in one drag, such as a multi-selection of artifacts. */
+export const WORKSPACE_FILES_DRAG_MIME = "application/x-paseo-workspace-files+json";
 
 export interface WorkspaceFileDragPayload {
   version: 1;
@@ -52,4 +54,24 @@ export function resolveWorkspaceFileDrop(input: {
     input.payload.workspaceId === input.workspaceId
     ? input.payload.attachment
     : null;
+}
+
+export function serializeWorkspaceFilesDragPayload(
+  payloads: readonly WorkspaceFileDragPayload[],
+): string {
+  return JSON.stringify(payloads);
+}
+
+export function parseWorkspaceFilesDragPayload(serialized: string): WorkspaceFileDragPayload[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(serialized);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const payload = parseWorkspaceFileDragPayload(JSON.stringify(entry));
+    return payload ? [payload] : [];
+  });
 }

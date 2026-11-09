@@ -1480,6 +1480,7 @@ export const ar: TranslationResources = {
       noChat: "افتح علامة تبويب محادثة لإضافة هذا الاقتباس.",
       added: "أُضيف الاقتباس إلى مسودة المحادثة.",
     },
+    selection: en.artifacts.selection,
     pill: "Artifacts {{count}}",
     title: "Artifacts",
     filter: { sessionOnly: "هذه الجلسة فقط ({{count}})", showAll: "عرض الكل ({{count}})" },
