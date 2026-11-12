@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import React from "react";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderComponent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentAttachment, AgentProfile } from "@getpaseo/protocol/messages";
 import { UserMessage } from "@/components/message";
+import { createUserMessageExpansion } from "@/components/user-message/expansion";
+import { UserMessageExpansionContext } from "@/components/user-message/expansion-context";
 import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-default-environment";
 import type { MarkdownClipboardEnvironment } from "@/utils/rich-clipboard";
 import { resolveResourceLink, type ResourceClient } from "./resolve";
@@ -58,6 +60,15 @@ const sessionAttachment: AgentAttachment = {
   text: "- provider: codex\n- agentId: existing-session\n- cwd: /project",
 };
 
+function render(element: React.ReactElement) {
+  const expansion = createUserMessageExpansion();
+  return renderComponent(
+    <UserMessageExpansionContext.Provider value={expansion}>
+      {element}
+    </UserMessageExpansionContext.Provider>,
+  );
+}
+
 beforeEach(() => vi.stubGlobal("React", React));
 afterEach(() => {
   cleanup();
@@ -67,7 +78,7 @@ afterEach(() => {
 
 describe("sent profile references", () => {
   it("renders exact inline ranges and opens the stored snapshot without attachments", () => {
-    const view = render(<UserMessage message={message} timestamp={1} />);
+    const view = render(<UserMessage itemId="message-1" message={message} timestamp={1} />);
     const body = view.container.querySelector('[data-message-text="true"]');
 
     expect(body?.textContent).toBe(plainText);
@@ -93,7 +104,11 @@ describe("sent profile references", () => {
       JSON.stringify({ serverId: "other-host", profile: otherProfile }),
     )})`;
     const view = render(
-      <UserMessage message={`😀${profileLink}\n与${otherLink}。`} timestamp={1} />,
+      <UserMessage
+        itemId="message-1"
+        message={`😀${profileLink}\n与${otherLink}。`}
+        timestamp={1}
+      />,
     );
     expect(view.container.querySelector('[data-message-text="true"]')?.textContent).toBe(
       `😀#${profile.name}\n与#${profile.name}。`,
@@ -111,7 +126,7 @@ describe("sent profile references", () => {
   it("copies the sent Markdown, keeping each reference's resource link", async () => {
     const writePlainText = vi.fn<MarkdownClipboardEnvironment["writePlainText"]>();
     vi.mocked(getDefaultMarkdownClipboardEnvironment).mockReturnValue({ writePlainText });
-    const view = render(<UserMessage message={message} timestamp={1} />);
+    const view = render(<UserMessage itemId="message-1" message={message} timestamp={1} />);
 
     fireEvent.click(view.getByRole("button", { name: "Copy message" }));
 
@@ -129,6 +144,7 @@ describe("sent profile references", () => {
   it("hides only profile pills for inline references and preserves session details", () => {
     const view = render(
       <UserMessage
+        itemId="message-1"
         message={message}
         attachments={[profileAttachment, sessionAttachment]}
         timestamp={1}
@@ -151,6 +167,7 @@ describe("sent profile references", () => {
     };
     const view = render(
       <UserMessage
+        itemId="message-1"
         message={message}
         attachments={[profileAttachment, otherAttachment]}
         timestamp={1}
@@ -165,6 +182,7 @@ describe("sent profile references", () => {
   it("keeps old profile and session pills when the message has no encoded references", () => {
     const view = render(
       <UserMessage
+        itemId="message-1"
         message="@old-profile @existing-session"
         attachments={[profileAttachment, sessionAttachment]}
         timestamp={1}
@@ -183,7 +201,13 @@ describe("sent profile references", () => {
 
   it("uses the same text and references for optimistic and reloaded messages", () => {
     const pending = render(
-      <UserMessage message={message} attachments={[profileAttachment]} timestamp={1} isPending />,
+      <UserMessage
+        itemId="message-1"
+        message={message}
+        attachments={[profileAttachment]}
+        timestamp={1}
+        isPending
+      />,
     );
     expect(pending.container.querySelector('[data-message-text="true"]')?.textContent).toBe(
       plainText,
@@ -192,7 +216,7 @@ describe("sent profile references", () => {
     expect(pending.queryByTestId("user-message-agent-mention-pill")).toBeNull();
     pending.unmount();
 
-    const reloaded = render(<UserMessage message={message} timestamp={1} />);
+    const reloaded = render(<UserMessage itemId="message-1" message={message} timestamp={1} />);
     expect(reloaded.container.querySelector('[data-message-text="true"]')?.textContent).toBe(
       plainText,
     );
@@ -244,6 +268,7 @@ describe("sent profile references", () => {
     );
     const view = render(
       <UserMessage
+        itemId="message-1"
         message={selected.text}
         attachments={[sessionCard, profileAttachment]}
         timestamp={1}
@@ -271,7 +296,12 @@ describe("sent profile references", () => {
     const literal =
       "#manual @session [#broken](paseo-profile:not-json) [web](https://example.test) **bold**";
     const view = render(
-      <UserMessage message={literal} attachments={[profileAttachment]} timestamp={1} />,
+      <UserMessage
+        itemId="message-1"
+        message={literal}
+        attachments={[profileAttachment]}
+        timestamp={1}
+      />,
     );
 
     expect(view.container.querySelector('[data-message-text="true"]')?.textContent).toBe(literal);

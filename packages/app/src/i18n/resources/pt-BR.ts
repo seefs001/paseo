@@ -2273,6 +2273,8 @@ export const ptBR: TranslationResources = {
     title: "Novidades",
     installed: "Instalada",
     showMore: "Mostrar mais",
+    showAllChanges: "Mostrar todas as mudanças",
+    hideAllChanges: "Ocultar todas as mudanças",
     openWebsite: "Changelog completo",
     error: {
       title: "Não foi possível carregar o changelog",

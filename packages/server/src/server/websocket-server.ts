@@ -12,6 +12,7 @@ import {
 } from "./agent/agent-messages/index.js";
 import {
   sendPreparedPromptToAgent,
+  unarchiveAgentState,
   waitForAgentRunStartWithTimeout,
 } from "./agent/agent-prompt.js";
 import { createToolHosts } from "./agent/host-operations/index.js";
@@ -82,6 +83,7 @@ import type { HubRelationshipManagement } from "./hub/relationship-controller.js
 import { WorkspaceSetupObservation } from "./workspace-setup-observation.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
 import { WorkspaceArchiveOperations } from "./workspace-archive-operations.js";
+import { unarchiveWorkspaceAgents } from "./workspace-archive-service.js";
 import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import type { AgentProvider } from "./agent/agent-sdk-types.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
@@ -843,6 +845,13 @@ export class VoiceAssistantWebSocketServer {
     const isDirectory = async (path: string) =>
       (await stat(path).catch(() => null))?.isDirectory() ?? false;
     const workspaceProvisioning = createWorkspaceProvisioningService({
+      unarchiveWorkspaceAgents: (request) =>
+        unarchiveWorkspaceAgents({
+          ...request,
+          agentStorage,
+          unarchiveAgent: (id) => unarchiveAgentState(agentStorage, agentManager, id),
+          sessionLogger: this.logger,
+        }),
       lifecycle: this.pluginRuntime,
       serverId,
       workspaceRegistry: this.workspaceRegistry,
@@ -2395,6 +2404,8 @@ export class VoiceAssistantWebSocketServer {
         // COMPAT(providerRemoval): added in v0.1.105, drop the gate when floor >= v0.1.105.
         providerRemoval: true,
         hopliteProvider: this.providerSnapshotManager.supportsConfigRequiredProvider("hoplite"),
+        // COMPAT(fxProvider): added after v0.15.3, remove after 2027-05-09 once host floor includes the bundled adapter.
+        fxProvider: this.providerSnapshotManager.supportsConfigRequiredProvider("fx"),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: true,
         // COMPAT(importSessionSearch): added in v0.7.3, remove gate after 2027-03-02.
@@ -2404,6 +2415,8 @@ export class VoiceAssistantWebSocketServer {
         forgeProviders: true,
         // COMPAT(selectiveAgentTimeline): added in v0.1.106, remove after 2027-01-12.
         selectiveAgentTimeline: true,
+        // COMPAT(timelineFreshnessCheck): added after v0.15.3, remove after 2027-05-09.
+        timelineFreshnessCheck: true,
         explicitEventSubscriptions: true,
         // COMPAT(canonicalSubmittedPrompts): added in v0.2.6, remove gate after 2027-01-30.
         canonicalSubmittedPrompts: true,

@@ -79,6 +79,7 @@ interface PluginHookAgent {
   provider: string;
   cwd: string;
   title: string | null;
+  readonly background: boolean;
   metadata: Record<string, JsonValue>;
 }
 
@@ -99,6 +100,7 @@ type PluginTurnOutcome =
 
 | Field        | Shape / meaning                                                                        |
 | ------------ | -------------------------------------------------------------------------------------- |
+| `background` | `true` for a [background agent](#background-agents)                                    |
 | `turnId`     | Provider-reported `string` or `null`; unique across resumed sessions                   |
 | `timeline`   | Deprecated, always `[]`; fetch history with the SDK.                                   |
 | `request`    | SDK `AgentPermissionRequest`; `kind` is `tool`, `plan`, `question`, `mode`, or `other` |
@@ -320,6 +322,7 @@ server.addHook("agent.open.before", async ({ request }, { paseo }) => {
   "provider": "codex",
   "cwd": "/projects/shop",
   "title": "Workspace notes",
+  "background": false,
   "labels": { "notes/enabled": "true" },
   "metadata": { "linear.issue": { "id": "ENG-123" } },
   "tools": [],
@@ -334,6 +337,7 @@ server.addHook("agent.open.before", async ({ request }, { paseo }) => {
 | ------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `workspaceId` | String or `null`                                                                                                        |
 | `title`       | Read-only string or `null`; creation title on create, stored title on resume.                                           |
+| `background`  | Read-only `true` for a [background agent](#background-agents). Fixed at creation.                                       |
 | `labels`      | Read-only string map; creation labels on create, stored labels on resume.                                               |
 | `metadata`    | Read-only JSON map; the [metadata](#metadata) stored on the agent.                                                      |
 | `tools`       | Editable `AgentToolDefinition[]`, local to this plugin. See [Attach tools to agents](#attach-tools-to-agents).          |
@@ -367,7 +371,7 @@ the placeholder URL with your MCP endpoint:
 
 ```ts
 server.addHook("agent.open.before", async ({ request }) => {
-  if (request.provider !== "codex") return;
+  if (request.provider !== "codex" || request.background) return;
 
   return {
     ...request,
@@ -443,6 +447,7 @@ Select agents using any of the session-open request fields:
 | Provider         | `request.provider === "codex"`               |
 | Workspace        | `request.workspaceId === "workspace-456"`    |
 | Individual agent | `request.agentId === chosenAgentId`          |
+| Background agent | `request.background`                         |
 
 `request.tools` starts empty for each plugin. Each callback sees the tools returned by earlier
 callbacks in that plugin; replace the array to add or remove tools. Returning `undefined` preserves
@@ -640,7 +645,20 @@ server.addHook("agent.permission.after", async ({ agent, requestId, resolution }
 });
 ```
 
+## Background agents
+
 Agent hooks exclude the daemon's private disposable helpers. Background agents and the agents in background workspaces use the same hooks.
+
+A [background agent](/docs/sdk/agents#run-a-helper-as-a-background-agent) is a helper hidden from tabs, lists and attention. Every hook's `agent.background` and the `agent.open.before` request's `background` are `true` for one, so you can skip it without a lookup:
+
+```ts
+server.addHook("agent.turn.after", async ({ agent }) => {
+  if (agent.background) return; // A helper reports to the agent that created it.
+  await notifyTeam(agent);
+});
+```
+
+`background` is fixed when the agent is created and a hook cannot change it. An agent created in a background workspace without `background: true` reads `false`. Hosts older than 0.16.0 omit the field, so it reads as `undefined`.
 
 ## Ordering and returned values
 

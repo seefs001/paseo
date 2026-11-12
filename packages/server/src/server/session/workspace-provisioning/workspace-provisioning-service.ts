@@ -1,3 +1,4 @@
+import type { WorkspaceArchiveRestoreRequest } from "../../workspace-archive-service.js";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type { PluginLifecycle } from "../../plugins/lifecycle/index.js";
 import { describeHookWorkspace } from "../../plugins/lifecycle/index.js";
@@ -22,6 +23,13 @@ import { deriveProjectKey } from "../../project-key.js";
 import { areEquivalentPaths, createRealpathAwarePathMatcher } from "../../../utils/path.js";
 import type { UntrustedWorkspaceSource } from "../../workspace-automation-gate.js";
 import { readPaseoWorktreeMetadata } from "../../../utils/worktree-metadata.js";
+
+interface RestoreProjectRecordInput {
+  project: PersistedProjectRecord;
+  workspace: PersistedWorkspaceRecord;
+  checkout: ProjectCheckoutLitePayload | null;
+  timestamp: string;
+}
 
 export interface ResolveOrCreateWorkspaceIdInput {
   createdWorktree: CreatePaseoWorktreeWorkflowResult | null;
@@ -84,6 +92,7 @@ export interface WorkspaceProvisioningService {
   findOrCreateProjectForDirectory(cwd: string): Promise<PersistedProjectRecord>;
   ensureWorkspaceRecordUnarchived(
     workspace: PersistedWorkspaceRecord,
+    archivedAt?: string | null,
   ): Promise<PersistedWorkspaceRecord>;
 }
 
@@ -104,6 +113,7 @@ export class WorkspaceProvisioningError extends Error {
 }
 
 export function createWorkspaceProvisioningService(deps: {
+  unarchiveWorkspaceAgents: (request: WorkspaceArchiveRestoreRequest) => Promise<void>;
   serverId?: string;
   workspaceRegistry: WorkspaceRegistry;
   projectRegistry: ProjectRegistry;
@@ -442,8 +452,38 @@ export function createWorkspaceProvisioningService(deps: {
       : workspace.autoArchivedChangeRequestUrl;
   }
 
+  async function restoreProjectRecord({
+    project,
+    workspace,
+    checkout,
+    timestamp,
+  }: RestoreProjectRecordInput): Promise<void> {
+    const projectCheckout =
+      checkout && areEquivalentPaths(project.rootPath, workspace.cwd)
+        ? checkout
+        : await workspaceGitService.getCheckout(project.rootPath);
+    const kind = projectCheckout.isGit ? "git" : "non_git";
+    const projectKey = deriveProjectKey({
+      rootPath: project.rootPath,
+      remoteUrl: projectCheckout.remoteUrl,
+      worktreeRoot: projectCheckout.worktreeRoot,
+      mainRepoRoot: projectCheckout.mainRepoRoot,
+      serverId,
+    });
+    if (project.archivedAt || project.kind !== kind || project.projectKey !== projectKey) {
+      await projectRegistry.upsert({
+        ...project,
+        kind,
+        projectKey,
+        archivedAt: null,
+        updatedAt: timestamp,
+      });
+    }
+  }
+
   async function ensureWorkspaceRecordUnarchived(
     workspace: PersistedWorkspaceRecord,
+    archivedAt = workspace.archivedAt,
   ): Promise<PersistedWorkspaceRecord> {
     const project = await projectRegistry.get(workspace.projectId);
     if (workspace.projectId !== null && !project)
@@ -470,31 +510,18 @@ export function createWorkspaceProvisioningService(deps: {
       };
     }
     if (project && (project.archivedAt || workspace.archivedAt)) {
-      const projectCheckout =
-        checkout && areEquivalentPaths(project.rootPath, workspace.cwd)
-          ? checkout
-          : await workspaceGitService.getCheckout(project.rootPath);
-      const kind = projectCheckout.isGit ? "git" : "non_git";
-      const projectKey = deriveProjectKey({
-        rootPath: project.rootPath,
-        remoteUrl: projectCheckout.remoteUrl,
-        worktreeRoot: projectCheckout.worktreeRoot,
-        mainRepoRoot: projectCheckout.mainRepoRoot,
-        serverId,
-      });
-      if (project.archivedAt || project.kind !== kind || project.projectKey !== projectKey) {
-        await projectRegistry.upsert({
-          ...project,
-          kind,
-          projectKey,
-          archivedAt: null,
-          updatedAt: timestamp,
-        });
-      }
+      await restoreProjectRecord({ project, workspace, checkout, timestamp });
     }
-    if (!next) return workspace;
-    await workspaceRegistry.upsert(next);
-    return next;
+    if (next) await workspaceRegistry.upsert(next);
+    // A canceled archive supplies a modern stamp before the record itself is archived.
+    if (archivedAt) {
+      await deps.unarchiveWorkspaceAgents({
+        workspaceId: workspace.workspaceId,
+        archivedAt,
+        allowLegacyFallback: Boolean(workspace.archivedAt),
+      });
+    }
+    return next ?? workspace;
   }
 
   async function refreshWorkspaceRecord(

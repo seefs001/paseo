@@ -83,6 +83,24 @@ describe("tool-call presentation", () => {
     });
   });
 
+  it("shows a shell call awaiting its command as Shell, loading its details", () => {
+    const presentation = buildToolCallPresentation({
+      toolName: "Bash",
+      status: "running",
+      error: null,
+      detail: { type: "shell", command: "" },
+      resolveIcon: fakeResolveIcon,
+    });
+
+    expect(presentation).toMatchObject({
+      displayName: "Shell",
+      summary: undefined,
+      isLoadingDetails: true,
+      hasDetails: false,
+      canOpenDetails: true,
+    });
+  });
+
   it("uses the declared skill name rather than the checkout folder or document title", () => {
     const presentation = buildToolCallPresentation({
       toolName: "read",
