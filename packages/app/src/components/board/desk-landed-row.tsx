@@ -108,6 +108,7 @@ export const DeskLandedRow = memo(function DeskLandedRow({
         ) : null}
         {prHint ? (
           <WorkspaceMetaRow
+            backdrop="surface1"
             currentBranch={null}
             projectName={null}
             hostBadge={null}

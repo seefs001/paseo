@@ -52,35 +52,9 @@ has_files() {
 }
 
 seed_worktree_paseo_home() {
-  local source_home="${PASEO_DEV_SEED_HOME:-$HOME/.paseo}"
-  local target_home="$1"
-
-  if [ ! -d "$source_home" ]; then
-    echo "  Seed:    skipped (${source_home} missing)"
-    return
-  fi
-
-  if [ "$source_home" = "$target_home" ]; then
-    echo "  Seed:    skipped (source is target)"
-    return
-  fi
-
-  if [ "${PASEO_DEV_RESET_HOME:-0}" = "1" ]; then
-    rm -rf "$target_home"
-  elif has_files "$target_home"; then
-    echo "  Seed:    skipped (${target_home} already has data)"
-    return
-  fi
-
-  mkdir -p "$target_home"
-  echo "  Seed:    copying metadata from ${source_home}"
-  copy_json_tree "$source_home/agents" "$target_home/agents"
-  copy_json_tree "$source_home/projects" "$target_home/projects"
-  if [ -f "$source_home/config.json" ]; then
-    cp "$source_home/config.json" "$target_home/config.json"
-  fi
-
-  echo "  Seed:    copied metadata from ${source_home}"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  node "$script_dir/seed-dev-home.mjs" "${PASEO_DEV_SEED_HOME:-$HOME/.paseo}" "$1"
 }
 
 configure_dev_daemon_config() {

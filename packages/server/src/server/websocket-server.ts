@@ -768,6 +768,22 @@ export class VoiceAssistantWebSocketServer {
           this.workspaceTrace.dispatched(batchId, request, disposition, replaced),
         failed: (batchId, request) => this.workspaceTrace.failed(batchId, request),
       },
+      tryRunOutOfBand: (request, onAccepted) =>
+        agentManager.tryRunOutOfBand(
+          request.recipientId,
+          request.prompt,
+          { clientMessageId: request.messageIds[0] },
+          onAccepted,
+        ),
+      isRunning: (agentId) => agentManager.hasInFlightRun(agentId),
+      hasPendingPermission: (agentId) => agentManager.hasPendingPermissions(agentId),
+      subscribe: (notify) =>
+        agentManager.subscribe(
+          (event) => {
+            if (event.type === "agent_state") notify(event.agent.id);
+          },
+          { replayState: false },
+        ),
       dispatch: async (batch) => {
         const { disposition } = await sendPreparedPromptToAgent({
           agentManager,
@@ -775,11 +791,12 @@ export class VoiceAssistantWebSocketServer {
           agentId: batch.recipientId,
           prompt: batch.prompt,
           activeTurnBehavior: batch.activeTurnBehavior,
+          idleOnly: batch.idleOnly,
+          onDispatch: batch.onDispatch,
           sessionMode: batch.sessionMode,
           clearPendingPermissions: batch.clearPendingPermissions,
           unarchive: batch.unarchive,
           runOptions: { clientMessageId: batch.messageIds[0] },
-          onDispatch: batch.onDispatch,
           logger: this.logger,
         });
         if (disposition === "turn_started")
@@ -2300,6 +2317,8 @@ export class VoiceAssistantWebSocketServer {
         pluginGitManagement: true,
         pluginSourceInstallation: true,
         pluginSourceUpdates: true,
+        // COMPAT(pluginRegistry): added in v0.16.0, remove gate after 2027-05-15.
+        pluginRegistry: true,
         pluginLogs: true,
         // COMPAT(pluginThemes): added in v0.5.0, remove gate after 2027-08-20.
         pluginThemes: true,

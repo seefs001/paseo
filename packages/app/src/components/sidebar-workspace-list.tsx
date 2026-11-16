@@ -1,8 +1,8 @@
+import { PressHighlight as Pressable } from "@/components/ui/press-highlight";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
   Text,
-  Pressable,
   ScrollView,
   type GestureResponderEvent,
   type PressableStateCallbackType,
@@ -87,7 +87,6 @@ import {
 import { ProjectLeadingVisual } from "@/components/sidebar/project-leading-visual";
 import { useToast } from "@/contexts/toast-context";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
-import { toWorktreeArchiveRisk } from "@/git/worktree-archive-warning";
 import { hasVisibleOrderChanged, mergeWithRemainder } from "@/utils/sidebar-reorder";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
@@ -374,12 +373,10 @@ function projectKebabStyle({
 
 function getProjectWorkspaceRowStyle({
   isDragging,
-  isPressed,
   selected,
   isHovered,
 }: {
   isDragging: boolean;
-  isPressed: boolean;
   selected: boolean;
   isHovered: boolean;
 }) {
@@ -388,7 +385,6 @@ function getProjectWorkspaceRowStyle({
     isHovered && styles.workspaceRowHovered,
     selected && styles.sidebarRowSelected,
     isDragging && styles.workspaceRowDragging,
-    isPressed && styles.workspaceRowPressed,
   ];
 }
 
@@ -680,7 +676,11 @@ function WorkspaceRowRightGroup({
       {renderSlot ? (
         <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
           <SidebarWorkspaceTrailingActionBase presentation={trailingPresentation}>
-            <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
+            <SidebarWorkspaceTrailingContent
+              workspace={workspace}
+              trailing={trailing}
+              backdrop={backdrop}
+            />
           </SidebarWorkspaceTrailingActionBase>
           <SidebarWorkspaceTrailingActionOverlay
             visible={kebab.showKebab}
@@ -822,7 +822,6 @@ function NewWorkspaceGhostRow({
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.newWorkspaceGhostRow,
       hovered && !pressed && styles.newWorkspaceGhostRowHovered,
-      pressed && styles.newWorkspaceGhostRowPressed,
     ],
     [],
   );
@@ -835,6 +834,7 @@ function NewWorkspaceGhostRow({
       })}
       onPress={handlePress}
       style={rowStyle}
+      highlightStyle={styles.newWorkspaceGhostRowPressed}
       testID={`sidebar-project-new-workspace-row-${project.viewKey}`}
     >
       {({ hovered, pressed }) => (
@@ -885,7 +885,7 @@ function ProjectHeaderRow({
   dragHandleProps,
 }: ProjectHeaderRowProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isPressed, setIsPressed] = useState(false);
+  const [isHighlighted, setIsHighlighted] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const isMobileBreakpoint = useIsCompactFormFactor();
   const localDaemonServerId = useLocalDaemonServerId();
@@ -932,25 +932,13 @@ function ProjectHeaderRow({
     setContextMenuOpen(open);
     if (open) setIsHovered(false);
   }, []);
-  const handleProjectPressIn = useCallback(
-    (event: GestureResponderEvent) => {
-      setIsPressed(true);
-      interaction.handlePressIn(event);
-    },
-    [interaction],
-  );
-  const handleProjectPressOut = useCallback(() => {
-    setIsPressed(false);
-    interaction.handlePressOut();
-  }, [interaction]);
 
-  const projectRowStyle = useCallback(
-    ({ pressed }: PressableStateCallbackType) => [
+  const projectRowStyle = useMemo(
+    () => [
       styles.projectRow,
       isDragging && styles.projectRowDragging,
       selected && styles.sidebarRowSelected,
       isHovered && styles.projectRowHovered,
-      pressed && styles.projectRowPressed,
     ],
     [isDragging, selected, isHovered],
   );
@@ -964,7 +952,7 @@ function ProjectHeaderRow({
           iconDataUri={iconDataUri}
           statusBucket={statusBucket}
           projectViewKey={project.viewKey}
-          backdrop={getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered })}
+          backdrop={getSidebarRowBackdrop({ isDragging, isHighlighted, selected, isHovered })}
           chevron={chevron}
           showChevron={isHovered && chevron !== null}
           isArchiving={isArchiving}
@@ -1010,9 +998,10 @@ function ProjectHeaderRow({
           accessibilityRole="button"
           style={projectRowStyle}
           highlightStyle={styles.projectRowPressed}
-          onPressIn={handleProjectPressIn}
+          onHighlightChange={setIsHighlighted}
+          onPressIn={interaction.handlePressIn}
           onTouchMove={interaction.handleTouchMove}
-          onPressOut={handleProjectPressOut}
+          onPressOut={interaction.handlePressOut}
           onPress={handlePress}
           testID={`sidebar-project-row-${project.viewKey}`}
         >
@@ -1036,9 +1025,10 @@ function ProjectHeaderRow({
           accessibilityRole="button"
           style={projectRowStyle}
           highlightStyle={styles.projectRowPressed}
-          onPressIn={handleProjectPressIn}
+          onHighlightChange={setIsHighlighted}
+          onPressIn={interaction.handlePressIn}
           onTouchMove={interaction.handleTouchMove}
-          onPressOut={handleProjectPressOut}
+          onPressOut={interaction.handlePressOut}
           onPress={handlePress}
           testID={`sidebar-project-row-${project.viewKey}`}
         >
@@ -1094,7 +1084,7 @@ function WorkspaceRowInner({
   reserveIdleStatusIndicatorSpace = true,
 }: WorkspaceRowInnerProps) {
   const isCompact = useIsCompactFormFactor();
-  const [isPressed, setIsPressed] = useState(false);
+  const [isHighlighted, setIsHighlighted] = useState(false);
   const isTouchPlatform = platformIsNative || isCompact;
   const interaction = useLongPressDragInteraction({
     drag,
@@ -1114,17 +1104,6 @@ function WorkspaceRowInner({
     }
     onPress();
   }, [interaction.didLongPressRef, onPress]);
-  const handleWorkspacePressIn = useCallback(
-    (event: GestureResponderEvent) => {
-      setIsPressed(true);
-      interaction.handlePressIn(event);
-    },
-    [interaction],
-  );
-  const handleWorkspacePressOut = useCallback(() => {
-    setIsPressed(false);
-    interaction.handlePressOut();
-  }, [interaction]);
 
   const accessibilityState = useMemo(() => ({ selected }), [selected]);
   const isEditingTitle = titleEditor !== null;
@@ -1138,13 +1117,8 @@ function WorkspaceRowInner({
       {({ isHovered, contextMenuOpen, onContextMenuOpenChange, hoverHandlers }) => {
         const isDesktop = !isTouchPlatform;
         const serviceSummary = isDesktop ? selectWorkspaceServiceSummary(workspace.scripts) : null;
-        const workspaceRowStyle = getProjectWorkspaceRowStyle({
-          isDragging,
-          isPressed,
-          selected,
-          isHovered,
-        });
-        const backdrop = getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered });
+        const workspaceRowStyle = getProjectWorkspaceRowStyle({ isDragging, selected, isHovered });
+        const backdrop = getSidebarRowBackdrop({ isDragging, isHighlighted, selected, isHovered });
         return (
           <View
             {...dragAttributes}
@@ -1179,10 +1153,11 @@ function WorkspaceRowInner({
               accessibilityRole="button"
               accessibilityState={accessibilityState}
               style={workspaceRowStyle}
-              highlightStyle={styles.workspaceRowPressed}
-              onPressIn={isEditingTitle ? undefined : handleWorkspacePressIn}
+              highlightStyle={isEditingTitle ? undefined : styles.workspaceRowPressed}
+              onHighlightChange={setIsHighlighted}
+              onPressIn={isEditingTitle ? undefined : interaction.handlePressIn}
               onTouchMove={isEditingTitle ? undefined : interaction.handleTouchMove}
-              onPressOut={isEditingTitle ? undefined : handleWorkspacePressOut}
+              onPressOut={isEditingTitle ? undefined : interaction.handlePressOut}
               onPress={isEditingTitle ? undefined : handlePress}
               testID={`sidebar-workspace-row-${workspace.workspaceKey}`}
             >
@@ -1283,8 +1258,9 @@ function WorkspaceRowWithMenu({
     serverId: workspace.serverId,
     workspaceId: workspace.workspaceId,
     workspaceKind: workspace.workspaceKind,
+    workspaceDirectory: workspace.workspaceDirectory,
     name: workspace.name,
-    ...toWorktreeArchiveRisk(workspace),
+    diffStat: workspace.diffStat,
     onArchiveStarted: redirectAfterArchive,
     onSetHiding: setIsHidingWorkspace,
   });
@@ -1569,6 +1545,8 @@ function ProjectBlock({
   showShortcutBadges,
   shortcutIndexByWorkspaceKey,
   onToggleCollapsed,
+  workspacesExpanded,
+  onToggleWorkspacesExpanded,
   onWorkspacePress,
   parentGestureRef,
   onWorkspaceReorder,
@@ -1595,6 +1573,9 @@ function ProjectBlock({
   showShortcutBadges: boolean;
   shortcutIndexByWorkspaceKey: Map<string, number>;
   onToggleCollapsed: (projectViewKey: string) => void;
+  /** "Show more" on this project's workspaces, owned by the list so a drop's remount keeps it. */
+  workspacesExpanded: boolean;
+  onToggleWorkspacesExpanded: (projectViewKey: string) => void;
   onWorkspacePress?: () => void;
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   onWorkspaceReorder: (projectViewKey: string, workspaces: SidebarWorkspacePlacement[]) => void;
@@ -1619,12 +1600,11 @@ function ProjectBlock({
   const {
     leadingItem: leadingWorkspace,
     visibleItems: visibleWorkspaces,
-    expanded: workspacesExpanded,
     canToggle: canToggleWorkspaces,
-    toggleExpanded: toggleWorkspacesExpanded,
   } = useLimitedSidebarGroup({
     items: project.workspaces,
     selection: selectionEnabled ? activeWorkspaceSelection : null,
+    expanded: workspacesExpanded,
     policy: visibilityPolicy,
   });
   const activeServerId = activeWorkspaceSelection?.serverId ?? null;
@@ -1782,6 +1762,10 @@ function ProjectBlock({
     onToggleCollapsed(project.viewKey);
   }, [onToggleCollapsed, project.viewKey]);
 
+  const handleToggleWorkspacesExpanded = useCallback(() => {
+    onToggleWorkspacesExpanded(project.viewKey);
+  }, [onToggleWorkspacesExpanded, project.viewKey]);
+
   let projectChildren = null;
   if (!collapsed) {
     if (project.workspaces.length > 0) {
@@ -1819,7 +1803,7 @@ function ProjectBlock({
           {canToggleWorkspaces ? (
             <SidebarGroupToggleRow
               expanded={workspacesExpanded}
-              onPress={toggleWorkspacesExpanded}
+              onPress={handleToggleWorkspacesExpanded}
               testID={`sidebar-project-show-more-${project.viewKey}`}
             />
           ) : null}
@@ -1889,6 +1873,8 @@ function areProjectBlockPropsEqual(previous: ProjectBlockProps, next: ProjectBlo
     previous.supportsPinningByServerId === next.supportsPinningByServerId &&
     previous.onToggleWorkspacePin === next.onToggleWorkspacePin &&
     previous.onToggleCollapsed === next.onToggleCollapsed &&
+    previous.workspacesExpanded === next.workspacesExpanded &&
+    previous.onToggleWorkspacesExpanded === next.onToggleWorkspacesExpanded &&
     previous.onWorkspacePress === next.onWorkspacePress &&
     previous.parentGestureRef === next.parentGestureRef &&
     previous.onWorkspaceReorder === next.onWorkspaceReorder &&
@@ -2230,15 +2216,29 @@ function ProjectModeList({
   const selectionEnabled = isWorkspaceRoute;
   const activeWorkspaceSelection = useActiveWorkspaceSelection();
   const { residentChats, pinnedChats, unpinnedProjects } = pinnedGroups;
+  const [pinnedChatsExpanded, setPinnedChatsExpanded] = useState(false);
+  const togglePinnedChatsExpanded = useCallback(
+    () => setPinnedChatsExpanded((current) => !current),
+    [],
+  );
+  const [expandedProjectKeys, setExpandedProjectKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleProjectWorkspacesExpanded = useCallback((projectViewKey: string) => {
+    setExpandedProjectKeys((current) => {
+      const next = new Set(current);
+      if (!next.delete(projectViewKey)) next.add(projectViewKey);
+      return next;
+    });
+  }, []);
   const {
     leadingItem: leadingPinnedChat,
     visibleItems: visiblePinnedChats,
-    expanded: pinnedChatsExpanded,
     canToggle: canTogglePinnedChats,
-    toggleExpanded: togglePinnedChatsExpanded,
   } = useLimitedSidebarGroup({
     items: pinnedChats,
     selection: selectionEnabled ? activeWorkspaceSelection : null,
+    expanded: pinnedChatsExpanded,
   });
   const nativeScrollGestureProps = useMemo(
     () =>
@@ -2394,6 +2394,8 @@ function ProjectModeList({
           showShortcutBadges={showShortcutBadges}
           shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
           onToggleCollapsed={onToggleProjectCollapsed}
+          workspacesExpanded={expandedProjectKeys.has(item.viewKey)}
+          onToggleWorkspacesExpanded={toggleProjectWorkspacesExpanded}
           onWorkspacePress={onWorkspacePress}
           manualSort={manualSort}
           parentGestureRef={parentGestureRef}
@@ -2415,6 +2417,8 @@ function ProjectModeList({
     },
     [
       collapsedProjectKeys,
+      expandedProjectKeys,
+      toggleProjectWorkspacesExpanded,
       activeWorkspaceSelection,
       handleWorktreeCreated,
       manualSort,
@@ -2625,6 +2629,8 @@ const styles = StyleSheet.create((theme) => ({
     // Optical inset: aligns the visible Pinned/Workspaces glyph edge with the
     // Schedules icon across the divider; their layout boxes have different insets.
     paddingTop: 2,
+    // The sidebar toast floats over the list's end. Keep this padding the same whether or not
+    // a toast shows: changing it moves the rows when the toast leaves.
     paddingBottom: theme.spacing[4],
   },
   projectListContainer: {

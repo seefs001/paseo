@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { ToolCallDetail } from "../../agent-sdk-types.js";
 import type { ProviderImageOutput } from "../provider-image-output.js";
+import { omitNullArgs } from "../tool-call-args.js";
 
 interface BashToolInput {
   command: string;
@@ -331,20 +332,12 @@ export function parseToolArgs(toolName: string, rawArgs: unknown): PiTrackedTool
   }
   const schema = SIMPLE_TOOL_SCHEMAS[toolName as SimpleToolKind];
   if (schema) {
-    const parsed = schema.safeParse(normalizeOptionalArgs(rawArgs));
+    const parsed = schema.safeParse(omitNullArgs(rawArgs));
     if (parsed.success) {
       return { kind: toolName as SimpleToolKind, toolName, args: parsed.data } as PiTrackedToolCall;
     }
   }
   return { kind: "unknown", toolName, args: rawArgs ?? null };
-}
-
-function normalizeOptionalArgs(rawArgs: unknown): unknown {
-  if (typeof rawArgs !== "object" || rawArgs === null || Array.isArray(rawArgs)) return rawArgs;
-  // Pi providers can serialize omitted optional parameters as null.
-  // Required fields still fail their schema when absent.
-  const entries = Object.entries(rawArgs).filter(([, value]) => value !== null);
-  return Object.fromEntries(entries);
 }
 
 export function mapToolDetail(toolCall: PiTrackedToolCall, result?: PiToolResult): ToolCallDetail {

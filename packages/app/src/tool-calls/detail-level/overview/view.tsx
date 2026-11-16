@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useRef, type ReactNode } from "react";
+import React, { memo, useCallback, useRef, type ReactNode } from "react";
 import { ScrollView } from "react-native";
 import { Wrench } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -31,20 +31,10 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
   label,
   isError,
 }: OverviewGroupProps) {
-  const scrollRef = useRef<ScrollView>(null);
   const isCompact = useIsCompactFormFactor();
   const aggregateSummary = useOverviewSummaryLabel(group.summary);
   const title = label ?? aggregateSummary;
   const secondaryLabel = label ? aggregateSummary : undefined;
-  const scrollToLatest = useCallback(() => {
-    scrollRef.current?.scrollToEnd({ animated: false });
-  }, []);
-  useEffect(() => {
-    if (!expanded || isCompact) return;
-    // Follow tool updates, not height changes from opening or closing nested details.
-    const frame = requestAnimationFrame(scrollToLatest);
-    return () => cancelAnimationFrame(frame);
-  }, [expanded, group.run.latest, isCompact, scrollToLatest]);
   const hold = useDisclosureHold();
   const toggle = useCallback(() => {
     const apply = () => onExpandedChange(group.run.id, !expanded);
@@ -56,18 +46,8 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
     onExpandedChange(group.run.id, false);
   }, [group.run.id, onExpandedChange]);
   const renderDetails = useCallback(
-    () => (
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        nestedScrollEnabled
-        showsVerticalScrollIndicator
-      >
-        <IndentRail>{children}</IndentRail>
-      </ScrollView>
-    ),
-    [children],
+    () => <InlineGroupDetails latestCallId={group.run.latest.id}>{children}</InlineGroupDetails>,
+    [children, group.run.latest.id],
   );
 
   if (isCompact) {
@@ -107,6 +87,35 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
     />
   );
 });
+
+function InlineGroupDetails({
+  latestCallId,
+  children,
+}: {
+  latestCallId: string;
+  children: ReactNode;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
+  const lastRevealedCall = useRef<string | null>(null);
+  const revealLatestCall = useCallback(() => {
+    // A disclosure changes height without appending a call. Keep the reader's place then.
+    if (lastRevealedCall.current === latestCallId) return;
+    lastRevealedCall.current = latestCallId;
+    scrollRef.current?.scrollToEnd({ animated: false });
+  }, [latestCallId]);
+  return (
+    <ScrollView
+      ref={scrollRef}
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+      onContentSizeChange={revealLatestCall}
+    >
+      <IndentRail>{children}</IndentRail>
+    </ScrollView>
+  );
+}
 
 const styles = StyleSheet.create((theme) => ({
   scroll: {

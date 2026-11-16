@@ -141,6 +141,7 @@ function AgentPullRequest({ item }: { item: BoardAgentItem }): ReactElement | nu
   if (!prHint) return null;
   return (
     <WorkspaceMetaRow
+      backdrop="surface1"
       currentBranch={null}
       projectName={null}
       hostBadge={null}

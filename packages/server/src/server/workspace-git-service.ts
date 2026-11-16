@@ -6,7 +6,7 @@ import { CheckoutDiffCache } from "./checkout-diff-cache.js";
 import { getUncommittedDiffStat } from "./diff/git.js";
 import pLimit from "p-limit";
 import type pino from "pino";
-import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
+import type { ForgeWeb, ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
 import { parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
 import type { CheckoutContext } from "../utils/checkout-git.js";
 import {
@@ -73,6 +73,12 @@ import {
   type SubscribeToFileChanges,
   createFileObserver,
 } from "./file-observer/index.js";
+import {
+  forgeWebForResolution,
+  resolveForgeWebReference,
+  type ForgeWebEntry,
+} from "./forge-web.js";
+import type { SshHostnameResolver } from "../utils/ssh-hostname.js";
 import { checkoutLiteFromGitSnapshot } from "./workspace-registry-model.js";
 import { createWatcherLivenessCanary } from "./watcher-liveness-canary.js";
 
@@ -131,6 +137,11 @@ const WATCH_RECOVERY_BASE_DELAY_MS = 30_000;
 // restart, which kills running agents. Back off, but keep trying.
 const WATCH_RECOVERY_MAX_DELAY_MS = 300_000;
 const WATCH_RECOVERY_MAX_BACKOFF_STEPS = 4;
+// A startup scan that missed the subscribe deadline on a CPU-starved host misses it again on the
+// next attempt, and every attempt repeats the full scan. Consecutive setup timeouts therefore
+// keep doubling the recovery delay past the ladder cap, up to an hour.
+const WATCH_SETUP_TIMEOUT_RECOVERY_MAX_DELAY_MS = 3_600_000;
+const WATCH_SETUP_TIMEOUT_MAX_BACKOFF_STEPS = 7;
 // Auxiliary reads may reuse cached values within this window; snapshots do not expire on read.
 const WORKSPACE_GIT_AUXILIARY_READ_TTL_MS = 15_000;
 // Non-forced refresh triggers share this minimum gap to absorb watcher/self-heal bursts; force bypasses it.
@@ -186,6 +197,8 @@ export interface WorkspaceGitRuntimeSnapshot {
     uncommittedDiffStat?: Awaited<ReturnType<typeof getUncommittedDiffStat>>;
   };
   forge: WorkspaceForgeSnapshot;
+  /** Absent when the remote resolves to no forge. */
+  forgeWeb?: ForgeWeb;
 }
 
 export interface WorkspaceForgeSnapshot {
@@ -432,6 +445,8 @@ interface WorkspaceGitServiceDependencies {
    * fakes. Any forge not listed here is built (and cached once) by the registry.
    */
   forgeOverrides?: Record<string, ForgeService>;
+  /** Resolves an SSH config alias to its HostName; defaults to `ssh -G`. */
+  resolveSshHostname?: SshHostnameResolver;
   resolveAbsoluteGitDir: (cwd: string) => Promise<string | null>;
   hasOriginRemote: (cwd: string) => Promise<boolean>;
   runGitFetch: (
@@ -487,6 +502,11 @@ interface WorkspaceGitTarget {
   latestGitLoadedAtMs: number | null;
   latestForge: WorkspaceForgeSnapshot | null;
   latestForgeLoadedAtMs: number | null;
+  latestForgeWeb: ForgeWebEntry | null;
+  /** The entry whose reference repository is being looked up, so one remote costs one call. */
+  forgeWebLookupEntry: ForgeWebEntry | null;
+  /** The remote the forge snapshot was last refreshed for; null until the first forge refresh. */
+  forgeRefreshedForRemote: { remoteUrl: string | null } | null;
   latestSnapshot: WorkspaceGitRuntimeSnapshot | null;
   latestSnapshotLoadedAtMs: number | null;
   latestFacts: CheckoutSnapshotFacts | null;
@@ -587,6 +607,10 @@ interface WatchRecoveryState {
   // use (SMB/NFS, Docker virtiofs, some FUSE) resets the ladder on every
   // attempt and the backoff never engages.
   establishedAt: number | null;
+  // Setup attempts that hit WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS since the last accepted
+  // subscription. Reset on acceptance: finishing the startup scan in time is the proof that
+  // the next attempt is affordable.
+  setupTimeoutCount: number;
 }
 
 function setsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
@@ -698,6 +722,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private disposed = false;
   private disposePromise: Promise<void> | null = null;
   private readonly pendingRefreshes = new Set<Promise<WorkspaceGitRuntimeSnapshot>>();
+  private readonly pendingForgeWebLookups = new Set<Promise<void>>();
   private readonly snapshotUpdatedListeners = new Set<WorkspaceGitSnapshotUpdatedListener>();
   private readonly workspaceTargets = new Map<string, WorkspaceGitTarget>();
   private readonly repoTargets = new Map<string, RepoGitTarget>();
@@ -742,6 +767,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     );
     this.forgeResolver = createForgeResolver({
       createService: (forge) => this.deps.forgeOverrides?.[forge] ?? createForgeService(forge),
+      resolveSshHostname: this.deps.resolveSshHostname,
     });
   }
 
@@ -1202,11 +1228,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.workingTreeWatchAliases.clear();
     this.snapshotUpdatedListeners.clear();
     // Unsubscribing can remove a target while its Git command still owns the cwd.
-    // Stop admission first, then drain those refreshes before releasing the service.
-    this.disposePromise = Promise.all([
-      this.fileObserver.close(),
-      Promise.allSettled(this.pendingRefreshes),
-    ]).then(() => undefined);
+    // Stop admission first, then drain those refreshes and the parent lookups they start.
+    this.disposePromise = (async () => {
+      await Promise.all([this.fileObserver.close(), Promise.allSettled(this.pendingRefreshes)]);
+      await Promise.allSettled(this.pendingForgeWebLookups);
+    })();
     return this.disposePromise;
   }
 
@@ -1365,6 +1391,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       latestGit: null,
       latestGitLoadedAtMs: null,
       latestForge: null,
+      latestForgeWeb: null,
+      forgeWebLookupEntry: null,
+      forgeRefreshedForRemote: null,
       latestForgeLoadedAtMs: null,
       latestSnapshot: null,
       latestSnapshotLoadedAtMs: null,
@@ -1564,7 +1593,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       fallbackPolling: false,
       fallbackPollTimer: null,
       fallbackPollQuietTickCount: 0,
-      recovery: { attemptCount: 0, timer: null, establishedAt: null },
+      recovery: { attemptCount: 0, timer: null, establishedAt: null, setupTimeoutCount: 0 },
       listeners: new Set(),
       closed: false,
     };
@@ -1594,9 +1623,12 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     let removeAbortListener = () => {};
     let unsubscribePromise: Promise<void> | null = null;
     let subscriptionPromise: Promise<FileObserverSubscription>;
+    // Abandoning the race is not enough: the observer's startup scan would keep walking the
+    // tree after the deadline. Abort it so a timed-out attempt stops costing CPU.
+    const setupController = new AbortController();
     try {
       subscriptionPromise = this.deps
-        .subscribe(watchPath, callback, options)
+        .subscribe(watchPath, callback, { ...options, signal: setupController.signal })
         .finally(onSubscribeSettled);
     } catch (error) {
       onSubscribeSettled();
@@ -1615,12 +1647,15 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timeout = setTimeout(() => {
         outcome = "expired";
-        reject(new WorkspaceGitWatcherSubscriptionTimeoutError(watchPath));
+        const error = new WorkspaceGitWatcherSubscriptionTimeoutError(watchPath);
+        setupController.abort(error);
+        reject(error);
       }, WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS);
     });
     const disposalPromise = new Promise<never>((_resolve, reject) => {
       const rejectForDisposal = () => {
         outcome = "expired";
+        setupController.abort(signal.reason);
         reject(signal.reason);
       };
       if (signal.aborted) {
@@ -1755,6 +1790,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       // `scheduleWorkingTreeWatchRecovery` only resets the ladder once this
       // one has survived long enough to prove itself durable.
       target.recovery.establishedAt = this.deps.now().getTime();
+      target.recovery.setupTimeoutCount = 0;
       if (options?.replaceFallback && target.repoRoot !== null) {
         target.fallbackPolling = false;
         if (target.fallbackPollTimer) {
@@ -1775,6 +1811,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         { err: error, cwd: target.cwd },
         "Failed to start working tree watcher; using degraded polling",
       );
+      this.noteWatchSetupFailure(target.recovery, error);
       if (!options?.replaceFallback) {
         this.startWorkingTreeWatchFallback(target, "watcher_setup_failed");
       }
@@ -1997,11 +2034,26 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     }
     recovery.establishedAt = null;
     recovery.attemptCount += 1;
-    return Math.min(
+    const ladderDelayMs = Math.min(
       WATCH_RECOVERY_BASE_DELAY_MS *
         2 ** Math.min(recovery.attemptCount - 1, WATCH_RECOVERY_MAX_BACKOFF_STEPS),
       WATCH_RECOVERY_MAX_DELAY_MS,
     );
+    if (recovery.setupTimeoutCount === 0) {
+      return ladderDelayMs;
+    }
+    const setupTimeoutDelayMs = Math.min(
+      WATCH_RECOVERY_BASE_DELAY_MS *
+        2 ** Math.min(recovery.setupTimeoutCount - 1, WATCH_SETUP_TIMEOUT_MAX_BACKOFF_STEPS),
+      WATCH_SETUP_TIMEOUT_RECOVERY_MAX_DELAY_MS,
+    );
+    return Math.max(ladderDelayMs, setupTimeoutDelayMs);
+  }
+
+  private noteWatchSetupFailure(recovery: WatchRecoveryState, error: unknown): void {
+    if (error instanceof WorkspaceGitWatcherSubscriptionTimeoutError) {
+      recovery.setupTimeoutCount += 1;
+    }
   }
 
   private scheduleWorkingTreeWatchRecovery(target: WorkingTreeWatchTarget): void {
@@ -2475,7 +2527,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       fallbackPolling: false,
       fallbackPollTimer: null,
       fallbackPollQuietTickCount: 0,
-      recovery: { attemptCount: 0, timer: null, establishedAt: null },
+      recovery: { attemptCount: 0, timer: null, establishedAt: null, setupTimeoutCount: 0 },
       intervalId: null,
       fetchInFlight: false,
       bufferedFetchMetadataEvents: [],
@@ -2651,6 +2703,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       // subscribe success alone, only record when this subscription was
       // established.
       target.recovery.establishedAt = this.deps.now().getTime();
+      target.recovery.setupTimeoutCount = 0;
       if (options?.replaceFallback) {
         target.fallbackPolling = false;
         if (target.fallbackPollTimer) {
@@ -2674,6 +2727,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         { err: error, repoGitRoot: target.repoGitRoot },
         "Failed to start repository metadata watcher; using degraded polling",
       );
+      this.noteWatchSetupFailure(target.recovery, error);
       if (!options?.replaceFallback) {
         this.startRepoMetadataFallback(target);
       }
@@ -3420,8 +3474,16 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     request: WorkspaceGitRefreshRequest,
   ): Promise<WorkspaceGitRuntimeSnapshot> {
     const snapshot = await this.requestGitSnapshot(target, request);
-    if (!request.includeForge || target.folderMissing || target.closed) return snapshot;
-    return this.requestForgeSnapshot(target, request);
+    if (target.folderMissing || target.closed) return snapshot;
+    if (request.includeForge) return this.requestForgeSnapshot(target, request);
+    if (this.hasRemoteChangedSinceForgeRefresh(target)) {
+      // Refresh remote-owned forge facts without putting network work in the Git read queue.
+      void this.requestForgeSnapshot(target, { ...request, includeForge: true, force: true }).catch(
+        (error) =>
+          this.logger.warn({ err: error, cwd: target.cwd }, "Failed to refresh changed remote"),
+      );
+    }
+    return snapshot;
   }
 
   private requestForgeSnapshot(
@@ -3809,6 +3871,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       const loadedAtMs = this.deps.now().getTime();
       target.latestGitLoadedAtMs = loadedAtMs;
       target.latestForge = buildForgeUnavailableSnapshot();
+      target.latestForgeWeb = null;
       target.latestForgeLoadedAtMs = target.latestGitLoadedAtMs;
       return facts;
     }
@@ -3854,6 +3917,15 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     return facts;
   }
 
+  private hasRemoteChangedSinceForgeRefresh(target: WorkspaceGitTarget): boolean {
+    const refreshedFor = target.forgeRefreshedForRemote;
+    return (
+      refreshedFor !== null &&
+      target.latestGit?.isGit === true &&
+      refreshedFor.remoteUrl !== target.latestGit.remoteUrl
+    );
+  }
+
   private async refreshForgeSnapshot(
     target: WorkspaceGitTarget,
     request: WorkspaceGitRefreshRequest,
@@ -3866,14 +3938,16 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       git?.remoteUrl === target.latestGit?.remoteUrl &&
       git?.currentBranch === target.latestGit?.currentBranch &&
       git?.headSha === target.latestGit?.headSha;
+    target.forgeRefreshedForRemote = { remoteUrl };
     const resolution = await this.forgeResolver.resolveFromRemoteUrlAsync(remoteUrl);
     if (!stillCurrent()) return;
     // Every forge gates on the resolver alone: a cloud host matches synchronously
     // and a self-hosted/Enterprise host is recognized by the adapter probe (which
     // this async resolution populates), so GitHub Enterprise is no longer gated
     // out by a cloud-only identity check.
-    if (!resolution) {
+    if (!resolution || !remoteUrl) {
       target.latestForge = buildUnresolvedRemoteForgeSnapshot(remoteUrl);
+      target.latestForgeWeb = null;
       target.latestForgeLoadedAtMs = this.deps.now().getTime();
       return;
     }
@@ -3897,7 +3971,16 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     // self-managed GitLab hosts correctly instead of falling back to "github".
     if (!stillCurrent()) return;
     target.latestForge = { ...forgeSnapshot, forge: resolution.forge };
+    // Publish the host with the snapshot; the parent lookup finishes in the background. Read the
+    // previous entry after the wait: a lookup for the old entry may have completed meanwhile.
+    target.latestForgeWeb = forgeWebForResolution({
+      remoteUrl,
+      resolution,
+      previous: target.latestForgeWeb,
+      nowMs: this.deps.now().getTime(),
+    });
     target.latestForgeLoadedAtMs = this.deps.now().getTime();
+    this.queueForgeWebReferenceLookup(target);
   }
 
   private combineSnapshot(target: WorkspaceGitTarget): WorkspaceGitRuntimeSnapshot {
@@ -3909,6 +3992,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       cwd: target.cwd,
       git: target.latestGit,
       forge: target.latestForge ?? buildForgeUnavailableSnapshot(),
+      // Only the remote it was resolved for: after `git remote set-url` the old host and
+      // parent are wrong until the next forge refresh resolves the new remote.
+      ...(target.latestForgeWeb?.remoteUrl === target.latestGit.remoteUrl
+        ? { forgeWeb: target.latestForgeWeb.forgeWeb }
+        : {}),
     };
   }
 
@@ -3948,6 +4036,68 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.rememberSnapshot(target, this.combineSnapshot(target), {
       forceEmit: false,
     });
+    this.queueForgeWebReferenceLookup(target);
+  }
+
+  private queueForgeWebReferenceLookup(target: WorkspaceGitTarget): void {
+    const lookup = this.resolveForgeWebReferenceIfDue(target)
+      .catch((error) => {
+        if (!this.disposed) {
+          this.logger.warn(
+            { err: error, cwd: target.cwd },
+            "Failed to resolve the forge reference repository",
+          );
+        }
+      })
+      .finally(() => {
+        this.pendingForgeWebLookups.delete(lookup);
+      });
+    this.pendingForgeWebLookups.add(lookup);
+  }
+
+  // The status poll is the only periodic work an idle workspace has, so it also
+  // retries a parent lookup that failed or ran before the forge CLI was signed in.
+  private async resolveForgeWebReferenceIfDue(target: WorkspaceGitTarget): Promise<void> {
+    const entry = target.latestForgeWeb;
+    const remoteUrl = target.latestGit?.remoteUrl ?? null;
+    const nowMs = this.deps.now().getTime();
+    if (
+      !entry ||
+      !remoteUrl ||
+      entry.remoteUrl !== remoteUrl ||
+      entry.retryAtMs === null ||
+      nowMs < entry.retryAtMs ||
+      target.forgeWebLookupEntry === entry
+    ) {
+      return;
+    }
+    target.forgeWebLookupEntry = entry;
+    try {
+      // The async resolver, like the forge refresh: only it reports the `ssh -G` host for an alias.
+      const resolution = await this.forgeResolver.resolveFromRemoteUrlAsync(remoteUrl);
+      if (!resolution) {
+        return;
+      }
+      const next = await resolveForgeWebReference({
+        cwd: target.cwd,
+        resolution,
+        entry,
+        nowMs,
+      });
+      if (target.closed || this.workspaceTargets.get(target.cwd) !== target) {
+        return;
+      }
+      // The origin can change while the lookup runs; the old remote's answer is not ours to publish.
+      if (target.latestForgeWeb !== entry || target.latestGit?.remoteUrl !== entry.remoteUrl) {
+        return;
+      }
+      target.latestForgeWeb = next;
+      this.rememberSnapshot(target, this.combineSnapshot(target), { forceEmit: false });
+    } finally {
+      if (target.forgeWebLookupEntry === entry) {
+        target.forgeWebLookupEntry = null;
+      }
+    }
   }
 
   private rememberSnapshot(

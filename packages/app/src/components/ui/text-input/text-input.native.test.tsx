@@ -75,6 +75,8 @@ function createHandleRecorder() {
   return { handleRef, received, assignHandle };
 }
 
+const attachNoContentDrag = () => () => {};
+
 describe("EditingTextInputNative", () => {
   it.each(["paste", "bottom-sheet"] as const)(
     "renders one source of text for highlighted %s inputs and keeps replacements current",
@@ -182,7 +184,7 @@ describe("EditingTextInputNative", () => {
       root?.render(
         <>
           <EditingTextInput testID="outside" />
-          <BottomSheetScope>
+          <BottomSheetScope attachContentDrag={attachNoContentDrag}>
             <EditingTextInput testID="inside" />
           </BottomSheetScope>
         </>,

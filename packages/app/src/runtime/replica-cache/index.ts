@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   AgentStatusSchema,
   AgentTimelineItemPayloadSchema,
+  ForgeWebSchema,
   WorkspaceGitHubRuntimePayloadSchema,
 } from "@getpaseo/protocol/messages";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
@@ -354,6 +355,7 @@ const StoredWorkspaceSchema = z.strictObject({
       gitObservation: z.enum(["unobserved", "git", "not_git", "failed"]).optional(),
     })
     .optional(),
+  forgeWeb: ForgeWebSchema.optional(),
 });
 
 const StoredProjectSchema = z.strictObject({
@@ -790,6 +792,7 @@ function serializeWorkspace(workspace: WorkspaceDescriptor): StoredWorkspace {
     githubRuntime: workspace.githubRuntime,
     forge: workspace.forge,
     ...(workspace.executionLocation ? { executionLocation: workspace.executionLocation } : {}),
+    forgeWeb: workspace.forgeWeb,
   };
 }
 

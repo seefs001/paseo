@@ -215,6 +215,7 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
       label={t("newWorkspace.fields.project")}
       accessibilityLabel="Workspace project"
       tooltip={t("newWorkspace.tooltips.project")}
+      shortcutAction="new-workspace"
       icon={projectIcon}
       value={project.triggerLabel}
       onPress={project.open}

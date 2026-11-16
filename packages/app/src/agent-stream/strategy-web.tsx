@@ -460,6 +460,8 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
   const rowVirtualizer = useVirtualizer({
     count: segments.historyVirtualized.length,
     enabled: shouldUseVirtualizer,
+    // History can become virtualized after the reader has already scrolled the mounted rows.
+    initialOffset: () => scrollContainerRef.current?.scrollTop ?? 0,
     initialRect: {
       width: scrollContainerRef.current?.clientWidth ?? 0,
       height: scrollContainerRef.current?.clientHeight ?? 0,
@@ -606,6 +608,15 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
   const markUpwardInputEvidence = useCallback(() => {
     upwardInputEvidenceUntilRef.current =
       window.performance.now() + UPWARD_INPUT_EVIDENCE_TIMEOUT_MS;
+  }, []);
+
+  const hasUpwardInputEvidence = useCallback(() => {
+    const mouseGesture = mouseScrollGestureRef.current;
+    return (
+      mouseGesture?.kind === "scrollbar" ||
+      (mouseGesture?.kind === "autoscroll" && mouseGesture.hasUpwardEvidence) ||
+      window.performance.now() < upwardInputEvidenceUntilRef.current
+    );
   }, []);
 
   useLayoutEffect(() => {
@@ -794,16 +805,16 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     const scrolledUp = currentScrollTop < lastKnownScrollTopRef.current - USER_SCROLL_DELTA_EPSILON;
     const scrolledDown =
       currentScrollTop > lastKnownScrollTopRef.current + USER_SCROLL_DELTA_EPSILON;
-    const mouseGesture = mouseScrollGestureRef.current;
-    const hasUpwardInputEvidence =
-      mouseGesture?.kind === "scrollbar" ||
-      (mouseGesture?.kind === "autoscroll" && mouseGesture.hasUpwardEvidence) ||
-      window.performance.now() < upwardInputEvidenceUntilRef.current;
+    const userScrolledUp = scrolledUp && hasUpwardInputEvidence();
 
     if (!followOutputRef.current && isAtBottom && scrolledDown && !isJumpSettling()) {
       setFollowOutput(true);
-    } else if (followOutputRef.current && scrolledUp && hasUpwardInputEvidence) {
+    } else if (followOutputRef.current && userScrolledUp) {
       stopFollowingOutputFromUserIntent();
+    } else if (userScrolledUp) {
+      // Wheel listeners can run before or after the browser applies the scroll, so the
+      // upward scroll itself re-arms loading when it reaches the start.
+      rearmHistoryStartFromUserIntent();
     }
 
     lastKnownScrollTopRef.current = currentScrollTop;
@@ -814,8 +825,10 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     evaluateHistoryStart();
   }, [
     evaluateHistoryStart,
+    hasUpwardInputEvidence,
     isJumpSettling,
     readingAnchor,
+    rearmHistoryStartFromUserIntent,
     stopFollowingOutputFromUserIntent,
     updateScrollMetrics,
   ]);

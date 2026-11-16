@@ -442,8 +442,7 @@ export class WorkspaceReconciliationService {
     const workspaceCheckouts = await Promise.all(
       siblings.map(async (workspace) => {
         const current = await this.workspaceRegistry.get(workspace.workspaceId);
-        if (!current || current.cwd !== workspace.cwd || current.projectId !== workspace.projectId)
-          return null;
+        if (!current || !isStillReconcilable(current, workspace)) return null;
         return { workspace: current, checkout: await readCheckout(current.cwd) };
       }),
     );
@@ -499,8 +498,7 @@ export class WorkspaceReconciliationService {
     if (!reconcileWorkspacePlacement({ workspace, checkout, updatedAt: timestamp })) return;
     let fields: Partial<MutableWorkspacePlacement> | null = null;
     await this.workspaceRegistry.update(workspace.workspaceId, (current) => {
-      if (current.cwd !== workspace.cwd || current.projectId !== workspace.projectId)
-        return current;
+      if (!isStillReconcilable(current, workspace)) return current;
       const update = reconcileWorkspacePlacement({
         workspace: current,
         checkout,
@@ -740,4 +738,14 @@ async function mapBounded<T, R>(items: T[], visit: (item: T) => Promise<R>): Pro
     }),
   );
   return results;
+}
+
+/** An archived record keeps the placement its restore depends on. */
+function isStillReconcilable(
+  current: PersistedWorkspaceRecord,
+  scanned: PersistedWorkspaceRecord,
+): boolean {
+  return (
+    !current.archivedAt && current.cwd === scanned.cwd && current.projectId === scanned.projectId
+  );
 }

@@ -145,6 +145,7 @@ export interface WorkspaceDescriptor {
   gitRuntime?: WorkspaceDescriptorPayload["gitRuntime"];
   githubRuntime?: WorkspaceDescriptorPayload["githubRuntime"];
   forge?: WorkspaceDescriptorPayload["forge"];
+  forgeWeb?: WorkspaceDescriptorPayload["forgeWeb"];
   project?: ProjectPlacementPayload;
   /** Present when tools and files live on an SSH machine; workspaceDirectory is then owner-side. */
   executionLocation?: WorkspaceDescriptorPayload["executionLocation"];
@@ -194,6 +195,7 @@ export function normalizeWorkspaceDescriptor(
     gitRuntime: payload.gitRuntime,
     githubRuntime: payload.githubRuntime,
     forge: payload.forge,
+    forgeWeb: payload.forgeWeb,
     project: payload.project,
     ...(payload.executionLocation ? { executionLocation: payload.executionLocation } : {}),
   };

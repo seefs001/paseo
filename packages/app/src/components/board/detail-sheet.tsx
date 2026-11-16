@@ -62,7 +62,7 @@ export function BoardDetailSheet({
               {onPrevious ? (
                 <SheetHeaderIconButton
                   icon={ChevronUp}
-                  accessibilityLabel={t("board.detail.previous")}
+                  label={t("board.detail.previous")}
                   onPress={onPrevious}
                   testID="board-detail-sheet-previous"
                 />
@@ -70,7 +70,7 @@ export function BoardDetailSheet({
               {onNext ? (
                 <SheetHeaderIconButton
                   icon={ChevronDown}
-                  accessibilityLabel={t("board.detail.next")}
+                  label={t("board.detail.next")}
                   onPress={onNext}
                   testID="board-detail-sheet-next"
                 />
