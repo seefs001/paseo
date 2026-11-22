@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { buildPiToolCallMetadata } from "@getpaseo/protocol/pi-tool-presentation";
 import { mapCustomMessageToToolCall } from "../custom-message.js";
-import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
+import type {
+  AgentMetric,
+  AgentStreamEvent,
+  AgentTimelineItem,
+  ToolCallDetail,
+} from "../../agent-sdk-types.js";
+import type { MeasuredStep } from "../turn-metrics.js";
+import { piReplayedTurns } from "./metrics.js";
 import {
   materializeProviderImage,
   renderProviderImageOutputAsAssistantMarkdown,
@@ -433,17 +440,22 @@ export async function* streamPiHistory(
   extensionHost: PiExtensionHost = createPiExtensionHost(undefined, undefined, 16 * 1024 * 1024),
   markers: readonly PiHistoryMarker[] = [],
   signal?: AbortSignal,
-): AsyncGenerator<AgentStreamEvent> {
+): AsyncGenerator<AgentStreamEvent, PiHistoryReplay> {
   const mapper = new PiHistoryMapper(provider, userEntries, hooks, extensionHost);
+  const turns = piReplayedTurns();
+  const replay: PiHistoryReplay = { lastReply: null };
+  // Each finished turn's metrics follow its rows, as they do live.
+  const turnCompleted = (metrics: AgentMetric[]): AgentStreamEvent[] =>
+    metrics.length ? [{ type: "turn_completed", provider, metrics }] : [];
   const replayMarkers = historyMarkersMatch(messages, markers)
     ? markers
     : messages.map(() => ({ kind: "message" as const }));
   let messageIndex = 0;
   for (const marker of replayMarkers) {
-    if (signal?.aborted) return;
+    if (signal?.aborted) return replay;
     if (marker.kind === "web") {
       for (const event of webHistoryEvents(provider, marker)) {
-        if (signal?.aborted) return;
+        if (signal?.aborted) return replay;
         yield event;
       }
       continue;
@@ -451,15 +463,27 @@ export async function* streamPiHistory(
     const message = messages[messageIndex];
     messageIndex += 1;
     if (!message) continue;
-    for (const event of await mapper.mapMessages([message])) {
-      if (signal?.aborted) return;
+    const events = [
+      ...turnCompleted(turns.observe(message)),
+      ...(await mapper.mapMessages([message])),
+    ];
+    for (const event of events) {
+      if (signal?.aborted) return replay;
       yield event;
     }
   }
+  yield* turnCompleted(turns.end());
+  replay.lastReply = turns.lastReply;
   for (const event of await mapper.hydrate()) {
-    if (signal?.aborted) return;
+    if (signal?.aborted) return replay;
     yield event;
   }
+  return replay;
+}
+
+export interface PiHistoryReplay {
+  /** The most recent reply replayed, for the session's metrics. */
+  lastReply: MeasuredStep | null;
 }
 
 function webHistoryEvents(provider: string, marker: PiWebHistoryMarker): AgentStreamEvent[] {

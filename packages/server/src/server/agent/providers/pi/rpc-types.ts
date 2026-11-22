@@ -125,6 +125,7 @@ export interface PiSessionStats {
     total?: number;
   };
   cost?: number;
+  toolCalls?: number;
   contextUsage?: {
     tokens?: number | null;
     contextWindow?: number | null;

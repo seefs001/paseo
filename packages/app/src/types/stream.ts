@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type {
+  AgentMetric,
   AgentProvider,
   AgentTimelineItem,
   AgentTurnInfo,
@@ -11,6 +12,7 @@ import { timelineItemIdentity } from "@getpaseo/protocol/timeline-identity";
 import type { AgentAttachment, AgentStreamEventPayload } from "@getpaseo/protocol/messages";
 import type { AttachmentMetadata } from "@/attachments/types";
 import type { OverviewSummary } from "@/tool-calls/detail-level/overview/model";
+import { stampCompletedTurnMetrics } from "@/timeline/turn-metrics";
 import { extractTaskEntriesFromToolCall } from "../utils/tool-call-parsers";
 
 /**
@@ -720,6 +722,8 @@ export interface AssistantMessageItem {
   timelineCursor?: TimelinePosition;
   text: string;
   timestamp: Date;
+  /** Set when this message carries its turn's footer. */
+  turnMetrics?: AgentMetric[];
   /** Display-only fields, assigned after source-item plugin transforms. */
 }
 
@@ -776,6 +780,8 @@ export interface ToolCallItem {
   payload: ToolCallPayload;
   /** Presentation-only children; canonical timeline rows remain flat. */
   nestedCalls?: readonly ToolCallItem[];
+  /** Set when this call carries its turn's footer. */
+  turnMetrics?: AgentMetric[];
 }
 
 export type AgentToolCallItem = ToolCallItem & {
@@ -1695,9 +1701,10 @@ export function reduceStreamUpdate(
       );
       return event.item.type === "reasoning" ? updated : finalizeActiveThoughts(updated);
     }
+    case "turn_completed":
+      return stampCompletedTurnMetrics(finalizeActiveThoughts(state), event.metrics, event.turnId);
     case "thread_started":
     case "turn_started":
-    case "turn_completed":
     case "turn_failed":
     case "turn_canceled":
     case "permission_requested":

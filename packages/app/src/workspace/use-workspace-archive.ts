@@ -13,6 +13,7 @@ import { archiveWorkspaceWithUndo, supportsWorkspaceArchiveUndo } from "@/worksp
 import {
   archiveWorkspaceOptimistically,
   purgeArchivedWorkspaceState,
+  runWorkspaceArchiveAttempt,
   type WorkspaceArchiveTarget,
 } from "@/workspace/workspace-archive";
 
@@ -48,7 +49,6 @@ export function useWorkspaceArchive(input: ArchiveWorkspaceInput): WorkspaceArch
   } = input;
   const { t } = useTranslation();
   const toast = useToast();
-  const confirmingRef = useRef(false);
   // The archive starts after the host answers and you confirm. By then you may have opened another
   // workspace, so the redirect reads the selection from the latest render.
   const onArchiveStartedRef = useRef(onArchiveStarted);
@@ -110,26 +110,12 @@ export function useWorkspaceArchive(input: ArchiveWorkspaceInput): WorkspaceArch
   }, [diffStat, name, serverId, t, toast, warningLabels, workspaceDirectory]);
 
   const archive = useCallback(() => {
-    // A second press while the host answers or the warning is open would ask twice.
-    if (confirmingRef.current) {
-      return;
-    }
-    void (async () => {
-      if (workspaceKind === "worktree") {
-        confirmingRef.current = true;
-        let confirmed: boolean;
-        try {
-          confirmed = await confirmWorktreeArchive();
-        } finally {
-          confirmingRef.current = false;
-        }
-        if (!confirmed) {
-          return;
-        }
-      }
-      await archiveWorkspaceRecord();
-    })();
-  }, [archiveWorkspaceRecord, confirmWorktreeArchive, workspaceKind]);
+    void runWorkspaceArchiveAttempt({
+      workspace: { serverId, workspaceId },
+      confirm: workspaceKind === "worktree" ? confirmWorktreeArchive : undefined,
+      archive: archiveWorkspaceRecord,
+    });
+  }, [archiveWorkspaceRecord, confirmWorktreeArchive, serverId, workspaceId, workspaceKind]);
 
   return {
     archive,

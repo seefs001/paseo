@@ -33,7 +33,7 @@ interface RemoteMessage {
   agentId: string;
   serverId: string;
   messageId: string;
-  behavior: "steer" | "interrupt";
+  behavior?: "steer" | "interrupt";
 }
 
 /** Records trusted daemon facts and owns the bounded, workspace-local causal projection. */
@@ -81,7 +81,7 @@ export class WorkspaceTrace {
   }
 
   queued(message: Message, messageId: string): void {
-    if (!message.trace) return;
+    if (!message.trace || message.source.kind === "change-request-update") return;
     const source = this.participant(message.source.agentId, message.source.serverId);
     const target = this.participant(message.recipientId);
     if (this.isInternal(source) || this.isInternal(target)) return;
@@ -91,7 +91,8 @@ export class WorkspaceTrace {
       target,
       messageId,
       sourceTurnId: message.trace.sourceTurnId,
-      requestedBehavior: message.activeTurnBehavior ?? "steer",
+      requestedBehavior:
+        message.activeTurnBehavior === "queue" ? undefined : message.activeTurnBehavior,
       notificationEvent:
         message.source.kind === "agent-notification" ? message.source.event : undefined,
       subscriptionIds: message.trace.subscriptionIds,

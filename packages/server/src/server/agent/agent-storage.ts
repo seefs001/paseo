@@ -9,6 +9,7 @@ import {
   AgentFeatureSchema,
   AgentOptionControlSchema,
   AgentRoleSnapshotSchema,
+  AgentMetricSchema,
   AgentStatusSchema,
 } from "../messages.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
@@ -103,6 +104,7 @@ const RAW_STORED_AGENT_SCHEMA = z.object({
   // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01. Read-only; becomes controls.
   features: z.array(AgentFeatureSchema).optional(),
   persistence: PERSISTENCE_HANDLE_SCHEMA,
+  sessionMetrics: z.array(AgentMetricSchema).optional(),
   lastError: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),

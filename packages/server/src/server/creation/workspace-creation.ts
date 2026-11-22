@@ -49,6 +49,7 @@ type CurrentSelection = NonNullable<
  * daemon callers such as Board starts publish to every client.
  */
 export interface WorkspaceCreationEffects {
+  withCheckoutForDirectory?<T>(cwd: string, run: () => Promise<T>): Promise<T>;
   directoryWorkspaceCreated(
     workspace: PersistedWorkspaceRecord,
     request: WorkspaceCreateRequest,
@@ -232,24 +233,29 @@ export class WorkspaceCreation {
     }
     const projectId = request.source.projectAssigned === false ? null : request.source.projectId;
     const cwd = expandTilde(request.source.path);
-    const directoryExists = await this.deps.isDirectory(cwd).catch(() => false);
-    if (!directoryExists) {
-      throw new WorkspaceCreationError("directory_not_found", `Directory not found: ${cwd}`);
-    }
+    const provision = async () => {
+      const directoryExists = await this.deps.isDirectory(cwd).catch(() => false);
+      if (!directoryExists) {
+        throw new WorkspaceCreationError("directory_not_found", `Directory not found: ${cwd}`);
+      }
 
-    const explicitTitle = request.title?.trim() || null;
-    const promptTitle = resolveFirstAgentPromptTitle(request.firstAgentContext);
-    const workspace = await this.deps.workspaceProvisioning.createWorkspaceForDirectory(
-      cwd,
-      explicitTitle ?? promptTitle,
-      projectId,
-      {
-        expectsInitialAgent: Boolean(request.firstAgentContext),
-        workspaceId,
-        metadata: request.metadata,
-        ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
-      },
-    );
+      const explicitTitle = request.title?.trim() || null;
+      const promptTitle = resolveFirstAgentPromptTitle(request.firstAgentContext);
+      return this.deps.workspaceProvisioning.createWorkspaceForDirectory(
+        cwd,
+        explicitTitle ?? promptTitle,
+        projectId,
+        {
+          expectsInitialAgent: Boolean(request.firstAgentContext),
+          workspaceId,
+          metadata: request.metadata,
+          ...(await this.workspaceBackgroundIntent(request.background, request.callerAgentId)),
+        },
+      );
+    };
+    const workspace = effects.withCheckoutForDirectory
+      ? await effects.withCheckoutForDirectory(cwd, provision)
+      : await provision();
     const descriptor = await effects.directoryWorkspaceCreated(workspace, request);
     void this.deps.workspaceGitService
       .getSnapshot(workspace.cwd, { force: true, includeForge: false, reason: "open_project" })

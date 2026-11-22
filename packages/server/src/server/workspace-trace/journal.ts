@@ -31,7 +31,7 @@ const TraceRecordSchema = z.discriminatedUnion("kind", [
     source: TraceParticipantSchema,
     target: TraceParticipantSchema,
     messageId: z.string(),
-    requestedBehavior: z.enum(["steer", "interrupt"]),
+    requestedBehavior: z.enum(["steer", "interrupt"]).optional(),
     sourceTurnId: z.string().optional(),
     notificationEvent: z.enum(["finished", "errored", "permission-required", "closed"]).optional(),
     subscriptionIds: z.array(z.string()).optional(),

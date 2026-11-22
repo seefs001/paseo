@@ -6,6 +6,7 @@ import {
   Cable,
   CalendarClock,
   CircleDashed,
+  Copy,
   Folder,
   FolderPlus,
   History,
@@ -21,6 +22,8 @@ import {
 } from "lucide-react-native";
 import { withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useToast } from "@/contexts/toast-context";
+import { getDesktopHost } from "@/desktop/host";
 import { useKeyboardShortcutOverrides } from "@/hooks/use-keyboard-shortcut-overrides";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useImportSession } from "@/hooks/use-import-session";
@@ -35,6 +38,7 @@ import { getWorkspaceProjectId, openBoardTaskSheet } from "@/board/sheet";
 import { useBoardTasks } from "@/board/tasks";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { clearCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
+import { copyToClipboard } from "@/utils/copy-to-clipboard";
 import {
   buildBoardRoute,
   buildMcpCallsRoute,
@@ -45,6 +49,7 @@ import {
 } from "@/utils/host-routes";
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { CommandCenterContribution, CommandCenterIconProps } from "./contributions";
+import { getCommandCenterIcon } from "./icon";
 import { useCommandCenterActions } from "./provider";
 import { buildGroupingContribution } from "./root-contributions";
 
@@ -85,6 +90,7 @@ const ThemedCircleDashed = withUnistyles(CircleDashed, (theme) => ({
 const ThemedPanelLeft = withUnistyles(PanelLeft, (theme) => ({
   color: theme.colors.foregroundMuted,
 }));
+const BrowserHostCopyIcon = getCommandCenterIcon(Copy);
 
 function PlusIcon({ size }: CommandCenterIconProps) {
   return <ThemedPlus size={size} strokeWidth={2.4} />;
@@ -156,6 +162,8 @@ function PanelLeftIcon({ size }: CommandCenterIconProps) {
 export function CommandCenterRootActions() {
   const keyboardActionDispatcher = useKeyboardActionDispatcher();
   const { t } = useTranslation();
+  const toast = useToast();
+  const browserHostLabel = getDesktopHost()?.browserHostLabel;
   const { overrides } = useKeyboardShortcutOverrides();
   const shortcutsAvailable = useHardwareKeyboardPresent();
   const openAddProject = useOpenAddProject();
@@ -427,6 +435,32 @@ export function CommandCenterRootActions() {
       },
     ];
 
+    if (browserHostLabel) {
+      availableActions.push({
+        id: "copy-browser-host-name",
+        group: "actions",
+        groupRank: 0,
+        rank: 9,
+        keywords: ["browser", "host", "window", browserHostLabel],
+        visibility: "query",
+        run: async () => {
+          try {
+            await copyToClipboard(browserHostLabel);
+            toast.copied();
+          } catch {
+            toast.error(t("common.errors.unableToCopy"));
+          }
+        },
+        presentation: {
+          kind: "action",
+          title: t("shell.commandCenter.copyBrowserHostName"),
+          subtitle: browserHostLabel,
+          sectionTitle: t("shell.commandCenter.actions"),
+          icon: BrowserHostCopyIcon,
+        },
+      });
+    }
+
     if (shortcutsAvailable) {
       availableActions.push({
         id: "keyboard-shortcuts",
@@ -466,6 +500,7 @@ export function CommandCenterRootActions() {
     activeServerId,
     activeWorkspaceId,
     boardRoute,
+    browserHostLabel,
     groupMode,
     homeRoute,
     keyboardActionDispatcher,
@@ -481,6 +516,7 @@ export function CommandCenterRootActions() {
     shortcutPlatform,
     shortcutsAvailable,
     t,
+    toast,
     toggleAgentList,
   ]);
 

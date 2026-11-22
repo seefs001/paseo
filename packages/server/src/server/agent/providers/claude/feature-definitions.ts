@@ -1,5 +1,8 @@
 import type { AgentOptionControl, AgentOptionToggleControl } from "../../agent-sdk-types.js";
-import { claudeManifestModelSupportsFastMode } from "./model-manifest.js";
+import {
+  claudeManifestModelSupportsFastMode,
+  claudeManifestModelSupportsUltracode,
+} from "./model-manifest.js";
 
 export const CLAUDE_MCP_AUTO_ACCEPT_CONTROL: AgentOptionToggleControl = {
   type: "toggle",
@@ -19,12 +22,27 @@ export const CLAUDE_FAST_MODE_CONTROL: AgentOptionToggleControl = {
   icon: "zap",
 };
 
+const CLAUDE_ULTRACODE_CONTROL: AgentOptionToggleControl = {
+  type: "toggle",
+  key: "ultracode",
+  label: "Ultracode",
+  description: "Let Claude plan workflows for substantive tasks",
+  icon: "Workflow",
+};
+
 export function claudeModelSupportsFastMode(modelId: string | null | undefined): boolean {
   return claudeManifestModelSupportsFastMode(modelId);
 }
 
-export function buildClaudeControls(modelId: string | null | undefined): AgentOptionControl[] {
-  const controls: AgentOptionControl[] = [{ ...CLAUDE_MCP_AUTO_ACCEPT_CONTROL }];
-  if (claudeModelSupportsFastMode(modelId)) controls.push({ ...CLAUDE_FAST_MODE_CONTROL });
-  return controls;
+export function buildClaudeControls(
+  modelId: string | null | undefined,
+  independentUltracode: boolean,
+): AgentOptionControl[] {
+  return [
+    { ...CLAUDE_MCP_AUTO_ACCEPT_CONTROL },
+    ...(claudeModelSupportsFastMode(modelId) ? [{ ...CLAUDE_FAST_MODE_CONTROL }] : []),
+    ...(independentUltracode && claudeManifestModelSupportsUltracode(modelId)
+      ? [{ ...CLAUDE_ULTRACODE_CONTROL }]
+      : []),
+  ];
 }

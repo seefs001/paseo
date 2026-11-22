@@ -21,6 +21,7 @@ describe("feature metadata helpers", () => {
     expect(getFeatureHighlightColor("service_tier")).toBe("yellow");
     expect(getFeatureHighlightColor("plan_mode")).toBe("blue");
     expect(getFeatureHighlightColor("auto_accept_mcp")).toBe("green");
+    expect(getFeatureHighlightColor("ultracode")).toBe("purple");
     expect(getFeatureHighlightColor("other")).toBe("default");
   });
 });

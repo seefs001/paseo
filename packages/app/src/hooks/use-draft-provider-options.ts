@@ -93,6 +93,14 @@ export function useDraftProviderOptions(input: {
     [draftConfig, serverId],
   );
   const requestKey = JSON.stringify(queryKey);
+  // COMPAT(claudeUltracodePreference): added in v0.17.0, remove after 2027-05-18.
+  const retainLegacyUltracode = useCallback(
+    () =>
+      thinkingOptionId === "ultracode"
+        ? model.retainResolvedOption("ultracode", requestKey)
+        : undefined,
+    [model, requestKey, thinkingOptionId],
+  );
 
   const { data } = useFetchQuery({
     queryKey,
@@ -180,6 +188,7 @@ export function useDraftProviderOptions(input: {
     options: ownOptions,
     shownOptions,
     setOption,
+    retainLegacyUltracode,
     applyProfile,
   };
 }

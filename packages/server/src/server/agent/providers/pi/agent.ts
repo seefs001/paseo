@@ -21,6 +21,7 @@ import {
   type AgentPermissionRequest,
   type AgentPermissionResponse,
   type AgentProviderNotice,
+  type AgentClientInstallation,
   type AgentPersistenceHandle,
   type AgentPromptInput,
   type AgentProvider,
@@ -46,6 +47,13 @@ import {
 } from "../../agent-sdk-types.js";
 import { importSessionFromPersistence } from "../../provider-session-import.js";
 import { assertChangesAreLive, ToolPolicyUnsupportedError } from "../../provider-options.js";
+import { createCliInstallation } from "../cli-installation.js";
+import {
+  compareWithLatestRelease,
+  fetchReleaseField,
+  type LatestReleaseLookup,
+} from "../release-check.js";
+import { updatedForNewAgents } from "../update-command.js";
 import { runProviderRefreshActivity } from "../../provider-refresh-deadline.js";
 import { runProviderTurn } from "../provider-runner.js";
 import {
@@ -112,6 +120,9 @@ import type {
   PiThinkingLevel,
 } from "./rpc-types.js";
 import { PiUsagePoller, type PiUsagePollScheduler } from "./usage-poller.js";
+import { PiFirstTokenTimer, piReplyStep, piSessionMetrics } from "./metrics.js";
+import { type MeasuredStep, measuredTurnMetrics, TurnMeter } from "../turn-metrics.js";
+import { createSessionMetricsReporter } from "../metrics.js";
 import {
   mapToolDetail,
   parseToolArgs,
@@ -229,6 +240,7 @@ export interface PiRpcAgentClientOptions {
   runtimeSettings?: ProviderRuntimeSettings;
   runtime?: PiRuntime;
   usagePollScheduler?: PiUsagePollScheduler;
+  lookupLatestRelease?: LatestReleaseLookup;
   shareGh?: PiShareGh;
 }
 
@@ -345,6 +357,12 @@ class PiFeatureError extends Error {
     this.name = "PiFeatureError";
   }
 }
+
+const PI_INSTALL_URL = "https://pi.dev/docs/latest/quickstart";
+
+/** The release `pi update` installs, from the endpoint Pi's own version check reads. */
+const lookupLatestPiRelease: LatestReleaseLookup = ({ signal }) =>
+  fetchReleaseField({ url: "https://pi.dev/api/latest-version", field: "version", signal });
 
 interface PiPromptPayload {
   text: string;
@@ -1584,6 +1602,12 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly logger: Logger;
   private readonly usagePoller: PiUsagePoller;
   private initialUsageRequested = false;
+  private readonly turnMeter = new TurnMeter();
+  private readonly firstToken = new PiFirstTokenTimer();
+  private lastReply: MeasuredStep | null = null;
+  private readonly reportSessionMetrics = createSessionMetricsReporter((metrics) =>
+    this.emit({ type: "session_metrics_updated", provider: this.provider, metrics }),
+  );
   private closed = false;
   private runtimeDead = false;
   private readonly closeController = new AbortController();
@@ -1632,13 +1656,14 @@ export class PiRpcAgentSession implements AgentSession {
     this.usagePoller = new PiUsagePoller({
       scheduler: options.usagePollScheduler,
       readStats: () => this.runtimeSession.getSessionStats(),
-      onUsage: (usage, turnId) => {
+      onUsage: (usage, turnId, stats) => {
         this.emit({
           type: "usage_updated",
           provider: this.provider,
           usage,
           ...(turnId === undefined ? {} : { turnId }),
         });
+        this.reportSessionMetrics(piSessionMetrics(stats, this.lastReply));
       },
       onPollError: (error) => {
         this.logger.debug({ err: error }, "Pi context usage poll failed");
@@ -1683,6 +1708,7 @@ export class PiRpcAgentSession implements AgentSession {
 
     const turnId = randomUUID();
     this.activeTurnId = turnId;
+    this.turnMeter.begin(Date.now());
     this.usagePoller.startTurn();
     this.activeClientMessageId = options?.clientMessageId ?? null;
     this.activeAssistantMessageId = null;
@@ -1835,7 +1861,7 @@ export class PiRpcAgentSession implements AgentSession {
     try {
       await this.requestEntryCapture("history");
       const history = await this.runtimeSession.getHistory();
-      yield* streamPiHistory(
+      const replay = yield* streamPiHistory(
         this.provider,
         history.messages,
         history.userEntries,
@@ -1845,6 +1871,18 @@ export class PiRpcAgentSession implements AgentSession {
         this.contextMarkers,
         this.closeController.signal,
       );
+      this.lastReply ??= replay.lastReply;
+      const stats = await this.runtimeSession.getSessionStats().catch((error: unknown) => {
+        this.logger.debug({ err: error }, "Pi session stats unavailable for history");
+        return null;
+      });
+      if (stats && !this.closeController.signal.aborted) {
+        yield {
+          type: "session_metrics_updated",
+          provider: this.provider,
+          metrics: piSessionMetrics(stats, this.lastReply),
+        };
+      }
     } finally {
       if (this.closeAfterHistory) await this.close();
     }
@@ -2568,7 +2606,6 @@ export class PiRpcAgentSession implements AgentSession {
       this.emit({
         type: "timeline",
         provider: this.provider,
-        turnId: this.currentTurnIdForEvent(),
         item: {
           type: "notification",
           level: toNotificationLevel(event.notifyType),
@@ -2710,6 +2747,7 @@ export class PiRpcAgentSession implements AgentSession {
         });
         return;
       case "turn_start":
+        this.firstToken.requestSent(Date.now());
         this.activeTurnStarted = true;
         this.clearNoTurnBuffers();
         if (this.activeTurnStartedEmitted) {
@@ -2732,6 +2770,7 @@ export class PiRpcAgentSession implements AgentSession {
         this.handleMessageUpdate(event, turnId);
         return;
       case "tool_execution_start": {
+        this.turnMeter.toolStarted(event.toolCallId, Date.now());
         const toolCall = parseToolArgs(event.toolName, event.args);
         this.draftToolCalls.delete(event.toolCallId);
         this.activeToolCalls.set(event.toolCallId, toolCall);
@@ -2782,6 +2821,7 @@ export class PiRpcAgentSession implements AgentSession {
         return;
       }
       case "tool_execution_end": {
+        this.turnMeter.toolEnded(event.toolCallId, Date.now());
         this.handleToolExecutionEnd(event);
         return;
       }
@@ -2936,6 +2976,7 @@ export class PiRpcAgentSession implements AgentSession {
     if (event.message && event.message.role !== "assistant") {
       return;
     }
+    this.firstToken.replyUpdated(event.assistantMessageEvent, Date.now());
     if (event.assistantMessageEvent.type === "text_delta") {
       // Pi-compatible runtimes may emit updates without a preceding message_start.
       this.activeAssistantMessageId ??= event.message?.responseId || randomUUID();
@@ -3020,6 +3061,7 @@ export class PiRpcAgentSession implements AgentSession {
   private handleMessageStart(event: Extract<PiAgentSessionEvent, { type: "message_start" }>): void {
     if (event.message.role === "assistant") {
       this.activeAssistantMessageId = event.message.responseId || null;
+      this.firstToken.replyStarted(Date.now());
     }
   }
 
@@ -3032,6 +3074,11 @@ export class PiRpcAgentSession implements AgentSession {
       // Drafts only execute when the message ends with tool use; otherwise they never will.
       if (event.message.stopReason && event.message.stopReason !== "toolUse") {
         this.cancelDraftToolCalls(turnId);
+      }
+      const step = piReplyStep(event.message, this.firstToken.replyEnded());
+      if (step) {
+        this.turnMeter.step(step, Date.now());
+        this.lastReply = step;
       }
       return;
     }
@@ -3119,6 +3166,8 @@ export class PiRpcAgentSession implements AgentSession {
     this.pendingSettledMessages = null;
     this.pendingSteerSubmissions.length = 0;
     this.clearNoTurnBuffers();
+    const measured = this.turnMeter.finish(Date.now());
+    this.turnMeter.reset();
     if (typeof errorMessage === "string" && errorMessage.length > 0) {
       this.usagePoller.stopTurn();
       this.emit({
@@ -3134,6 +3183,7 @@ export class PiRpcAgentSession implements AgentSession {
       type: "turn_completed",
       provider: this.provider,
       turnId,
+      metrics: measuredTurnMetrics(measured),
     });
     void this.refreshAfterTurn(finalUsage);
   }
@@ -3151,6 +3201,7 @@ export class PiRpcAgentSession implements AgentSession {
 export class PiRpcAgentClient implements AgentClient {
   readonly provider: AgentProvider;
   readonly capabilities: AgentCapabilityFlags;
+  readonly installation: AgentClientInstallation;
 
   private readonly logger: Logger;
   private readonly runtimeSettings?: ProviderRuntimeSettings;
@@ -3166,6 +3217,21 @@ export class PiRpcAgentClient implements AgentClient {
     this.runtime = options.runtime;
     this.usagePollScheduler = options.usagePollScheduler;
     this.shareGh = options.shareGh;
+    const lookup = options.lookupLatestRelease ?? lookupLatestPiRelease;
+    this.installation = createCliInstallation({
+      name: "Pi",
+      defaultBinary: PI_BINARY_COMMAND,
+      runtimeSettings: options.runtimeSettings,
+      installUrl: PI_INSTALL_URL,
+      updateUrl: PI_INSTALL_URL,
+      checkForUpdates: async ({ cli, installedVersion, signal }) =>
+        compareWithLatestRelease({
+          installed: installedVersion,
+          latest: await lookup({ executablePath: cli.command, signal }),
+        }),
+      // `--self` updates Pi itself and leaves installed Pi packages alone.
+      update: { args: ["update", "--self"], successMessage: updatedForNewAgents("Pi") },
+    });
   }
 
   async createSession(

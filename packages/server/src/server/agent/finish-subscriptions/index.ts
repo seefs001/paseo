@@ -211,7 +211,8 @@ export function createFinishSubscriptions(deps: Dependencies): FinishSubscriptio
             .filter((subscription) => subscription.triggerCreation)
             .map((subscription) => subscription.childAgentId),
         },
-        activeTurnBehavior: "steer",
+        // A finish report never enters a running turn.
+        activeTurnBehavior: "queue",
         unarchive: false,
       });
       acknowledgments.push(
