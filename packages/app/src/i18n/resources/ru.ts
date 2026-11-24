@@ -1158,6 +1158,8 @@ export const ru: TranslationResources = {
             "Отправка изменений недоступна: эта ветка ещё не связана с удалённым репозиторием.",
           pushBehind: "Отправка изменений пока недоступна: сначала получите более новые изменения.",
           pushNothing: "Отправка изменений недоступна: нет новых изменений для отправки.",
+          pushUpstreamGone:
+            "Отправка изменений недоступна: ветка, которую отслеживает эта ветка, больше не существует.",
           pullAndPushNoRemote:
             "Получение и отправка изменений недоступны: эта ветка ещё не связана с удалённым репозиторием.",
           pullAndPushDirty:
@@ -4182,6 +4184,23 @@ export const ru: TranslationResources = {
         name: {
           label: "Имя",
         },
+        icon: {
+          label: "Значок",
+          accessibilityLabel: "Значок, {{value}}",
+          auto: "Авто",
+          autoDetected: "Авто ({{icon}})",
+          options: {
+            server: "Сервер",
+            laptop: "Ноутбук",
+            desktop: "Компьютер",
+            mini: "Мини-ПК",
+            workstation: "Рабочая станция",
+            cloud: "Облако",
+            container: "Контейнер",
+            board: "Одноплатный ПК",
+            terminal: "Терминал",
+          },
+        },
         color: {
           label: "Цвет",
           accessibilityLabel: "Цвет, {{value}}",
@@ -4217,6 +4236,14 @@ export const ru: TranslationResources = {
         relay: "Ретранслятор",
         local: "Локальный",
         remoteSsh: "Удалённый SSH",
+      },
+      connectionKinds: {
+        local: "Локальный",
+        relay: "Ретранслятор",
+        tailscale: "Tailscale",
+        ssh: "SSH",
+        direct: "Прямой",
+        routed: "Через",
       },
       connections: {
         title: "Подключения",

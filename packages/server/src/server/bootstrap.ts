@@ -18,13 +18,11 @@ import { createServer as createHTTPServer, type IncomingMessage, type ServerResp
 import { constants, existsSync, unlinkSync } from "fs";
 import { open, rm, stat } from "fs/promises";
 import { randomUUID } from "node:crypto";
+import { getCachedHostMachineKind, primeHostMachineKind } from "./host-machine-kind.js";
 import { getHostName } from "./host-name.js";
 import path from "node:path";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import {
-  isJSONRPCErrorResponse,
-  isJSONRPCResultResponse,
-} from "@modelcontextprotocol/sdk/types.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { resolveAgentRoles } from "@getpaseo/protocol/agent-role";
@@ -670,6 +668,9 @@ export async function createPaseoDaemon(
   rootLogger: Logger,
   dependencies: PaseoDaemonDependencies = {},
 ): Promise<PaseoDaemon> {
+  // Start hardware detection at the beginning of bootstrap so it overlaps with disk/registry init
+  // and does not hold up the listener when probes are slow.
+  const hostMachineKindReady = primeHostMachineKind();
   configureGitProcessPolicy(config.git ?? resolveGitProcessPolicy({ env: process.env }));
   const logger = rootLogger.child({ module: "bootstrap" });
   const obsoleteTimelineDirectory = path.join(config.paseoHome, "agent-timelines");
@@ -915,11 +916,13 @@ export async function createPaseoDaemon(
   });
 
   app.get("/api/status", (_req, res) => {
+    const machineKind = getCachedHostMachineKind();
     res.json({
       status: "server_info",
       serverId,
       hostname: getHostName(),
       version: daemonVersion,
+      ...(machineKind ? { machineKind } : {}),
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
   });
@@ -1338,6 +1341,8 @@ export async function createPaseoDaemon(
     logger,
     findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
     getWorkspace: (workspaceId) => workspaceRegistry.get(workspaceId),
+    assertWorkspaceAutomationAllowed: (guardedWorkspaceId) =>
+      assertWorkspaceAutomationAllowedForWorkspace(workspaceRegistry, guardedWorkspaceId),
     isCheckoutUntrusted: (checkoutPath) => isCheckoutUntrusted(workspaceRegistry, checkoutPath),
     listActiveWorkspaces: listActiveWorkspacesExternal,
     getAutoArchivedChangeRequestUrl: async (workspaceId) =>
@@ -1458,6 +1463,8 @@ export async function createPaseoDaemon(
     worktreeManagers: pluginRuntime,
     workspaceArchiveOperations,
     getWorkspace: (workspaceId) => workspaceRegistry.get(workspaceId),
+    assertWorkspaceAutomationAllowed: (guardedWorkspaceId) =>
+      assertWorkspaceAutomationAllowedForWorkspace(workspaceRegistry, guardedWorkspaceId),
     isCheckoutUntrusted: (checkoutPath) => isCheckoutUntrusted(workspaceRegistry, checkoutPath),
     agentManager,
     agentStorage,
@@ -1730,6 +1737,8 @@ export async function createPaseoDaemon(
     workspaceGitService,
     worktreeManagers: pluginRuntime,
     workspaceArchiveOperations,
+    assertWorkspaceAutomationAllowed: (guardedWorkspaceId) =>
+      assertWorkspaceAutomationAllowedForWorkspace(workspaceRegistry, guardedWorkspaceId),
     isCheckoutUntrusted: (checkoutPath) => isCheckoutUntrusted(workspaceRegistry, checkoutPath),
     findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
     listActiveWorkspaces: listActiveWorkspacesExternal,
@@ -1827,7 +1836,31 @@ export async function createPaseoDaemon(
         logger.warn({ err: error }, "Failed to record Agent MCP call");
       }
     };
+    const extractMcpResponseError = (payload: unknown): string | null => {
+      const messages = Array.isArray(payload) ? payload : [payload];
+      for (const message of messages) {
+        if (typeof message !== "object" || message === null) continue;
+        const record = message as Record<string, unknown>;
+        if (
+          typeof record.error === "object" &&
+          record.error !== null &&
+          typeof (record.error as Record<string, unknown>).message === "string"
+        ) {
+          return (record.error as Record<string, unknown>).message as string;
+        }
+        if ("result" in record) {
+          const error = mcpToolError(record.result);
+          if (error !== null) return error;
+        }
+      }
+      return null;
+    };
 
+    // Stateless serving: createMcpHandler builds a fresh server per request and
+    // serves both protocol eras — modern 2026-07-28 (per-request envelope) and
+    // 2025-era clients through its stateless legacy fallback. No per-session
+    // state is retained between requests, matching the previous
+    // `sessionIdGenerator: undefined` transport.
     const createAgentMcpSession = async (session: {
       callerAgentId: string | undefined;
       labels: readonly string[];
@@ -1857,37 +1890,32 @@ export async function createPaseoDaemon(
         },
       });
 
-      // Stateless mode: each HTTP request builds a fresh server + transport that is
-      // torn down when the response closes, so no per-session state is retained between
-      // requests. The agent control plane only lists and calls tools, neither of which
-      // needs cross-request state, so sessions would only pin memory for the life of the
-      // daemon (agents that exit without a clean DELETE never get reaped).
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        // NOTE: We enforce a Vite-like host allowlist at the app/websocket layer.
-        // StreamableHTTPServerTransport's built-in check requires exact Host header matches.
-        enableDnsRebindingProtection: false,
-      });
-      Object.assign(transport, {
+      const mcpHandler = createMcpHandler(() => agentMcpServer, {
+        legacy: "stateless",
         onerror: (err: Error) => {
+          session.onResponseError(err.message);
           logger.error({ err }, "Agent MCP transport error");
         },
       });
 
-      const send = transport.send.bind(transport);
-      transport.send = async (message, options) => {
-        // MCP validation and protocol errors can still have HTTP status 200.
-        if (isJSONRPCErrorResponse(message)) {
-          session.onResponseError(message.error.message);
-        } else if (isJSONRPCResultResponse(message)) {
-          const error = mcpToolError(message.result);
-          if (error !== null) session.onResponseError(error);
-        }
-        await send(message, options);
+      const handler = {
+        fetch: async (request: Request, options?: Parameters<typeof mcpHandler.fetch>[1]) => {
+          const response = await mcpHandler.fetch(request, options);
+          const contentType = response.headers.get("content-type") ?? "";
+          if (contentType.includes("application/json")) {
+            try {
+              const payload: unknown = await response.clone().json();
+              const error = extractMcpResponseError(payload);
+              if (error !== null) session.onResponseError(error);
+            } catch {
+              // Ignore non-JSON or empty bodies.
+            }
+          }
+          return response;
+        },
+        close: () => mcpHandler.close(),
       };
-
-      await agentMcpServer.connect(transport);
-      return { server: agentMcpServer, transport };
+      return { handler };
     };
 
     const runAgentMcpRequest = async (
@@ -1983,7 +2011,7 @@ export async function createPaseoDaemon(
           });
           return;
         }
-        const { server, transport } = await createAgentMcpSession({
+        const { handler } = await createAgentMcpSession({
           callerAgentId: callerAgentId ?? undefined,
           labels,
           onToolCall: () => {
@@ -1993,19 +2021,19 @@ export async function createPaseoDaemon(
             responseError = error;
           },
         });
-        res.on("close", () => {
-          void transport.close();
-          void server.close();
-        });
-
-        await transport.handleRequest(
-          req as unknown as IncomingMessage,
-          res as unknown as ServerResponse,
-          req.body,
-        );
-        const httpError = res.statusCode < 400 ? null : `HTTP ${res.statusCode}`;
-        const error = responseError ?? httpError;
-        settleHttpCall(error === null, error);
+        try {
+          // express.json() already consumed the stream, so hand the parsed body over.
+          await toNodeHandler(handler)(
+            req as unknown as IncomingMessage,
+            res as unknown as ServerResponse,
+            req.body,
+          );
+          const httpError = res.statusCode < 400 ? null : `HTTP ${res.statusCode}`;
+          const error = responseError ?? httpError;
+          settleHttpCall(error === null, error);
+        } finally {
+          await handler.close();
+        }
       } catch (err) {
         logger.error({ err }, "Failed to handle Agent MCP request");
         settleHttpCall(false, "Internal MCP server error");
@@ -2037,7 +2065,20 @@ export async function createPaseoDaemon(
   const start = async () => {
     let mainStarted = false;
     try {
-      localCredential = await writeLocalCredential(config.paseoHome);
+      let machineKindTimeout: ReturnType<typeof setTimeout> | null = null;
+      const [nextLocalCredential] = await Promise.all([
+        writeLocalCredential(config.paseoHome),
+        Promise.race([
+          hostMachineKindReady,
+          new Promise<void>((resolve) => {
+            machineKindTimeout = setTimeout(resolve, 150);
+            machineKindTimeout.unref();
+          }),
+        ]).finally(() => {
+          if (machineKindTimeout) clearTimeout(machineKindTimeout);
+        }),
+      ]);
+      localCredential = nextLocalCredential;
       if (serviceProxyListenTarget) {
         const boundServiceProxyTarget = await serviceProxy.startStandalone({
           listenTarget: serviceProxyListenTarget,

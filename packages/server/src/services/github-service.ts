@@ -22,12 +22,15 @@ import {
 import { execCommand } from "../utils/spawn.js";
 import { resolveSshHostname } from "../utils/ssh-hostname.js";
 import {
+  type CachedCliPathResolver,
   CLI_AUTH_PROBE_TIMEOUT_MS,
+  createCachedCliPathResolver,
   createForgeCliRunner,
   ForgeAuthenticationError,
   ForgeCliMissingError,
   parseCliJsonOutput,
   probeHostViaCliAuthStatus,
+  runWithResolvedCliPath,
   ForgeCommandError,
   type ForgeCommandFailureParams,
   type ForgeCliRunnerOptions,
@@ -970,7 +973,7 @@ interface CacheEntry {
 
 interface GitHubServiceDependencies {
   runner: GitHubCommandRunner;
-  resolveGhPath: () => Promise<string | null>;
+  resolveGhPath: CachedCliPathResolver;
   now: () => number;
   /**
    * GitHub Enterprise host for a workspace, or null for github.com (where `gh`
@@ -1151,7 +1154,7 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
   const ttlMs = options.ttlMs ?? DEFAULT_GITHUB_CACHE_TTL_MS;
   const deps: GitHubServiceDependencies = {
     runner: options.runner ?? runGhCommand,
-    resolveGhPath: options.resolveGhPath ?? resolveGhPath,
+    resolveGhPath: createCachedCliPathResolver(options.resolveGhPath ?? resolveGhPath),
     now: options.now ?? Date.now,
     resolveRepoHost: options.resolveRepoHost ?? resolveGitHubEnterpriseHost,
     resolveRepoSlug: options.resolveRepoSlug ?? resolveGitHubSlugFromOrigin,
@@ -1384,8 +1387,8 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     runOptions: GitHubCommandRunnerOptions,
     explicitHost?: string,
   ): Promise<string> {
-    const ghPath = await deps.resolveGhPath();
-    if (!ghPath) {
+    const initialGhPath = await deps.resolveGhPath();
+    if (!initialGhPath) {
       throw new GitHubCliMissingError();
     }
     // Route every gh invocation to the workspace's host. `gh api`/`graphql`
@@ -1393,11 +1396,15 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     // which silently queries the wrong server on GitHub Enterprise. GH_HOST is
     // safe even for auto-routing subcommands because it matches the repo's host.
     const host = explicitHost ?? (await resolveRepoHostCached(runOptions.cwd));
-    const effectiveOptions: GitHubCommandRunnerOptions = host
+    const baseOptions: GitHubCommandRunnerOptions = host
       ? { ...runOptions, envOverlay: { ...runOptions.envOverlay, GH_HOST: host } }
       : runOptions;
     try {
-      const result = await deps.runner(args, effectiveOptions);
+      const result = await runWithResolvedCliPath({
+        resolvePath: deps.resolveGhPath,
+        createMissingError: () => new GitHubCliMissingError(),
+        run: (ghPath) => deps.runner(args, { ...baseOptions, executablePath: ghPath }),
+      });
       return result.stdout.trim();
     } catch (error) {
       throw githubCliRunner.normalizeError(error, {
@@ -3197,7 +3204,8 @@ const githubCliRunner = createForgeCliRunner({
   timeoutMs: GITHUB_COMMAND_TIMEOUT_MS,
   isAuthFailureText,
   errorClasses: {
-    isAlreadyClassified: (candidate) => candidate instanceof GitHubAuthenticationError,
+    isAlreadyClassified: (candidate) =>
+      candidate instanceof GitHubAuthenticationError || candidate instanceof GitHubCliMissingError,
     isCommandError: (candidate): candidate is GitHubCommandError =>
       candidate instanceof GitHubCommandError,
     createAuthError: (stderr) => new GitHubAuthenticationError({ stderr }),
