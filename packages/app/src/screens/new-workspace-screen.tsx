@@ -338,6 +338,7 @@ interface WorkspaceDraftSubmissionConfig {
   thinkingOptionId: string | null;
   roleId: string | null;
   providerOptions: Record<string, unknown> | undefined;
+  systemPrompt: string | null;
   target: WorkspaceTabTarget;
 }
 
@@ -463,6 +464,9 @@ function buildWorkspaceDraftSetupFromComposer(input: {
     thinkingOptionId: input.composerState.effectiveThinkingOptionId || null,
     ...(input.composerState.roleId ? { roleId: input.composerState.roleId } : {}),
     providerOptions: input.composerState.providerOptions ?? {},
+    ...(input.composerState.selectedSystemPrompt
+      ? { systemPrompt: input.composerState.selectedSystemPrompt }
+      : {}),
   };
 }
 
@@ -495,6 +499,7 @@ function buildComposerInitialValues(input: {
       modeId: input.initialSetup.modeId,
       model: input.initialSetup.model,
       thinkingOptionId: input.initialSetup.thinkingOptionId,
+      systemPrompt: input.initialSetup.systemPrompt,
     };
   }
   return undefined;
@@ -548,6 +553,9 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       model: composerState.effectiveModelId || undefined,
       thinkingOptionId: composerState.effectiveThinkingOptionId || undefined,
       providerOptions: composerState.providerOptions,
+      ...(composerState.selectedSystemPrompt
+        ? { systemPrompt: composerState.selectedSystemPrompt }
+        : {}),
     },
     ...(composerState.roleId ? { roleId: composerState.roleId } : {}),
     initialPrompt: wirePayload.text,
@@ -663,6 +671,7 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
       thinkingOptionId: initialSetup.thinkingOptionId,
       roleId: initialSetup.roleId ?? null,
       providerOptions: initialSetup.providerOptions,
+      systemPrompt: initialSetup.systemPrompt ?? null,
       target: { kind: "draft", draftId, setup: initialSetup },
     };
   }
@@ -674,6 +683,7 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
     thinkingOptionId: composerState.effectiveThinkingOptionId || null,
     roleId: composerState.roleId,
     providerOptions: composerState.providerOptions,
+    systemPrompt: composerState.selectedSystemPrompt || null,
     target: { kind: "draft", draftId },
   };
 }
@@ -743,6 +753,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     ...(submission.thinkingOptionId ? { thinkingOptionId: submission.thinkingOptionId } : {}),
     ...(submission.roleId ? { roleId: submission.roleId } : {}),
     ...(submission.providerOptions ? { providerOptions: submission.providerOptions } : {}),
+    ...(submission.systemPrompt ? { systemPrompt: submission.systemPrompt } : {}),
     allowEmptyText: true,
     agentCreation: input.agentCreation,
   });
@@ -1644,9 +1655,18 @@ export function NewWorkspaceScreen({
       ? t("newWorkspace.refPicker.searching")
       : t("newWorkspace.refPicker.noMatchingRefs");
 
+  // The prompt is where the user types; when a field's picker closes, focus returns there rather
+  // than to whatever had focus when the picker opened. A terminal profile that takes no prompt
+  // shows a read-only command preview, so its pickers keep returning focus to their field.
+  const composerFocusRef = useRef<{ focus: () => void } | null>(null);
+  const handleComposerFocusInput = useCallback((focus: () => void) => {
+    composerFocusRef.current = { focus };
+  }, []);
+
   const formStack = useNewWorkspaceForm({
     isCompact,
     isPending,
+    restoreFocusRef: terminalTakesPrompt ? composerFocusRef : undefined,
     pluginItems: (
       <PluginNewWorkspaceItems serverId={selectedServerId} screen={pluginScreen} setup={setup} />
     ),
@@ -1748,6 +1768,7 @@ export function NewWorkspaceScreen({
       clearDraft={noopClearDraft}
       autoFocus={terminalTakesPrompt}
       autoFocusKey={launchFocusKey}
+      onFocusInput={handleComposerFocusInput}
       error={errorMessage}
     />
   ) : (
@@ -1780,6 +1801,7 @@ export function NewWorkspaceScreen({
       submissionDraft={chatDraft.submission}
       autoFocus
       autoFocusKey={launchFocusKey}
+      onFocusInput={handleComposerFocusInput}
       commandDraft={composerState?.commandDraft}
       agentControls={agentControlsWithDisabled}
       error={errorMessage}

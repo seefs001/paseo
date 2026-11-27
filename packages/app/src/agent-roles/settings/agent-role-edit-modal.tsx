@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { AgentProfile, AgentRole } from "@getpaseo/protocol/messages";
-import { AgentProfileAppearanceField } from "@/agent-profiles";
+import { AgentProfileIconButton } from "@/agent-profiles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { type ControlSize } from "@/components/ui/control-geometry";
@@ -188,16 +188,17 @@ function OpenAgentRoleEditModal({
       <View style={styles.body}>
         <View style={styles.nameRow}>
           <View style={styles.iconField}>
-            <AgentProfileAppearanceField
-              label={t("settings.host.agentRoles.iconLabel")}
-              icon={state.icon}
-              color={state.color}
-              onChange={handleAppearanceChange}
-              disabled={state.isSubmitting}
-              size={controlSize}
-              testID="agent-role-icon-field"
-              triggerTestID="agent-role-icon-trigger"
-            />
+            <Field label={t("settings.host.agentRoles.iconLabel")} testID="agent-role-icon-field">
+              <AgentProfileIconButton
+                label={t("settings.host.agentRoles.iconLabel")}
+                icon={state.icon}
+                color={state.color}
+                onChange={handleAppearanceChange}
+                disabled={state.isSubmitting}
+                size={controlSize}
+                triggerTestID="agent-role-icon-trigger"
+              />
+            </Field>
           </View>
           <View style={styles.nameField}>
             <Field label={t("settings.host.agentRoles.nameLabel")} testID="agent-role-name-field">

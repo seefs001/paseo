@@ -93,6 +93,9 @@ export function normalizeWorkspaceDraftTabSetup(
     return undefined;
   }
   const metadata = AgentMetadataSchema.safeParse(record.metadata);
+  const systemPrompt = trimOptionalString(
+    typeof record.systemPrompt === "string" ? record.systemPrompt : null,
+  );
   return {
     ...(metadata.success ? { metadata: metadata.data } : {}),
     provider,
@@ -104,6 +107,7 @@ export function normalizeWorkspaceDraftTabSetup(
     ),
     providerOptions: isPlainRecord(record.providerOptions) ? { ...record.providerOptions } : {},
     ...(typeof record.roleId === "string" && record.roleId ? { roleId: record.roleId } : {}),
+    ...(systemPrompt ? { systemPrompt } : {}),
   };
 }
 
@@ -186,6 +190,7 @@ function workspaceDraftTabSetupsEqual(
     left.thinkingOptionId === right.thinkingOptionId &&
     left.roleId === right.roleId &&
     equal(left.metadata, right.metadata) &&
+    (left.systemPrompt ?? null) === (right.systemPrompt ?? null) &&
     recordsShallowEqual(left.providerOptions, right.providerOptions)
   );
 }

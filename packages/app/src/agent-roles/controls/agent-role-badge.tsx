@@ -52,7 +52,7 @@ export function AgentRoleBadge({
   const label = isRemoved ? t("agentControls.role.removedName", { name: role.name }) : role.name;
 
   const openRoleSettings = useCallback(() => {
-    router.push(buildSettingsHostSectionRoute(serverId, "agents"));
+    router.push(buildSettingsHostSectionRoute(serverId, "tools"));
   }, [router, serverId]);
 
   const triggerStyle = useCallback(

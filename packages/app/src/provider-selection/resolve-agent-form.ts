@@ -17,6 +17,7 @@ export interface FormInitialValues {
   modeId?: string | null;
   model?: string | null;
   thinkingOptionId?: string | null;
+  systemPrompt?: string | null;
 }
 
 export interface FormState {
@@ -24,6 +25,7 @@ export interface FormState {
   modeId: string;
   model: string;
   thinkingOptionId: string;
+  systemPrompt: string;
 }
 
 export interface UserModifiedFields {
@@ -31,6 +33,7 @@ export interface UserModifiedFields {
   modeId: boolean;
   model: boolean;
   thinkingOptionId: boolean;
+  systemPrompt: boolean;
 }
 
 export type ProviderModelsByProvider = Map<AgentProvider, AgentModelDefinition[] | null>;
@@ -54,6 +57,7 @@ export const INITIAL_USER_MODIFIED: UserModifiedFields = {
   modeId: false,
   model: false,
   thinkingOptionId: false,
+  systemPrompt: false,
 };
 
 export const PENDING_AGENT_FORM_RESOLUTION: AgentFormResolutionState = { status: "pending" };
@@ -106,6 +110,7 @@ export type AgentFormAction =
       modelId: string;
       modeId: string;
       thinkingOptionId: string;
+      systemPrompt: string;
       providerDef: AgentProviderDefinition | undefined;
       providerModels: AgentModelDefinition[] | null;
       providerPrefs?: ProviderPrefs | undefined;
@@ -242,7 +247,8 @@ export function hasFormStateChanged(prev: FormState, next: FormState): boolean {
     prev.provider !== next.provider ||
     prev.modeId !== next.modeId ||
     prev.model !== next.model ||
-    prev.thinkingOptionId !== next.thinkingOptionId
+    prev.thinkingOptionId !== next.thinkingOptionId ||
+    prev.systemPrompt !== next.systemPrompt
   );
 }
 
@@ -431,6 +437,10 @@ export function resolveFormState(
     });
   }
 
+  result.systemPrompt = userModified.systemPrompt
+    ? result.systemPrompt
+    : normalizeSelectedModelId(initialValues?.systemPrompt);
+
   return result;
 }
 
@@ -613,6 +623,7 @@ function applyProfile(state: AgentFormReducerState, action: ApplyProfileAction) 
       model: nextModelId,
       modeId: nextModeId,
       thinkingOptionId: nextThinkingOptionId,
+      systemPrompt: action.systemPrompt,
     },
     userModified: {
       ...state.userModified,
@@ -620,6 +631,7 @@ function applyProfile(state: AgentFormReducerState, action: ApplyProfileAction) 
       model: true,
       modeId: true,
       thinkingOptionId: true,
+      systemPrompt: true,
     },
   };
 }
@@ -629,7 +641,8 @@ function sameInitialValues(left: FormInitialValues = {}, right: FormInitialValue
     left.provider === right.provider &&
     left.model === right.model &&
     left.modeId === right.modeId &&
-    left.thinkingOptionId === right.thinkingOptionId
+    left.thinkingOptionId === right.thinkingOptionId &&
+    left.systemPrompt === right.systemPrompt
   );
 }
 
@@ -700,8 +713,9 @@ export function resolveAgentForm(
           model: nextModelId,
           modeId: nextModeId,
           thinkingOptionId: nextThinkingOptionId,
+          systemPrompt: "",
         },
-        userModified: { ...state.userModified, provider: true, model: true },
+        userModified: { ...state.userModified, provider: true, model: true, systemPrompt: true },
       };
     }
 
@@ -733,8 +747,9 @@ export function resolveAgentForm(
           ...state.form,
           model: nextModelId,
           thinkingOptionId: nextThinkingOptionId,
+          systemPrompt: "",
         },
-        userModified: { ...state.userModified, model: true },
+        userModified: { ...state.userModified, model: true, systemPrompt: true },
       };
     }
 
@@ -747,6 +762,7 @@ export function resolveAgentForm(
           model: "",
           modeId: "",
           thinkingOptionId: "",
+          systemPrompt: "",
         },
         userModified: {
           ...state.userModified,
@@ -754,6 +770,7 @@ export function resolveAgentForm(
           model: true,
           modeId: true,
           thinkingOptionId: true,
+          systemPrompt: true,
         },
       };
 

@@ -13,6 +13,7 @@ const recordsSchema = z.array(
     requireParentOwnership: z.boolean().optional(),
     triggerMessageId: z.string().optional(),
     triggerCreation: z.boolean().optional(),
+    followingSince: z.iso.datetime().optional(),
   }),
 );
 

@@ -57,6 +57,7 @@ import { SidebarFilterSummary } from "@/components/sidebar/filter-summary";
 import { SidebarSavedViewsMenu } from "@/components/sidebar/saved-views/menu";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
 import { SidebarToastRegion } from "@/components/sidebar/sidebar-toast-region";
+import { SidebarSelectionHost } from "@/sidebar-selection";
 import { SidebarNavRows, useVisibleSidebarNavItems } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarFooterIconHighlight } from "@/components/sidebar/sidebar-footer-icon-highlight";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
@@ -228,7 +229,7 @@ export const LeftSidebar = memo(function LeftSidebar({
       openSettingsFromSidebar({
         workspace: activeWorkspace,
         isCompact: isCompactLayout,
-        route: buildSettingsHostSectionRoute(serverId, "host"),
+        route: buildSettingsHostSectionRoute(serverId, "daemon"),
       });
     },
     [activeWorkspace, isCompactLayout],
@@ -669,6 +670,7 @@ function MobileSidebar({
                 listHeaderComponent={workspacesSectionHeaderElement}
               />
             )}
+            <SidebarSelectionHost active={active} workspaceEntriesByKey={workspaceEntriesByKey} />
           </SidebarToastRegion>
         </SidebarViewSlot>
 
@@ -924,6 +926,7 @@ function DesktopSidebar({
                   listHeaderComponent={workspacesSectionHeaderElement}
                 />
               )}
+              <SidebarSelectionHost active={active} workspaceEntriesByKey={workspaceEntriesByKey} />
             </SidebarToastRegion>
           </SidebarViewSlot>
 

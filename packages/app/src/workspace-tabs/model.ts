@@ -13,6 +13,7 @@ export interface WorkspaceDraftTabSetup {
   providerOptions: Record<string, unknown>;
   /** An Agent role the draft starts with. */
   roleId?: string;
+  systemPrompt?: string | null;
 }
 
 export interface WorkspaceWorkingDiffTabTarget {

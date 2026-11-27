@@ -44,7 +44,9 @@ export const WorkspaceTraceNodeSchema = z.object({
   sourceTurnId: z.string().optional(),
   requestedBehavior: z.enum(["steer", "interrupt"]).optional(),
   behavior: z.enum(["started", "steered", "interrupted", "out_of_band"]).optional(),
-  notificationEvent: z.enum(["finished", "errored", "permission-required", "closed"]).optional(),
+  notificationEvent: z
+    .enum(["finished", "errored", "permission-required", "closed", "message"])
+    .optional(),
   subscriptionIds: z.array(z.string()).optional(),
 });
 export type WorkspaceTraceNode = z.infer<typeof WorkspaceTraceNodeSchema>;

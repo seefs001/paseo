@@ -177,7 +177,7 @@ export function DraftAgentRoleControl({
   const handlePress = useCallback(() => setOpen((current) => !current), []);
   const openRoleSettings = useCallback(() => {
     setOpen(false);
-    if (serverId) router.push(buildSettingsHostSectionRoute(serverId, "agents"));
+    if (serverId) router.push(buildSettingsHostSectionRoute(serverId, "tools"));
   }, [router, serverId]);
 
   const renderOption = useCallback(

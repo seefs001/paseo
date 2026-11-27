@@ -10,7 +10,7 @@ nav: CLI
 
 在[应用的计划表单](/docs/schedules#choose-a-workspace-and-conversation)中选择已有工作区或对话。这些计划会显示在 `paseo schedule ls` 中，也支持下方所有管理命令。CLI 暂不提供工作区或对话选择参数；`--cwd` 指定目录，不代表选择已有工作区。
 
-默认情况下，每次运行结束时都会归档本次新建的工作区。CLI 没有 **Archive on finish** 参数；要让之后的运行工作区保持活跃，请[在应用中修改该选项](/docs/schedules#keep-run-workspaces)。
+默认情况下，每次运行结束时都会归档其工作区。向 `paseo schedule create` 或 `paseo schedule update` 传入 `--no-archive-on-finish`，即可[让之后的运行工作区保持活跃](/docs/schedules#keep-run-workspaces)；它对应应用中的 **Archive on finish** 选项。
 
 ## 创建 {#create}
 
@@ -114,6 +114,7 @@ paseo schedule pause <id>
 paseo schedule resume <id>
 paseo schedule run-once <id>
 paseo schedule update <id> --every 10m --max-runs 6
+paseo schedule update <id> --no-archive-on-finish
 paseo schedule delete <id>
 ```
 

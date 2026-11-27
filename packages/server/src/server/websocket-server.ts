@@ -67,8 +67,10 @@ import {
   type ServerCapabilityState,
   type ServerCapabilities,
   type WSOutboundMessage,
+  type WSTunnelHelloMessage,
   wrapSessionMessage,
 } from "./messages.js";
+import { NetworkTunnelService } from "./network-tunnel/index.js";
 import { asUint8Array, decodeBinaryFrame } from "@getpaseo/protocol/binary-frames/index";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import { MAX_WEBSOCKET_MESSAGE_BYTES } from "@getpaseo/protocol/websocket-message-limit";
@@ -166,6 +168,8 @@ import {
 } from "./websocket/physical-socket.js";
 
 const WS_CLOSE_DAEMON_AUTH_FAILED = 4401;
+// Give clients intermediate messages that count as progress during large transfers.
+const DIRECT_WEBSOCKET_FRAME_BYTES = 512 * 1024;
 
 export interface ExternalSocketMetadata {
   transport: "relay" | "hub";
@@ -522,6 +526,7 @@ interface PluginSessionConnection extends SessionConnectionBase {
 type SessionConnection = ReconnectableSessionConnection | PluginSessionConnection;
 
 interface SocketSessionOptions {
+  principalId: string;
   sourceId?: string;
   clientId: string;
   appVersion: string | null;
@@ -587,12 +592,33 @@ function requireWebSocketServices(params: {
 /**
  * WebSocket server that only accepts sockets + parses/forwards messages to the session layer.
  */
+function initPushNotifications(
+  logger: pino.Logger,
+  paseoHome: string,
+  pushNotifications?: PushNotifications,
+  pushNotificationSender?: PushNotificationSender,
+): { pushNotifications: PushNotifications; pushNotificationSender: PushNotificationSender } {
+  const notifications =
+    pushNotifications ??
+    createPushNotifications({
+      logger: logger.child({ module: "push" }),
+      filePath: join(paseoHome, "push-tokens.json"),
+    });
+  return {
+    pushNotifications: notifications,
+    pushNotificationSender: pushNotificationSender ?? notifications,
+  };
+}
+
 export class VoiceAssistantWebSocketServer {
   private readonly logger: pino.Logger;
   private readonly wss: WebSocketServer;
   private readonly hostLinks = new Map<WebSocketLike, DaemonLinkEndpoint>();
+  private readonly networkTunnel = new NetworkTunnelService();
+  private readonly handedOffTunnelSockets = new WeakSet<WebSocketLike>();
   private readonly pendingConnections: Map<WebSocketLike, PendingConnection> = new Map();
   private readonly sessions: Map<WebSocketLike, SessionConnection> = new Map();
+  private readonly socketLocalEndpoints = new WeakMap<object, string>();
   private readonly socketIdentities: Map<WebSocketLike, WebSocketConnectionIdentity> = new Map();
   private readonly externalSessionsByKey: Map<string, ReconnectableSessionConnection> = new Map();
   private readonly pluginSocketIds = new WeakMap<WebSocketLike, string>();
@@ -746,6 +772,7 @@ export class VoiceAssistantWebSocketServer {
     board?: BoardServices,
     private readonly sshWorkspaces?: SshWorkspaceService,
     workspaceArchiveOperations?: WorkspaceArchiveOperations,
+    pushNotifications?: PushNotifications,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -932,12 +959,14 @@ export class VoiceAssistantWebSocketServer {
       unsubscribeChange();
     };
 
-    const pushLogger = this.logger.child({ module: "push" });
-    this.pushNotifications = createPushNotifications({
-      logger: pushLogger,
-      filePath: join(paseoHome, "push-tokens.json"),
-    });
-    this.pushNotificationSender = pushNotificationSender ?? this.pushNotifications;
+    const push = initPushNotifications(
+      this.logger,
+      paseoHome,
+      pushNotifications,
+      pushNotificationSender,
+    );
+    this.pushNotifications = push.pushNotifications;
+    this.pushNotificationSender = push.pushNotificationSender;
 
     this.agentManager.setAgentAttentionCallback((params) => {
       void this.broadcastAgentAttention(params).catch((err) => {
@@ -1025,7 +1054,8 @@ export class VoiceAssistantWebSocketServer {
       },
     });
     wss.on("connection", (ws, request) => {
-      void this.attachAuthenticatedSocket(ws, request, password);
+      const socket = Object.assign(ws, { maxFrameBytes: DIRECT_WEBSOCKET_FRAME_BYTES });
+      void this.attachAuthenticatedSocket(socket, request, password);
     });
     return wss;
   }
@@ -1248,6 +1278,9 @@ export class VoiceAssistantWebSocketServer {
     principalId: string,
     permissions: readonly DaemonPermission[],
   ): void {
+    if (!permissions.includes("workspace.write")) {
+      this.networkTunnel.revokePrincipal(principalId);
+    }
     for (const [socket, link] of this.hostLinks) {
       if (this.sessions.get(socket)?.principalId === principalId) {
         link.close("permission_denied");
@@ -1282,6 +1315,7 @@ export class VoiceAssistantWebSocketServer {
 
   public async close(): Promise<void> {
     this.prepareForShutdown();
+    this.networkTunnel.close();
     await this.agentMessages.close();
     await this.connectedHosts.close();
     this.unsubscribeSpeechReadiness?.();
@@ -1627,6 +1661,8 @@ export class VoiceAssistantWebSocketServer {
 
     const requestMetadata = extractSocketRequestMetadata(request);
     const identity = createWebSocketConnectionIdentity(requestMetadata, metadata);
+    if (requestMetadata.localEndpoint)
+      this.socketLocalEndpoints.set(ws, requestMetadata.localEndpoint);
     this.socketIdentities.set(ws, identity);
     const connectionLogger = this.logger.child(toConnectionLogFields(identity));
 
@@ -1684,6 +1720,7 @@ export class VoiceAssistantWebSocketServer {
     let connection: SessionConnection | null = null;
 
     const session = this.createSocketSession({
+      principalId: admission.principalId,
       clientId,
       appVersion,
       clientCapabilities,
@@ -1855,6 +1892,7 @@ export class VoiceAssistantWebSocketServer {
             getDaemonTcpHost: this.getDaemonTcpHost,
             serviceProxyPublicBaseUrl: this.serviceProxyPublicBaseUrl,
             onScriptsChanged: null,
+            lifecycle: this.pluginRuntime ?? null,
           },
           input,
           options,
@@ -1873,6 +1911,7 @@ export class VoiceAssistantWebSocketServer {
   private createSocketSession(options: SocketSessionOptions): Session {
     return new Session({
       connectedHosts: this.connectedHosts,
+      getSourceLocalEndpoint: (source) => this.socketLocalEndpoints.get(source),
       getConnectedHostBufferedAmount: () => {
         let total = 0;
         for (const socket of this.sessions.keys()) {
@@ -1906,6 +1945,11 @@ export class VoiceAssistantWebSocketServer {
       },
       publishScriptStatusUpdate: (message) => this.publishScriptStatusUpdate(message),
       downloadTokenStore: this.downloadTokenStore,
+      createNetworkTunnelTicket: (permissions) =>
+        this.networkTunnel.createTicket({
+          principalId: options.principalId,
+          permissions,
+        }),
       pushNotifications: this.pushNotifications,
       paseoHome: this.paseoHome,
       worktreesRoot: this.worktreesRoot,
@@ -2345,12 +2389,18 @@ export class VoiceAssistantWebSocketServer {
         mcpToolAllowlist: true,
         // COMPAT(daemonPassword): added in v0.13.2, remove gate after 2027-05-01.
         daemonPassword: true,
+        // COMPAT(tailscale): added in v0.16.0, remove after 2027-05-25 once daemon floor >= v0.16.0.
+        ...(this.advertiseDaemonStatusRpc && this.daemonRuntimeConfig?.setTailscaleEnabled
+          ? { tailscale: true }
+          : {}),
         // COMPAT(speechSettings): added in v0.12.0, remove gate after 2027-04-18.
         speechSettings: true,
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         ...(this.advertiseRelayConfig ? { relayConfig: true } : {}),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
         pushTokenRevocation: true,
+        // COMPAT(pushNotificationPreferences): added in v0.18.0, remove gate after 2027-06-01.
+        pushNotificationPreferences: true,
         // COMPAT(plugins): added in v0.3.0, remove gate after 2027-08-07.
         plugins: true,
         pluginManagement: true,
@@ -2366,6 +2416,8 @@ export class VoiceAssistantWebSocketServer {
         pluginTimelineItems: true,
         // COMPAT(pluginSubscriptions): added in v0.15.0, remove gate after 2027-05-02.
         pluginSubscriptions: true,
+        // COMPAT(pluginNotifications): added in v0.18.0, remove gate after 2027-06-01.
+        pluginNotifications: true,
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: true,
         skillCatalog: true,
@@ -2506,6 +2558,8 @@ export class VoiceAssistantWebSocketServer {
         agentRoles: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: true,
+        // COMPAT(networkTunnel): added in v0.17.6, remove gate after 2027-05-26.
+        networkTunnel: true,
       },
     };
   }
@@ -2551,6 +2605,7 @@ export class VoiceAssistantWebSocketServer {
 
   private bindSocketHandlers(ws: WebSocketLike): void {
     ws.on("message", (...args: unknown[]) => {
+      if (this.handedOffTunnelSockets.has(ws)) return;
       const data = args[0] as Buffer | ArrayBuffer | Buffer[] | string;
       try {
         this.chunkedSocket(ws).receive(typeof data === "string" ? data : bufferFromWsData(data));
@@ -2561,6 +2616,7 @@ export class VoiceAssistantWebSocketServer {
     });
 
     ws.on("close", async (...args: unknown[]) => {
+      if (this.handedOffTunnelSockets.has(ws)) return;
       this.chunkedSockets.get(ws)?.close();
       const code = args[0];
       const reason = args[1];
@@ -2571,6 +2627,7 @@ export class VoiceAssistantWebSocketServer {
     });
 
     ws.on("error", async (...args: unknown[]) => {
+      if (this.handedOffTunnelSockets.has(ws)) return;
       const error = args[0];
       const err = error instanceof Error ? error : new Error(String(error));
       const active = this.sessions.get(ws);
@@ -2842,6 +2899,15 @@ export class VoiceAssistantWebSocketServer {
       return;
     }
 
+    if (message.type === "tunnel_hello" && !pendingConnection.authenticating) {
+      this.handleTunnelHello({
+        ws,
+        message,
+        pending: pendingConnection,
+      });
+      return;
+    }
+
     pendingConnection.connectionLogger.warn(
       {
         messageType: message.type,
@@ -2855,6 +2921,72 @@ export class VoiceAssistantWebSocketServer {
     } catch {
       // ignore close errors
     }
+  }
+
+  private handleTunnelHello(params: {
+    ws: WebSocketLike;
+    message: WSTunnelHelloMessage;
+    pending: PendingConnection;
+  }): void {
+    const { ws, message, pending } = params;
+    this.clearPendingConnection(ws);
+    this.socketIdentities.delete(ws);
+    this.applicationSocketLease.release(ws);
+
+    const redeemed = this.networkTunnel.redeemTicket(message.ticket);
+    if (!redeemed) {
+      pending.connectionLogger.warn("Rejected tunnel_hello with invalid or expired ticket");
+      this.rejectTunnelHello(
+        ws,
+        "invalid_ticket",
+        "Tunnel ticket is invalid, expired, or already used",
+      );
+      return;
+    }
+
+    if (!redeemed.permissions.includes("workspace.write")) {
+      pending.connectionLogger.warn(
+        { principalId: redeemed.principalId },
+        "Rejected tunnel_hello lacking workspace.write permission",
+      );
+      this.rejectTunnelHello(
+        ws,
+        "unauthorized",
+        "Principal is not authorized to open network tunnels",
+      );
+      return;
+    }
+
+    // Mark handed off synchronously before attaching TunnelSession so subsequent
+    // binary frames (including pipelined frames on EncryptedRelaySocket) bypass
+    // WebSocketServer and ChunkedTransport completely.
+    this.handedOffTunnelSockets.add(ws);
+    this.chunkedSockets.delete(ws);
+    this.networkTunnel.attachTunnelSocket(ws, {
+      principalId: redeemed.principalId,
+      logger: pending.connectionLogger,
+    });
+  }
+
+  private rejectTunnelHello(ws: WebSocketLike, code: string, message: string): void {
+    const closeSocket = () => {
+      try {
+        ws.close(WS_CLOSE_DAEMON_AUTH_FAILED, message);
+      } catch {
+        // ignore close errors
+      }
+    };
+    try {
+      const payload = JSON.stringify({ type: "tunnel_error", code, message });
+      const sendResult = ws.send(payload);
+      if (sendResult && typeof sendResult.then === "function") {
+        void sendResult.catch(() => undefined).finally(closeSocket);
+        return;
+      }
+    } catch {
+      // fall through to close
+    }
+    closeSocket();
   }
 
   private handleRawMessage(
@@ -2933,9 +3065,12 @@ export class VoiceAssistantWebSocketServer {
         return;
       }
 
-      if (message.type === "hello") {
+      if (isHandshakeMessage(message)) {
         this.incrementRuntimeCounter("unexpectedHelloOnActiveConnection");
-        activeConnection.connectionLogger.warn("Received hello on active connection");
+        activeConnection.connectionLogger.warn(
+          { messageType: message.type },
+          "Received unexpected handshake on active connection",
+        );
         try {
           ws.close(WS_CLOSE_INVALID_HELLO, "Unexpected hello");
         } catch {
@@ -3238,9 +3373,11 @@ export class VoiceAssistantWebSocketServer {
     );
 
     if (plan.shouldPush) {
-      void this.pushNotificationSender.send(notification).catch((err) => {
-        this.logger.warn({ err, agentId: params.agentId }, "Failed to send push notification");
-      });
+      void this.pushNotificationSender
+        .send(notification, { kind: "agent", reason: params.reason })
+        .catch((err) => {
+          this.logger.warn({ err, agentId: params.agentId }, "Failed to send push notification");
+        });
     }
 
     for (const { ws } of clientEntries) {
@@ -3389,16 +3526,19 @@ export class VoiceAssistantWebSocketServer {
 
     if (plan.shouldPush) {
       void this.pushNotificationSender
-        .send({
-          title,
-          body,
-          data: {
-            serverId: this.serverId,
-            terminalId: params.terminalId,
-            cwd: params.cwd,
-            ...(workspaceId ? { workspaceId } : {}),
+        .send(
+          {
+            title,
+            body,
+            data: {
+              serverId: this.serverId,
+              terminalId: params.terminalId,
+              cwd: params.cwd,
+              ...(workspaceId ? { workspaceId } : {}),
+            },
           },
-        })
+          { kind: "terminal", reason: params.reason },
+        )
         .catch((err) => {
           this.logger.warn(
             { err, terminalId: params.terminalId },
@@ -3429,9 +3569,99 @@ export class VoiceAssistantWebSocketServer {
       else this.sendToClient(ws, message);
     }
   }
+
+  public sendPluginNotification(params: {
+    pluginId: string;
+    notificationId: string;
+    title: string;
+    body: string;
+    open?: import("@getpaseo/protocol/messages").PluginNotificationOpenTarget;
+    data?: Record<string, import("@getpaseo/protocol/agent-types").JsonValue>;
+  }): void {
+    const clientEntries: Array<{
+      ws: WebSocketLike;
+      state: ClientPresenceState;
+    }> = [];
+
+    for (const [ws, connection] of this.sessions) {
+      if (this.pluginSocketIds.has(ws)) {
+        continue;
+      }
+      if (!connection.session.wantsSourceEvent(ws, "plugin.notification")) {
+        continue;
+      }
+      clientEntries.push({
+        ws,
+        state: this.getClientActivityState(connection.session, ws),
+      });
+    }
+
+    const notificationEntries = clientEntries.filter(({ ws }) =>
+      this.sessions.get(ws)?.session.wantsSourceNotification(ws, "plugin.notification"),
+    );
+    const allStates = notificationEntries.map((entry) => entry.state);
+    const nowMs = Date.now();
+    const focusTarget =
+      params.open?.type === "agent" ? { kind: "agent" as const, id: params.open.agentId } : null;
+
+    const plan = computeNotificationPlan({
+      allStates,
+      focusTarget,
+      pushEligible: true,
+      nowMs,
+    });
+
+    if (plan.shouldPush) {
+      void this.pushNotificationSender
+        .send(
+          {
+            title: params.title,
+            body: params.body,
+            data: {
+              kind: "plugin",
+              serverId: this.serverId,
+              pluginId: params.pluginId,
+              notificationId: params.notificationId,
+              ...(params.open ? { open: params.open } : {}),
+              ...(params.data ? { data: params.data } : {}),
+            },
+          },
+          { kind: "plugin", pluginId: params.pluginId },
+        )
+        .catch((err) => {
+          this.logger.warn(
+            { err, pluginId: params.pluginId, notificationId: params.notificationId },
+            "Failed to send plugin push notification",
+          );
+        });
+    }
+
+    for (const { ws } of clientEntries) {
+      const shouldNotify =
+        plan.inAppRecipientIndex !== null &&
+        notificationEntries[plan.inAppRecipientIndex]?.ws === ws;
+      const message = wrapSessionMessage({
+        type: "plugin.notification",
+        payload: {
+          serverId: this.serverId,
+          pluginId: params.pluginId,
+          notificationId: params.notificationId,
+          title: params.title,
+          body: params.body,
+          ...(params.open ? { open: params.open } : {}),
+          ...(params.data ? { data: params.data } : {}),
+          shouldNotify,
+        },
+      });
+      if (message.type === "session" && this.sessions.get(ws)?.session.delivery.isModern(ws))
+        this.sessions.get(ws)!.session.publishToSource(ws, message.message);
+      else this.sendToClient(ws, message);
+    }
+  }
 }
 
 interface SocketRequestMetadata {
+  localEndpoint?: string;
   host?: string;
   origin?: string;
   userAgent?: string;
@@ -3455,6 +3685,10 @@ function createWebSocketConnectionIdentity(
     ...(metadata?.securityMode ? { securityMode: metadata.securityMode } : {}),
     ...(metadata?.hubDaemonId ? { hubDaemonId: metadata.hubDaemonId } : {}),
   };
+}
+
+function isHandshakeMessage(message: WSInboundMessage): boolean {
+  return message.type === "hello" || message.type === "tunnel_hello";
 }
 
 function sessionConnectionKey(principalId: string, clientId: string): string {
@@ -3509,6 +3743,8 @@ function extractSocketRequestMetadata(request: unknown): SocketRequestMetadata {
     url?: unknown;
     socket?: {
       remoteAddress?: unknown;
+      localAddress?: unknown;
+      localPort?: unknown;
     };
   };
 
@@ -3520,6 +3756,10 @@ function extractSocketRequestMetadata(request: unknown): SocketRequestMetadata {
     typeof record.socket?.remoteAddress === "string" ? record.socket.remoteAddress : undefined;
 
   return {
+    ...(typeof record.socket?.localAddress === "string" &&
+    typeof record.socket.localPort === "number"
+      ? { localEndpoint: `${record.socket.localAddress}:${record.socket.localPort}` }
+      : {}),
     ...(host ? { host } : {}),
     ...(origin ? { origin } : {}),
     ...(userAgent ? { userAgent } : {}),

@@ -147,7 +147,8 @@ function resolveScheduleTarget(args: ScheduleTargetOptions): ScheduleTarget {
   if (hasExplicitNewAgentOption) {
     throw {
       code: "INVALID_TARGET",
-      message: "--provider/--mode/--thinking can only be used with a new-agent target",
+      message:
+        "--provider/--mode/--thinking/--archive-on-finish can only be used with a new-agent target",
       details: "Use --target new-agent or omit --target to create a new agent schedule",
     } satisfies CommandError;
   }
@@ -168,6 +169,51 @@ function resolveScheduleTarget(args: ScheduleTargetOptions): ScheduleTarget {
   return { type: "agent", agentId: targetValue };
 }
 
+function parseNewAgentOptions(options: {
+  provider?: string;
+  mode?: string;
+  thinking?: string;
+  archiveOnFinish?: boolean;
+}) {
+  const modeId = options.mode?.trim();
+  const thinkingOptionId = options.thinking?.trim();
+  if (options.thinking !== undefined && !thinkingOptionId) {
+    throw {
+      code: "INVALID_THINKING_OPTION",
+      message: "--thinking cannot be empty",
+    } satisfies CommandError;
+  }
+  const hasExplicitNewAgentOption =
+    options.provider !== undefined ||
+    options.mode !== undefined ||
+    options.thinking !== undefined ||
+    options.archiveOnFinish !== undefined;
+  return { modeId, thinkingOptionId, hasExplicitNewAgentOption };
+}
+
+function buildNewAgentTarget(input: {
+  provider?: string;
+  cwdInput?: string;
+  modeId?: string;
+  thinkingOptionId?: string;
+  archiveOnFinish?: boolean;
+}): ScheduleTarget {
+  const resolvedProviderModel = resolveProviderAndModel({
+    provider: input.provider,
+  });
+  return {
+    type: "new-agent",
+    config: {
+      provider: resolvedProviderModel.provider,
+      cwd: input.cwdInput ?? process.cwd(),
+      ...(resolvedProviderModel.model ? { model: resolvedProviderModel.model } : {}),
+      ...(input.modeId ? { modeId: input.modeId } : {}),
+      ...(input.thinkingOptionId ? { thinkingOptionId: input.thinkingOptionId } : {}),
+      ...(input.archiveOnFinish !== undefined ? { archiveOnFinish: input.archiveOnFinish } : {}),
+    },
+  };
+}
+
 export function parseScheduleCreateInput(options: {
   prompt: string;
   every?: string;
@@ -182,6 +228,7 @@ export function parseScheduleCreateInput(options: {
   mode?: string;
   thinking?: string;
   cwd?: string;
+  archiveOnFinish?: boolean;
   host?: string;
   daemonTarget: import("../../utils/daemon-target.js").DaemonTarget;
   maxRuns?: string;
@@ -216,35 +263,18 @@ export function parseScheduleCreateInput(options: {
   const runOnCreate = resolveRunOnCreate(options.runNow, cadence.type);
 
   const targetValue = options.target?.trim();
-  const modeId = options.mode?.trim();
-  const thinkingOptionId = options.thinking?.trim();
-  if (options.thinking !== undefined && !thinkingOptionId) {
-    throw {
-      code: "INVALID_THINKING_OPTION",
-      message: "--thinking cannot be empty",
-    } satisfies CommandError;
-  }
-  const hasExplicitNewAgentOption =
-    options.provider !== undefined || options.mode !== undefined || options.thinking !== undefined;
-  const createNewAgentTarget = (): ScheduleTarget => {
-    const resolvedProviderModel = resolveProviderAndModel({
-      provider: options.provider,
-    });
-    return {
-      type: "new-agent",
-      config: {
-        provider: resolvedProviderModel.provider,
-        cwd: cwdInput ?? process.cwd(),
-        ...(resolvedProviderModel.model ? { model: resolvedProviderModel.model } : {}),
-        ...(modeId ? { modeId } : {}),
-        ...(thinkingOptionId ? { thinkingOptionId } : {}),
-      },
-    };
-  };
+  const { modeId, thinkingOptionId, hasExplicitNewAgentOption } = parseNewAgentOptions(options);
   const target = resolveScheduleTarget({
     targetValue,
     hasExplicitNewAgentOption,
-    createNewAgentTarget,
+    createNewAgentTarget: () =>
+      buildNewAgentTarget({
+        provider: options.provider,
+        cwdInput,
+        modeId,
+        thinkingOptionId,
+        archiveOnFinish: options.archiveOnFinish,
+      }),
     boardTask: options.boardTask,
     title: prompt,
     notes: options.notes,
@@ -258,13 +288,14 @@ export function parseScheduleCreateInput(options: {
     options.expiresIn === undefined
       ? undefined
       : new Date(Date.now() + parseDuration(options.expiresIn)).toISOString();
+  const name = options.name?.trim();
 
   return {
     prompt,
     cadence,
     target,
     runOnCreate,
-    ...(options.name?.trim() ? { name: options.name.trim() } : {}),
+    ...(name ? { name } : {}),
     ...(maxRuns !== undefined ? { maxRuns } : {}),
     ...(expiresAt ? { expiresAt } : {}),
   };
@@ -288,6 +319,7 @@ export interface ScheduleUpdateOptionsInput {
   model?: string;
   mode?: string;
   cwd?: string;
+  archiveOnFinish?: boolean;
   maxRuns?: string;
   expiresIn?: string;
   clearMaxRuns?: boolean;
@@ -475,6 +507,9 @@ function buildNewAgentConfigPatch(
       } satisfies CommandError;
     }
     patch.cwd = trimmed;
+  }
+  if (options.archiveOnFinish !== undefined) {
+    patch.archiveOnFinish = options.archiveOnFinish;
   }
   return Object.keys(patch).length > 0 ? patch : undefined;
 }

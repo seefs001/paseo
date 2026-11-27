@@ -1,6 +1,7 @@
 import equal from "fast-deep-equal";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
+import { clearUnarchiveAgentPendingForServer } from "./unarchive-agent-store";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { ViewedTimelineOwner } from "@/timeline/viewed-timeline-sync";
 import type { AgentDirectoryEntry } from "@/types/agent-directory";
@@ -155,18 +156,17 @@ export interface WorkspaceDescriptor {
   executionLocation?: WorkspaceDescriptorPayload["executionLocation"];
 }
 
+function parseOptionalDate(value: string | null | undefined): Date | null {
+  return typeof value === "string" && value.length > 0 ? new Date(value) : null;
+}
+
 export function normalizeWorkspaceDescriptor(
   payload: Omit<WorkspaceDescriptorPayload, "projectId"> & { projectId: string | null },
 ): WorkspaceDescriptor {
-  const statusEnteredAtRaw = payload.statusEnteredAt;
-  const statusEnteredAt: Date | null =
-    typeof statusEnteredAtRaw === "string" && statusEnteredAtRaw.length > 0
-      ? new Date(statusEnteredAtRaw)
-      : null;
   return {
     // COMPAT(workspaceSortTimes): added in v0.13.0, remove after 2027-04-22.
-    createdAt: payload.createdAt ? new Date(payload.createdAt) : null,
-    lastUserMessageAt: payload.lastUserMessageAt ? new Date(payload.lastUserMessageAt) : null,
+    createdAt: parseOptionalDate(payload.createdAt),
+    lastUserMessageAt: parseOptionalDate(payload.lastUserMessageAt),
     id: normalizeWorkspaceOpaqueId(payload.id) ?? payload.id,
     projectId: payload.projectAssigned === false ? null : payload.projectId,
     projectDisplayName: payload.projectDisplayName,
@@ -183,7 +183,7 @@ export function normalizeWorkspaceDescriptor(
     projectKind: payload.projectKind,
     workspaceKind: payload.workspaceKind,
     background: payload.background ?? false,
-    parentWorkspaceId: payload.parentWorkspaceId,
+    parentWorkspaceId: normalizeWorkspaceOpaqueId(payload.parentWorkspaceId) ?? undefined,
     name: payload.name,
     title: payload.title ?? null,
     pinnedAt: payload.pinnedAt ?? null,
@@ -191,7 +191,7 @@ export function normalizeWorkspaceDescriptor(
     // COMPAT(workspaceLabels): old daemons omit assignments.
     labels: payload.labels ?? [],
     status: payload.status,
-    statusEnteredAt,
+    statusEnteredAt: parseOptionalDate(payload.statusEnteredAt),
     archivingAt: payload.archivingAt ?? null,
     diffStat: payload.diffStat ?? null,
     uncommittedDiffStat: payload.uncommittedDiffStat,
@@ -616,6 +616,8 @@ interface SessionStoreActions {
     message: UserMessageItem,
   ) => boolean;
   clearAgentStreamHead: (serverId: string, agentId: string) => void;
+  /** Drops every piece of one chat's resident transcript: rows, cursors, paging and sync marks. */
+  releaseAgentTimeline: (serverId: string, agentId: string) => void;
   setAgentTimelineCursor: (
     serverId: string,
     state:
@@ -889,6 +891,7 @@ export const useSessionStore = create<SessionStore>()(
       },
 
       clearSession: (serverId) => {
+        clearUnarchiveAgentPendingForServer(serverId);
         agentLastActivityCoalescer.flushNow();
         set((prev) => {
           const session = prev.sessions[serverId];
@@ -1366,6 +1369,35 @@ export const useSessionStore = create<SessionStore>()(
               [serverId]: { ...session, agentStreamHead: nextHead },
             },
           };
+        });
+      },
+
+      releaseAgentTimeline: (serverId, agentId) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session) return prev;
+          const timelineKeys = [
+            "agentStreamTail",
+            "agentStreamHead",
+            "agentTasks",
+            "agentTimelineCursor",
+            "agentTimelineUnsettledTurn",
+            "agentTimelineHasOlder",
+            "agentTimelineHasNewer",
+            "agentTimelineOlderFetchInFlight",
+            "agentHistorySyncGeneration",
+            "agentAuthoritativeHistoryApplied",
+          ] as const satisfies readonly (keyof SessionState)[];
+          let next: SessionState | null = null;
+          for (const key of timelineKeys) {
+            const current: Map<string, unknown> = session[key];
+            if (!current.has(agentId)) continue;
+            const without = new Map(current);
+            without.delete(agentId);
+            next = { ...(next ?? session), [key]: without };
+          }
+          if (!next) return prev;
+          return { ...prev, sessions: { ...prev.sessions, [serverId]: next } };
         });
       },
 
